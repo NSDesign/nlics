@@ -1,0 +1,8 @@
+{
+  "name": "nlics",
+  "version": "0.1.0",
+  "description": "Non-Linear Image Compositing System",
+  "main": "App.jsx",
+  "keywords": ["compositing", "canvas", "react", "image-processing"],
+  "license": "MIT"
+}
