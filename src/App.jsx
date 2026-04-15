@@ -1,119 +1,127 @@
 import { useState, useEffect, useRef } from "react"
 
-/* ─── CSS ─────────────────────────────────────────────── */
-const CSS = `
+
+/* ─── CSS ─────────────────────────────────────────────────── */
+const CSS_MOBILE = `
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Mono:wght@300;400&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
+*{box-sizing:border-box;margin:0;padding:0;}
 :root{
   --bg:#040412;--pn:#09091e;--sf:#0d0d22;--el:#131328;
   --sl:#1a1a38;--bd:#252550;--tx:#b8c8e8;--mu:#606898;
   --di:#8090c0;--ac:#24cca8;--lv:#b060f0;
-  --gn:#28d878;--co:#d04898;--dng:#e03060
+  --gn:#28d878;--co:#d04898;--dng:#e03060;
+  --tap:44px;--tap-sm:36px;--card-r:10px;--card-gap:8px;--pad:12px;
 }
-::-webkit-scrollbar{width:3px;height:3px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px}
-input[type=range]{-webkit-appearance:none;width:100%;height:2px;background:var(--bd);border-radius:1px;outline:none;cursor:pointer}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:8px;height:8px;border-radius:50%;background:var(--ac);cursor:pointer}
-select,input[type=text]{background:var(--el);border:1px solid var(--bd);color:var(--tx);padding:2px 4px;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;outline:none;width:100%}
-select:focus,input[type=text]:focus{border-color:var(--ac)}
-select{cursor:pointer}
-input[type=color]{width:20px;height:17px;border:1px solid var(--bd);border-radius:2px;padding:1px;background:var(--el);cursor:pointer;flex-shrink:0}
-button{background:var(--el);border:1px solid var(--bd);color:var(--di);padding:1px 6px;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:9px;cursor:pointer;transition:all .1s;white-space:nowrap}
-button:hover{background:var(--sl);border-color:var(--ac);color:var(--ac)}
-button.ac{border-color:var(--ac);color:var(--ac);background:rgba(36,204,168,.07)}
-button.lv{border-color:var(--lv);color:var(--lv);background:rgba(168,78,232,.07)}
-button.ib{background:none;border:none;color:var(--mu);padding:0 3px;font-size:11px}
-button.ib:hover{background:none;border:none;color:var(--tx)}
-button.ib.dng:hover{color:var(--dng)}
-button.sm{padding:1px 5px;font-size:8.5px}
-.r{display:flex;align-items:center;gap:3px;margin-bottom:3px;min-height:18px}
-.rl{color:var(--di);font-size:9px;min-width:48px;text-align:right;flex-shrink:0}
-.rv{color:var(--ac);font-size:8.5px;min-width:24px;text-align:right;font-family:'IBM Plex Mono',monospace;flex-shrink:0}
-.nrow{display:flex;align-items:center;gap:3px;padding:3px 8px;cursor:pointer;user-select:none;border-bottom:1px solid rgba(26,26,54,.8);transition:background .08s;position:relative;min-height:24px}
-.nrow:hover{background:var(--sf)}
-.nrow.sel{background:var(--sl)}
-.nrow.off{opacity:.3}
-.nrow.dsp::after{content:'';position:absolute;right:0;top:0;bottom:0;width:2px;background:var(--lv)}
-.pw{background:rgba(4,4,18,.95);border-bottom:1px solid var(--bd);animation:fps .1s ease}
-@keyframes fps{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
-.shdr{display:flex;align-items:center;gap:4px;padding:5px 9px;background:var(--pn);border-bottom:1px solid var(--bd);user-select:none;flex-shrink:0}
-.divh{width:8px;background:var(--bd);cursor:col-resize;flex-shrink:0;transition:background .12s;z-index:10;display:flex;align-items:center;justify-content:center;touch-action:none}
-.divh::after{content:'⋮';color:var(--bd);font-size:11px;pointer-events:none}
-.divh:hover,.divh.drag{background:var(--ac)}
-.divh:hover::after,.divh.drag::after{color:var(--bg)}
-.divv{height:8px;background:var(--bd);cursor:row-resize;flex-shrink:0;transition:background .12s;z-index:10;display:flex;align-items:center;justify-content:center;touch-action:none}
-.divv::after{content:'···';color:var(--bd);font-size:11px;pointer-events:none}
-.divv:hover,.divv.drag{background:var(--ac)}
-.divv:hover::after,.divv.drag::after{color:var(--bg)}
-.checker{background-image:linear-gradient(45deg,#0b0b1e 25%,transparent 25%),linear-gradient(-45deg,#0b0b1e 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#0b0b1e 75%),linear-gradient(-45deg,transparent 75%,#0b0b1e 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0;background-color:#050616}
-.ftag{font-size:7px;padding:1px 3px;border-radius:2px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;flex-shrink:0}
-.tgn{background:rgba(24,184,96,.12);color:#28e878;border:1px solid rgba(24,184,96,.22)}
-.tco{background:rgba(184,40,128,.12);color:#d858a0;border:1px solid rgba(184,40,128,.22)}
-.dm{position:absolute;top:100%;right:0;z-index:300;margin-top:2px;background:#0c0c26;border:1px solid var(--bd);border-radius:3px;min-width:130px;box-shadow:0 8px 24px rgba(0,0,0,.85);overflow:hidden}
-.dmi{padding:5px 10px;cursor:pointer;font-size:9.5px;color:var(--tx);border-bottom:1px solid #141432;transition:background .08s;font-family:'IBM Plex Mono',monospace}
-.dmi:last-child{border-bottom:none}
-.dmi:hover{background:var(--sl);color:var(--ac)}
-.ni{background:none;border:none;border-bottom:1px solid var(--ac);color:var(--tx);font-family:'IBM Plex Mono',monospace;font-size:10px;outline:none;width:100%;padding:0}
-.slbl{font-family:'Syne',sans-serif;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.14em}
-.se{border-left:2px solid rgba(36,204,168,.18);margin:2px 0 2px 6px;padding-left:2px}
-.sm2{border-left:2px solid rgba(168,78,232,.18);margin:2px 0 2px 6px;padding-left:2px}
-.ei{border-bottom:1px solid rgba(26,26,54,.5)}
-.ei:last-child{border-bottom:none}
-.er{display:flex;align-items:center;gap:2px;padding:2px 4px;min-height:21px}
-.mi{border-bottom:1px solid rgba(26,26,54,.5)}
-.mi:last-child{border-bottom:none}
-.mr{display:flex;align-items:center;gap:2px;padding:2px 4px;min-height:21px;flex-wrap:wrap}
-.ad{display:flex;align-items:center;gap:3px;padding:2px 5px 3px;border-top:1px solid rgba(255,255,255,.04)}
-.ps{display:flex;align-items:center;gap:4px;padding:3px 7px;background:rgba(6,6,22,.8);border-top:1px solid rgba(26,26,54,.5);cursor:pointer;user-select:none}
-.ps:hover{background:rgba(12,12,34,.8)}
-.psl{font-size:8px;color:var(--tx);text-transform:uppercase;letter-spacing:.1em;flex:1}
-.bdg{font-size:7px;padding:0 3px;border-radius:2px;font-family:'IBM Plex Mono',monospace}
-.bac{background:rgba(36,204,168,.1);color:var(--ac);border:1px solid rgba(36,204,168,.18)}
-.blv{background:rgba(168,78,232,.1);color:var(--lv);border:1px solid rgba(168,78,232,.18)}
-.gp{padding:6px 8px;background:rgba(4,4,14,.7)}
-/* Unified layout icon buttons — readable at all viewport sizes */
-.hico{background:none;border:none;cursor:pointer;transition:all .14s;
-  font-size:16px;color:#7ab8e8;padding:4px 6px;border-radius:3px;line-height:1;}
-.hico:hover{color:#aaddff;background:rgba(122,184,232,.12);}
-.hico.vert{font-size:21px;padding:6px 9px;}
-.hico.exit{color:var(--ac);padding:4px 8px;
-  border:1px solid rgba(36,204,168,.3);background:rgba(36,204,168,.07);}
-.hico.exit:hover{color:#fff;background:rgba(36,204,168,.22);border-color:var(--ac);}
-.hico.exit.vert{font-size:22px;padding:6px 11px;}
-/* Fullscreen escape overlay — always findable */
-.fs-escape{
-  position:fixed;top:10px;right:10px;z-index:500;
-  background:rgba(36,204,168,.18);border:1px solid var(--ac);
-  color:var(--ac);font-size:12px;padding:5px 12px;border-radius:4px;
-  font-family:'IBM Plex Mono',monospace;cursor:pointer;
-  transition:all .14s;backdrop-filter:blur(4px);
-}
-.fs-escape:hover{background:rgba(36,204,168,.36);color:#fff;}
-/* node row button contrast improvements */
-.ibq{background:none;border:none;padding:0 3px;font-size:12px;cursor:pointer;transition:color .12s}
-.nrow-tog-off{color:#7888b8}
-.nrow-tog-off:hover{color:var(--tx)}
-.nrow-dsp-off{color:#7888b8}
-.nrow-dsp-off:hover{color:var(--lv)}
-.nrow-del{color:#904060;font-size:11px;padding:0 3px;background:none;border:none;cursor:pointer;transition:all .12s;border-radius:2px}
-.nrow-del:hover{color:#e06080;background:rgba(220,48,80,.1)}
-.nrow-del.armed{color:#e02850;background:rgba(220,40,80,.18);border-radius:3px;padding:0 4px;font-size:9px;letter-spacing:.02em}
-.nrow-del.armed:hover{color:#fff;background:rgba(220,40,80,.4)}
-/* undo toast */
-.undo-toast{
-  position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
-  background:#1a1a36;border:1px solid var(--ac);color:var(--ac);
-  padding:5px 14px;border-radius:4px;font-size:9px;font-family:'IBM Plex Mono',monospace;
-  pointer-events:none;z-index:500;opacity:0;transition:opacity .2s;
-}
-.undo-toast.show{opacity:1}
+::-webkit-scrollbar{width:3px;height:3px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px;}
+input[type=range]{-webkit-appearance:none;width:100%;height:3px;background:var(--bd);border-radius:2px;outline:none;cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--ac);cursor:pointer;box-shadow:0 2px 8px rgba(36,204,168,.35);}
+select,input[type=text]{background:var(--el);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:12px;outline:none;width:100%;min-height:var(--tap-sm);}
+select:focus,input[type=text]:focus{border-color:var(--ac);}
+select{cursor:pointer;}
+input[type=color]{width:36px;height:34px;border:1px solid var(--bd);border-radius:6px;padding:2px;background:var(--el);cursor:pointer;flex-shrink:0;}
+button{background:var(--el);border:1px solid var(--bd);color:var(--di);padding:0 12px;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;transition:all .1s;white-space:nowrap;min-height:var(--tap-sm);display:inline-flex;align-items:center;justify-content:center;}
+button:hover,button:active{background:var(--sl);border-color:var(--ac);color:var(--ac);}
+button.ac{border-color:var(--ac);color:var(--ac);background:rgba(36,204,168,.1);}
+button.lv{border-color:var(--lv);color:var(--lv);background:rgba(176,96,240,.08);}
+button.danger{border-color:var(--dng);color:var(--dng);background:rgba(224,48,96,.08);}
+button.ghost{background:none;border:none;color:var(--mu);padding:0 8px;}
+button.ghost:hover{background:none;border:none;color:var(--tx);}
+button.icon-btn{background:none;border:none;color:var(--mu);width:var(--tap);height:var(--tap);padding:0;font-size:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;flex-shrink:0;}
+button.icon-btn:hover,button.icon-btn:active{background:rgba(255,255,255,.06);color:var(--tx);}
+button.icon-btn.sm{width:var(--tap-sm);height:var(--tap-sm);font-size:14px;}
+.nrow{display:flex;align-items:center;gap:6px;padding:10px 12px;cursor:pointer;user-select:none;border-bottom:1px solid rgba(37,37,80,.8);transition:background .08s;position:relative;min-height:var(--tap);}
+.nrow:hover,.nrow:active{background:var(--sf);}
+.nrow.sel{background:var(--sl);}
+.nrow.off{opacity:.35;}
+.nrow.dsp::after{content:'';position:absolute;right:0;top:0;bottom:0;width:3px;background:var(--lv);border-radius:2px 0 0 2px;}
+.card{background:var(--el);border:1px solid var(--bd);border-radius:var(--card-r);overflow:hidden;margin-bottom:var(--card-gap);}
+.card-hdr{display:flex;align-items:center;gap:4px;padding:0 8px 0 10px;min-height:var(--tap);background:var(--sf);border-bottom:1px solid var(--bd);}
+.card-body{padding:10px 12px;}
+.tabs{display:flex;gap:2px;padding:6px 8px;background:var(--bg);border-bottom:1px solid var(--bd);}
+.tab{flex:1;height:32px;border-radius:6px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;background:none;border:none;color:var(--mu);cursor:pointer;transition:all .12s;}
+.tab:hover{color:var(--di);background:var(--sf);}
+.tab.on{background:var(--sl);color:var(--tx);border:1px solid var(--bd);}
+.tab.on.ac{background:rgba(36,204,168,.12);color:var(--ac);border-color:rgba(36,204,168,.3);}
+.tab.on.lv{background:rgba(176,96,240,.12);color:var(--lv);border-color:rgba(176,96,240,.3);}
+.prow{display:flex;align-items:center;gap:8px;min-height:38px;margin-bottom:6px;}
+.prow:last-child{margin-bottom:0;}
+.plbl{color:var(--mu);font-size:10.5px;min-width:72px;text-align:right;flex-shrink:0;line-height:1.3;}
+.pval{color:var(--ac);font-size:10.5px;min-width:38px;text-align:right;font-family:'IBM Plex Mono',monospace;flex-shrink:0;}
+.breadcrumb{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;overflow-x:auto;white-space:nowrap;}
+.bc-item{font-size:10px;color:var(--di);font-family:'IBM Plex Mono',monospace;}
+.bc-item.cur{color:var(--tx);}
+.mask-card{display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg);border:1px solid rgba(176,96,240,.22);border-radius:8px;margin-bottom:8px;}
+.shdr{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--pn);border-bottom:1px solid var(--bd);user-select:none;flex-shrink:0;min-height:var(--tap);}
+.slbl{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;}
+.divh{width:8px;background:var(--bd);cursor:col-resize;flex-shrink:0;transition:background .12s;z-index:10;display:flex;align-items:center;justify-content:center;touch-action:none;}
+.divh::after{content:'⋮';color:var(--bd);font-size:12px;pointer-events:none;}
+.divh:hover,.divh.drag{background:var(--ac);}
+.divh:hover::after,.divh.drag::after{color:var(--bg);}
+.divv{height:8px;background:var(--bd);cursor:row-resize;flex-shrink:0;transition:background .12s;z-index:10;display:flex;align-items:center;justify-content:center;touch-action:none;}
+.divv::after{content:'···';color:var(--bd);font-size:12px;pointer-events:none;}
+.divv:hover,.divv.drag{background:var(--ac);}
+.divv:hover::after,.divv.drag::after{color:var(--bg);}
+.checker{background-image:linear-gradient(45deg,#0b0b1e 25%,transparent 25%),linear-gradient(-45deg,#0b0b1e 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#0b0b1e 75%),linear-gradient(-45deg,transparent 75%,#0b0b1e 75%);background-size:14px 14px;background-position:0 0,0 7px,7px -7px,-7px 0;background-color:#060618;}
+.ftag{font-size:9px;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;flex-shrink:0;}
+.tgn{background:rgba(40,216,120,.13);color:#38e07c;border:1px solid rgba(40,216,120,.26);}
+.tco{background:rgba(208,72,152,.13);color:#e060b0;border:1px solid rgba(208,72,152,.26);}
+.drop-menu{position:absolute;top:100%;left:0;z-index:300;margin-top:4px;background:#111128;border:1px solid var(--bd);border-radius:8px;min-width:180px;box-shadow:0 10px 32px rgba(0,0,0,.8);overflow:hidden;}
+.drop-item{padding:12px 16px;cursor:pointer;font-size:12px;color:var(--tx);border-bottom:1px solid #161630;transition:background .08s;font-family:'IBM Plex Mono',monospace;}
+.drop-item:last-child{border-bottom:none;}
+.drop-item:hover,.drop-item:active{background:var(--sl);color:var(--ac);}
+.drop-grp{padding:8px 16px 4px;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em;pointer-events:none;}
+.eff-menu{position:absolute;bottom:100%;left:0;right:0;z-index:400;margin-bottom:4px;background:#111128;border:1px solid var(--bd);border-radius:8px;box-shadow:0 -8px 28px rgba(0,0,0,.75);overflow:hidden;max-height:320px;overflow-y:auto;}
+.ninput{background:none;border:none;border-bottom:2px solid var(--ac);color:var(--tx);font-family:'IBM Plex Mono',monospace;font-size:13px;outline:none;width:100%;padding:2px 0;}
+.empty{padding:14px;color:var(--mu);font-size:11px;text-align:center;font-family:'IBM Plex Mono',monospace;}
+.undo-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1a1a3a;border:1px solid var(--ac);color:var(--ac);padding:8px 18px;border-radius:6px;font-size:10px;font-family:'IBM Plex Mono',monospace;pointer-events:none;z-index:500;opacity:0;transition:opacity .2s;white-space:nowrap;}
+.undo-toast.show{opacity:1;}
+.hico{background:none;border:none;cursor:pointer;font-size:18px;color:#7ab8e8;min-height:var(--tap);min-width:var(--tap);padding:0 6px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;transition:all .12s;}
+.hico:hover,.hico:active{color:#aaddff;background:rgba(122,184,232,.12);}
+.hico.exit{color:var(--ac);border:1px solid rgba(36,204,168,.3);background:rgba(36,204,168,.07);}
+.stack-lbl{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em;padding:4px 0 8px;display:flex;align-items:center;gap:8px;}
+.stack-lbl::after{content:'';flex:1;height:1px;background:var(--bd);}
+/* ── Settings sheet ── */
+.sheet-scrim{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:700;display:flex;flex-direction:column;justify-content:flex-end;}
+.sheet-scrim.top{justify-content:flex-start;}
+.sheet-body{background:var(--pn);border-radius:18px 18px 0 0;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
+.sheet-grip{width:40px;height:4px;background:var(--bd);border-radius:2px;margin:10px auto 6px;flex-shrink:0;}
+.sheet-hdr{display:flex;align-items:center;padding:4px 16px 12px;flex-shrink:0;}
+.sheet-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--tx);flex:1;}
+.sheet-scroll{flex:1;overflow-y:auto;padding:0 16px 32px;}
+.setting-grp{margin-bottom:24px;}
+.setting-grp-lbl{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bd);}
+.setting-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid rgba(37,37,80,.5);}
+.setting-row:last-child{border-bottom:none;}
+.setting-lbl{flex:1;font-size:13px;color:var(--tx);font-family:'IBM Plex Mono',monospace;}
+.setting-desc{font-size:10px;color:var(--mu);margin-top:2px;}
+.seg-ctrl{display:flex;background:var(--bg);border-radius:8px;padding:3px;gap:2px;border:1px solid var(--bd);}
+.seg-btn{flex:1;height:34px;border-radius:6px;font-size:11px;font-family:'IBM Plex Mono',monospace;background:none;border:none;color:var(--mu);cursor:pointer;transition:all .12s;}
+.seg-btn.on{background:var(--sl);color:var(--tx);box-shadow:0 1px 4px rgba(0,0,0,.4);}
+.seg-btn.on.ac{background:rgba(36,204,168,.18);color:var(--ac);}
+/* ── Unified scroll layout ── */
+.unified-wrap{height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+.unified-preview{flex-shrink:0;position:relative;overflow:hidden;}
+.unified-preview.pinned{position:sticky;top:0;z-index:50;}
+.unified-resize-handle{height:10px;background:var(--bd);cursor:row-resize;display:flex;align-items:center;justify-content:center;touch-action:none;transition:background .12s;flex-shrink:0;}
+.unified-resize-handle::after{content:'···';color:var(--bd);font-size:12px;pointer-events:none;}
+.unified-resize-handle:hover,.unified-resize-handle.drag{background:var(--ac);}
+.unified-resize-handle:hover::after,.unified-resize-handle.drag::after{color:var(--bg);}
+.unified-lists{flex:1;overflow-y:auto;}
+/* sticky section headers in unified mode */
+.shdr.sticky{position:sticky;top:0;z-index:20;}
+/* ── Node detail sheet (panel style = sheet) ── */
+.node-sheet{position:fixed;bottom:0;left:0;right:0;z-index:600;background:var(--pn);border-radius:18px 18px 0 0;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 -8px 40px rgba(0,0,0,.6);}
+.node-sheet-hdr{display:flex;align-items:center;padding:12px 16px 8px;flex-shrink:0;border-bottom:1px solid var(--bd);}
+.node-sheet-scroll{flex:1;overflow-y:auto;}
 `
+
 
 function StyleInjector() {
   useEffect(function() {
     var s = document.createElement("style")
-    s.textContent = CSS
+    s.textContent = CSS_MOBILE
     document.head.appendChild(s)
     return function() { s.remove() }
   }, [])
@@ -571,11 +579,14 @@ function renderPipeline(canvas,dispId,nodes,iC) {
   if(result)ctx.drawImage(result,0,0)
 }
 
+
+
+
 /* ─── UI PRIMITIVES ─────────────────────────────────────── */
 function PR(props) {
   return (
-    <div className="r" style={props.style}>
-      {!props.ns && <span className="rl">{props.l}</span>}
+    <div className="prow" style={props.style}>
+      {!props.ns && <span className="plbl">{props.l}</span>}
       {props.children}
     </div>
   )
@@ -585,23 +596,23 @@ function Sl(props) {
   return (
     <PR l={props.l}>
       <input type="range" min={props.mn} max={props.mx} step={props.st||.01} value={props.v}
-        onChange={function(e){ props.fn(parseFloat(e.target.value)) }} style={{flex:1}} />
-      <span className="rv">{disp}</span>
+        onChange={function(e){ props.fn(parseFloat(e.target.value)) }} style={{flex:1}}/>
+      <span className="pval">{disp}</span>
     </PR>
   )
 }
 function Co(props) {
   return (
     <PR l={props.l}>
-      <input type="color" value={props.v} onChange={function(e){ props.fn(e.target.value) }} />
-      <input type="text"  value={props.v} onChange={function(e){ props.fn(e.target.value) }} style={{flex:1,marginLeft:3}} />
+      <input type="color" value={props.v} onChange={function(e){props.fn(e.target.value)}}/>
+      <input type="text" value={props.v} onChange={function(e){props.fn(e.target.value)}} style={{flex:1,marginLeft:6}}/>
     </PR>
   )
 }
 function Se(props) {
   return (
     <PR l={props.l}>
-      <select value={props.v} onChange={function(e){ props.fn(e.target.value) }} style={{flex:1}}>
+      <select value={props.v} onChange={function(e){props.fn(e.target.value)}} style={{flex:1}}>
         {props.opts.map(function(o){ return <option key={o}>{o}</option> })}
       </select>
     </PR>
@@ -610,26 +621,40 @@ function Se(props) {
 function NRef(props) {
   return (
     <PR l={props.l}>
-      <select value={props.v||""} onChange={function(e){ props.fn(e.target.value||null) }} style={{flex:1}}>
-        <option value="">—none—</option>
-        <optgroup label="Creators">
-          {props.nodes.filter(function(n){ return n.section===1&&n.id!==props.selfId }).map(function(n){ return <option key={n.id} value={n.id}>{n.name}</option> })}
+      <select value={props.v||""} onChange={function(e){props.fn(e.target.value||null)}} style={{flex:1}}>
+        <option value="">— none —</option>
+        <optgroup label="Pixel Creators">
+          {props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId}).map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
         </optgroup>
-        <optgroup label="Blenders">
-          {props.nodes.filter(function(n){ return n.section===2&&n.id!==props.selfId }).map(function(n){ return <option key={n.id} value={n.id}>{n.name}</option> })}
+        <optgroup label="Compositors">
+          {props.nodes.filter(function(n){return n.section===2&&n.id!==props.selfId}).map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
         </optgroup>
       </select>
     </PR>
   )
 }
+function TabBar(props) {
+  return (
+    <div className="tabs">
+      {props.tabs.map(function(t) {
+        var cls = "tab" + (props.active===t.id ? " on" + (t.color ? " "+t.color : "") : "")
+        return (
+          <button key={t.id} className={cls} onClick={function(){props.onChange(t.id)}}>
+            {t.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
-/* ─── CREATOR PROP PANELS ───────────────────────────────── */
+/* ─── CREATOR PROP PANELS ─────────────────────────────── */
 function SolidP(props) {
   var p=props.p, up=props.up
   return (
     <div>
-      <Co l="colour" v={p.color} fn={function(v){up(Object.assign({},p,{color:v}))}} />
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}} />
+      <Co l="colour" v={p.color} fn={function(v){up(Object.assign({},p,{color:v}))}}/>
+      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
   )
 }
@@ -637,23 +662,23 @@ function ShapeP(props) {
   var p=props.p, up=props.up, s=p.shapeType
   return (
     <div>
-      <Se l="type" v={s} opts={SHAPES} fn={function(v){up(Object.assign({},p,{shapeType:v}))}} />
-      <Sl l="x"    v={p.x}  mn={0} mx={1}   st={.01} fn={function(v){up(Object.assign({},p,{x:v}))}} />
-      <Sl l="y"    v={p.y}  mn={0} mx={1}   st={.01} fn={function(v){up(Object.assign({},p,{y:v}))}} />
-      <Sl l="size" v={p.sz} mn={.05} mx={1.8} st={.01} fn={function(v){up(Object.assign({},p,{sz:v}))}} />
-      <Sl l="rot"  v={p.rot} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rot:v}))}} />
+      <Se l="type" v={s} opts={SHAPES} fn={function(v){up(Object.assign({},p,{shapeType:v}))}}/>
+      <Sl l="x" v={p.x} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x:v}))}}/>
+      <Sl l="y" v={p.y} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y:v}))}}/>
+      <Sl l="size" v={p.sz} mn={.05} mx={1.8} st={.01} fn={function(v){up(Object.assign({},p,{sz:v}))}}/>
+      <Sl l="rotation" v={p.rot} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rot:v}))}}/>
       {s==="star" && (
         <div>
-          <Sl l="points" v={p.pts}    mn={3} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pts:v}))}} />
-          <Sl l="innerR" v={p.innerR} mn={.05} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{innerR:v}))}} />
+          <Sl l="points" v={p.pts} mn={3} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pts:v}))}}/>
+          <Sl l="inner r" v={p.innerR} mn={.05} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{innerR:v}))}}/>
         </div>
       )}
-      {s==="ring"    && <Sl l="innerR" v={p.ringR} mn={.1} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{ringR:v}))}} />}
-      {s==="polygon" && <Sl l="sides"  v={p.sides} mn={3} mx={14} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{sides:v}))}} />}
-      <Co l="fill"    v={p.fill}   fn={function(v){up(Object.assign({},p,{fill:v}))}} />
-      <Sl l="strokeW" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}} />
-      {p.strokeW>0 && <Co l="stroke" v={p.stroke} fn={function(v){up(Object.assign({},p,{stroke:v}))}} />}
-      <Sl l="alpha"   v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}} />
+      {s==="ring" && <Sl l="inner r" v={p.ringR} mn={.1} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{ringR:v}))}}/>}
+      {s==="polygon" && <Sl l="sides" v={p.sides} mn={3} mx={14} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{sides:v}))}}/>}
+      <Co l="fill" v={p.fill} fn={function(v){up(Object.assign({},p,{fill:v}))}}/>
+      <Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>
+      {p.strokeW>0 && <Co l="stroke" v={p.stroke} fn={function(v){up(Object.assign({},p,{stroke:v}))}}/>}
+      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
   )
 }
@@ -661,21 +686,21 @@ function GradP(props) {
   var p=props.p, up=props.up
   return (
     <div>
-      <Se l="type" v={p.gType} opts={GTYPES} fn={function(v){up(Object.assign({},p,{gType:v}))}} />
-      <Co l="col 1"  v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}} />
-      <Sl l="stop 1" v={p.s1} mn={0} mx={.999} st={.01} fn={function(v){up(Object.assign({},p,{s1:v}))}} />
-      <Co l="col 2"  v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}} />
-      <Sl l="stop 2" v={p.s2} mn={.001} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{s2:v}))}} />
-      {p.gType==="linear" && <Sl l="angle°" v={p.angle} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{angle:v}))}} />}
+      <Se l="type" v={p.gType} opts={GTYPES} fn={function(v){up(Object.assign({},p,{gType:v}))}}/>
+      <Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>
+      <Sl l="stop 1" v={p.s1} mn={0} mx={.999} st={.01} fn={function(v){up(Object.assign({},p,{s1:v}))}}/>
+      <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
+      <Sl l="stop 2" v={p.s2} mn={.001} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{s2:v}))}}/>
+      {p.gType==="linear" && <Sl l="angle" v={p.angle} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>}
       {(p.gType==="radial"||p.gType==="conic") && (
         <div>
-          <Sl l="cx" v={p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}} />
-          <Sl l="cy" v={p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}} />
+          <Sl l="centre x" v={p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+          <Sl l="centre y" v={p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
         </div>
       )}
-      {p.gType==="radial" && <Sl l="radius" v={p.r}  mn={.01} mx={2.5} st={.01} fn={function(v){up(Object.assign({},p,{r:v}))}} />}
-      {p.gType==="conic"  && <Sl l="start°" v={p.sa} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{sa:v}))}} />}
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}} />
+      {p.gType==="radial" && <Sl l="radius" v={p.r} mn={.01} mx={2.5} st={.01} fn={function(v){up(Object.assign({},p,{r:v}))}}/>}
+      {p.gType==="conic" && <Sl l="start" v={p.sa} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{sa:v}))}}/>}
+      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
   )
 }
@@ -683,13 +708,13 @@ function NoiseP(props) {
   var p=props.p, up=props.up
   return (
     <div>
-      <Se l="type" v={p.nType} opts={NTYPES} fn={function(v){up(Object.assign({},p,{nType:v}))}} />
-      <Co l="col 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}} />
-      <Co l="col 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}} />
-      <Sl l="scale" v={p.scale} mn={.005} mx={.4} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}} />
-      {p.nType==="perlin" && <Sl l="octaves" v={p.oct} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}} />}
-      <Sl l="seed"  v={p.seed} mn={0} mx={99} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}} />
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}} />
+      <Se l="type" v={p.nType} opts={NTYPES} fn={function(v){up(Object.assign({},p,{nType:v}))}}/>
+      <Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>
+      <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
+      <Sl l="scale" v={p.scale} mn={.005} mx={.4} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+      {(p.nType==="perlin"||p.nType==="turbulent") && <Sl l="octaves" v={p.oct} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>}
+      <Sl l="seed" v={p.seed} mn={0} mx={99} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
+      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
   )
 }
@@ -697,495 +722,502 @@ function PatP(props) {
   var p=props.p, up=props.up
   return (
     <div>
-      <Se l="type" v={p.pType} opts={PTYPES} fn={function(v){up(Object.assign({},p,{pType:v}))}} />
-      <Co l="col 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}} />
-      <Co l="col 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}} />
-      <Sl l="scale" v={p.scale} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}} />
+      <Se l="type" v={p.pType} opts={PTYPES} fn={function(v){up(Object.assign({},p,{pType:v}))}}/>
+      <Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>
+      <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
+      <Sl l="scale" v={p.scale} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
       {p.pType==="stripes" && (
         <div>
-          <Sl l="width"  v={p.sw}    mn={.01} mx={.5}  st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{sw:v}))}} />
-          <Sl l="angle°" v={p.angle} mn={0}   mx={180} st={1}    fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{angle:v}))}} />
+          <Sl l="width" v={p.sw} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{sw:v}))}}/>
+          <Sl l="angle" v={p.angle} mn={0} mx={180} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>
         </div>
       )}
       {p.pType==="dots" && (
         <div>
-          <Sl l="dot r"   v={p.dr} mn={.005} mx={.2}  st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{dr:v}))}} />
-          <Sl l="spacing" v={p.ds} mn={.02}  mx={.5}  st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{ds:v}))}} />
+          <Sl l="dot r" v={p.dr} mn={.005} mx={.2} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{dr:v}))}}/>
+          <Sl l="spacing" v={p.ds} mn={.02} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{ds:v}))}}/>
         </div>
       )}
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}} />
+      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
   )
 }
 function ImgP(props) {
   var p=props.p, up=props.up, onLoad=props.onLoad
-  var uState = useState(p.url||"")
-  var u = uState[0], setU = uState[1]
-  var fileRef = useRef(null)
-  var camRef  = useRef(null)
-
-  function loadBlob(file) {
-    if (!file) return
-    var blobUrl = URL.createObjectURL(file)
-    setU(blobUrl)
-    up(Object.assign({},p,{url:blobUrl}))
-    onLoad(blobUrl)
-  }
-  function onFileChange(e) { loadBlob(e.target.files&&e.target.files[0]); e.target.value="" }
-  function goUrl() { up(Object.assign({},p,{url:u})); onLoad(u) }
-
-  var btnStyle = {flex:1, textAlign:"center", padding:"4px 0", fontSize:9}
-
+  var uSt=useState(p.url||""); var u=uSt[0], setU=uSt[1]
+  var fileRef=useRef(null), camRef=useRef(null)
+  function loadBlob(file){if(!file)return;var b=URL.createObjectURL(file);setU(b);up(Object.assign({},p,{url:b}));onLoad(b)}
+  function goUrl(){up(Object.assign({},p,{url:u}));onLoad(u)}
   return (
     <div>
-      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}}
-        onChange={onFileChange} />
-      <input ref={camRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
-        onChange={onFileChange} />
-
-      <PR l="load">
-        <div style={{display:"flex",gap:3,flex:1}}>
-          <button className="ac sm" style={btnStyle}
-            onClick={function(){ if(fileRef.current)fileRef.current.click() }}
-            title="Load from device">
-            📁 Device
-          </button>
-          <button className="ac sm" style={btnStyle}
-            onClick={function(){ if(camRef.current)camRef.current.click() }}
-            title="Take photo or use camera">
-            📷 Camera
-          </button>
-        </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={function(e){loadBlob(e.target.files&&e.target.files[0]);e.target.value=""}}/>
+      <input ref={camRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={function(e){loadBlob(e.target.files&&e.target.files[0]);e.target.value=""}}/>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <button className="ac" style={{flex:1}} onClick={function(){if(fileRef.current)fileRef.current.click()}}>Device</button>
+        <button className="ac" style={{flex:1}} onClick={function(){if(camRef.current)camRef.current.click()}}>Camera</button>
+      </div>
+      {p.url&&p.url.startsWith("blob:")&&<div style={{fontSize:10,color:"var(--ac)",marginBottom:8,textAlign:"center"}}>local file loaded</div>}
+      <PR l="URL">
+        <input type="text" value={u.startsWith("blob:")?"":u} placeholder="https://..." onChange={function(e){setU(e.target.value)}} onKeyDown={function(e){if(e.key==="Enter")goUrl()}} style={{flex:1}}/>
       </PR>
-
-      {p.url && p.url.startsWith("blob:") && (
-        <PR l="source">
-          <span style={{fontSize:8,color:"var(--ac)",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-            local file loaded ✓
-          </span>
-        </PR>
-      )}
-
-      <PR l="url">
-        <input type="text" value={u.startsWith("blob:")?"":u} placeholder="https://…"
-          onChange={function(e){ setU(e.target.value) }}
-          onKeyDown={function(e){ if(e.key==="Enter") goUrl() }}
-          style={{flex:1}} />
-        <button className="ac sm" onClick={goUrl} style={{flexShrink:0,marginLeft:2}}>↵</button>
-      </PR>
-
-      <Se l="fit" v={p.fit} opts={["contain","cover","fill"]} fn={function(v){up(Object.assign({},p,{fit:v}))}} />
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}} />
+      <PR ns><button className="ac" style={{width:"100%",marginTop:4}} onClick={goUrl}>Load URL</button></PR>
+      <Se l="fit" v={p.fit} opts={["contain","cover","fill"]} fn={function(v){up(Object.assign({},p,{fit:v}))}}/>
+      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
   )
 }
 function CreatorProps(props) {
   var node=props.node, onUpdate=props.onUpdate, onLoad=props.onLoad
-  function up(p) { onUpdate(Object.assign({},node,{props:p})) }
+  function up(p){onUpdate(Object.assign({},node,{props:p}))}
   return (
-    <div className="gp">
-      {node.type==="solid"    && <SolidP p={node.props} up={up} />}
-      {node.type==="shape"    && <ShapeP p={node.props} up={up} />}
-      {node.type==="gradient" && <GradP  p={node.props} up={up} />}
-      {node.type==="noise"    && <NoiseP p={node.props} up={up} />}
-      {node.type==="pattern"  && <PatP   p={node.props} up={up} />}
-      {node.type==="image"    && <ImgP   p={node.props} up={up} onLoad={onLoad} />}
+    <div style={{padding:"12px 12px 4px"}}>
+      {node.type==="solid"    && <SolidP p={node.props} up={up}/>}
+      {node.type==="shape"    && <ShapeP p={node.props} up={up}/>}
+      {node.type==="gradient" && <GradP  p={node.props} up={up}/>}
+      {node.type==="noise"    && <NoiseP p={node.props} up={up}/>}
+      {node.type==="pattern"  && <PatP   p={node.props} up={up}/>}
+      {node.type==="image"    && <ImgP   p={node.props} up={up} onLoad={onLoad}/>}
     </div>
   )
 }
 
-/* ─── RECURSIVE EFFECT / MASK STACKS ────────────────────── */
-function EfxRow(props) {
-  var mOpenState = useState(false)
-  var mOpen=mOpenState[0], setMOpen=mOpenState[1]
-  var efx=props.efx, cfg=ECFG[efx.type]
-  function upP(np) { props.onChange(Object.assign({},efx,{params:Object.assign({},efx.params,np)})) }
+/* ─── EFFECT PRIMARY PARAMS ──────────────────────────── */
+function EfxPrimary(props) {
+  var efx=props.efx, p=efx.params
+  function up(np){props.onChange(Object.assign({},efx,{params:Object.assign({},p,np)}))}
+  if(efx.type==="brightness") return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
+  if(efx.type==="contrast")   return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
+  if(efx.type==="blur")       return <Sl l="radius" v={p.radius} mn={0} mx={60} st={.5} fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up({radius:v})}}/>
+  if(efx.type==="invert")     return <Sl l="amount" v={p.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({amount:v})}}/>
+  if(efx.type==="threshold")  return <Sl l="level" v={p.value} mn={0} mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
+  if(efx.type==="hue-shift")  return <Sl l="angle" v={p.angle} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
+  if(efx.type==="saturation") return <Sl l="amount" v={p.amount} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({amount:v})}}/>
+  if(efx.type==="vibrance")   return <Sl l="amount" v={p.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({amount:v})}}/>
+  if(efx.type==="posterize")  return <Sl l="levels" v={p.levels} mn={2} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({levels:v})}}/>
+  if(efx.type==="exposure")   return <Sl l="stops" v={p.stops} mn={-3} mx={3} st={.1} fmt={function(v){return v.toFixed(1)+"EV"}} fn={function(v){up({stops:v})}}/>
+  if(efx.type==="levels")     return <Sl l="gamma" v={p.gamma!=null?p.gamma:1} mn={.1} mx={4} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up({gamma:v})}}/>
+  if(efx.type==="curves") return (
+    <div>
+      <Sl l="in black"  v={p.inBlack||0}                    mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inBlack:v})}}/>
+      <Sl l="in white"  v={p.inWhite==null?255:p.inWhite}   mn={1}   mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inWhite:v})}}/>
+      <Sl l="out black" v={p.outBlack||0}                   mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outBlack:v})}}/>
+      <Sl l="out white" v={p.outWhite==null?255:p.outWhite} mn={1}   mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outWhite:v})}}/>
+      <Sl l="S-curve"   v={p.sCurve||0}                     mn={-100} mx={100} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({sCurve:v})}}/>
+    </div>
+  )
+  if(efx.type==="transform") return (
+    <div>
+      <Sl l="translate x" v={p.tx||0}  mn={-.5} mx={.5}   st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({tx:v})}}/>
+      <Sl l="translate y" v={p.ty||0}  mn={-.5} mx={.5}   st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({ty:v})}}/>
+      <Sl l="rotation"    v={p.rot||0} mn={-180} mx={180}  st={1}    fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({rot:v})}}/>
+      <Sl l="scale unif"  v={p.su!=null?p.su:1} mn={.05} mx={4} st={.01} fmt={function(v){return v.toFixed(2)+"x"}} fn={function(v){up({su:v})}}/>
+      <Sl l="scale x"     v={p.sx!=null?p.sx:1} mn={.05} mx={4} st={.01} fmt={function(v){return v.toFixed(2)+"x"}} fn={function(v){up({sx:v})}}/>
+      <Sl l="scale y"     v={p.sy!=null?p.sy:1} mn={.05} mx={4} st={.01} fmt={function(v){return v.toFixed(2)+"x"}} fn={function(v){up({sy:v})}}/>
+      <Sl l="skew x"      v={p.skX||0} mn={-60} mx={60}   st={1}    fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({skX:v})}}/>
+      <Sl l="skew y"      v={p.skY||0} mn={-60} mx={60}   st={1}    fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({skY:v})}}/>
+    </div>
+  )
+  return <div className="empty">no parameters</div>
+}
+
+/* ─── MASK CARD ───────────────────────────────────────── */
+function MaskCard(props) {
+  var mk=props.mask
   return (
-    <div className="ei">
-      <div className="er">
-        <button className="ib" onClick={function(){props.onMv(props.idx,-1)}} disabled={props.idx===0} style={{fontSize:7,padding:"0 2px",lineHeight:1.2}}>▲</button>
-        <button className="ib" onClick={function(){props.onMv(props.idx,1)}} disabled={props.idx===props.tot-1} style={{fontSize:7,padding:"0 2px",lineHeight:1.2}}>▼</button>
-        <button className="ib" onClick={function(){props.onChange(Object.assign({},efx,{enabled:!efx.enabled}))}} style={{color:efx.enabled?"var(--ac)":"var(--mu)",fontSize:11,padding:"0 2px"}}>{efx.enabled?"●":"○"}</button>
-        <span style={{fontSize:8.5,color:efx.enabled?"var(--tx)":"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",minWidth:58,flexShrink:0}}>{efx.type}</span>
-        {cfg
-          ? <input type="range" min={cfg[1]} max={cfg[2]} step={cfg[3]} value={efx.params[cfg[0]]!=null?efx.params[cfg[0]]:cfg[4]} onChange={function(e){upP({[cfg[0]]:parseFloat(e.target.value)})}} style={{flex:1,minWidth:30}} />
-          : efx.type==="curves"
-            ? <span style={{fontSize:7.5,color:"var(--di)",flex:1}}>expand ▼</span>
-            : <span style={{flex:1}} />
-        }
-        <input type="range" min={0} max={100} step={1} value={efx.opacity} onChange={function(e){props.onChange(Object.assign({},efx,{opacity:+e.target.value}))}} style={{width:28,flexShrink:0}} />
-        <span style={{fontSize:7.5,color:"var(--di)",minWidth:20,textAlign:"right"}}>{Math.round(efx.opacity)}%</span>
-        <select value={efx.blendMode} onChange={function(e){props.onChange(Object.assign({},efx,{blendMode:e.target.value}))}} style={{width:50,fontSize:8.5,padding:"1px 2px",flexShrink:0}}>
-          {EBMS.map(function(m){return <option key={m}>{m}</option>})}
+    <div className="mask-card">
+      <span style={{fontSize:18,color:"var(--lv)",flexShrink:0,paddingTop:2}}>◈</span>
+      <div style={{flex:1,minWidth:0}}>
+        <select value={mk.refId||""} onChange={function(e){props.onChange(Object.assign({},mk,{refId:e.target.value||null}))}} style={{width:"100%",marginBottom:8}}>
+          <option value="">— select source —</option>
+          <optgroup label="Pixel Creators">
+            {props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId}).map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
+          </optgroup>
+          <optgroup label="Compositors">
+            {props.nodes.filter(function(n){return n.section===2&&n.id!==props.selfId}).map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
+          </optgroup>
         </select>
-        <button className={efx.maskStack.length>0?"sm lv":"sm"} onClick={function(){setMOpen(!mOpen)}} style={{padding:"1px 4px",fontSize:8}}>
-          {efx.maskStack.length>0?"M("+efx.maskStack.length+")":"M"}
-        </button>
-        <button className="ib dng" onClick={props.onDel} style={{fontSize:11,padding:"0 2px"}}>×</button>
+        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+          <select value={mk.channel} onChange={function(e){props.onChange(Object.assign({},mk,{channel:e.target.value}))}} style={{width:90,flex:"none"}}>
+            {MCH.map(function(c){return <option key={c}>{c}</option>})}
+          </select>
+          <input type="range" min={0} max={1} step={.01} value={mk.strength} onChange={function(e){props.onChange(Object.assign({},mk,{strength:+e.target.value}))}} style={{flex:1}}/>
+          <span style={{fontSize:10,color:"var(--ac)",minWidth:32,textAlign:"right"}}>{Math.round(mk.strength*100)}%</span>
+          <button className={mk.invert?"ac":"ghost"} style={{minHeight:32,padding:"0 10px",fontSize:11}} onClick={function(){props.onChange(Object.assign({},mk,{invert:!mk.invert}))}}>inv</button>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:props.onEditEffects?8:0}}>
+          <select value={mk.blendMode} onChange={function(e){props.onChange(Object.assign({},mk,{blendMode:e.target.value}))}} style={{flex:1}}>
+            {MBMS.map(function(m){return <option key={m}>{m}</option>})}
+          </select>
+          <input type="range" min={0} max={100} step={1} value={mk.opacity} onChange={function(e){props.onChange(Object.assign({},mk,{opacity:+e.target.value}))}} style={{flex:1}}/>
+          <span style={{fontSize:10,color:"var(--di)",minWidth:32,textAlign:"right"}}>{Math.round(mk.opacity)}%</span>
+        </div>
+        {props.onEditEffects && (
+          <button className="ac" style={{width:"100%"}} onClick={props.onEditEffects}>
+            Edit mask effects ({(mk.effectStack||[]).length}) →
+          </button>
+        )}
       </div>
-      {efx.type==="curves" && mOpen && (
-        <div style={{padding:"4px 6px 4px 8px",background:"rgba(4,4,14,.6)"}}>
-          <div style={{fontSize:7.5,color:"var(--di)",marginBottom:3}}>INPUT RANGE</div>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--muted)",minWidth:36}}>in black</span>
-            <input type="range" min={0} max={254} step={1} value={efx.params.inBlack||0} onChange={function(e){upP({inBlack:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:20}}>{efx.params.inBlack||0}</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--muted)",minWidth:36}}>in white</span>
-            <input type="range" min={1} max={255} step={1} value={efx.params.inWhite==null?255:efx.params.inWhite} onChange={function(e){upP({inWhite:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:20}}>{efx.params.inWhite==null?255:efx.params.inWhite}</span>
-          </div>
-          <div style={{fontSize:7.5,color:"var(--di)",marginBottom:3,marginTop:2}}>OUTPUT RANGE</div>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--muted)",minWidth:36}}>out black</span>
-            <input type="range" min={0} max={254} step={1} value={efx.params.outBlack||0} onChange={function(e){upP({outBlack:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:20}}>{efx.params.outBlack||0}</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--muted)",minWidth:36}}>out white</span>
-            <input type="range" min={1} max={255} step={1} value={efx.params.outWhite==null?255:efx.params.outWhite} onChange={function(e){upP({outWhite:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:20}}>{efx.params.outWhite==null?255:efx.params.outWhite}</span>
-          </div>
-          <div style={{fontSize:7.5,color:"var(--di)",marginBottom:3,marginTop:2}}>S-CURVE</div>
-          <div style={{display:"flex",alignItems:"center",gap:3}}>
-            <span style={{fontSize:8,color:"var(--muted)",minWidth:36}}>shape</span>
-            <input type="range" min={-100} max={100} step={1} value={efx.params.sCurve||0} onChange={function(e){upP({sCurve:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:20}}>{efx.params.sCurve||0}</span>
-          </div>
+      <button className="icon-btn sm" style={{color:"var(--dng)",alignSelf:"flex-start"}} onClick={props.onDel}>×</button>
+    </div>
+  )
+}
+
+/* ─── EFFECT CARD ─────────────────────────────────────── */
+function EfxCard(props) {
+  var efx=props.efx
+  var tabSt=useState("primary"); var tab=tabSt[0], setTab=tabSt[1]
+  var armedSt=useState(false); var armed=armedSt[0], setArmed=armedSt[1]
+  var timerRef=useRef(null)
+  useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
+  function handleDel(){
+    if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
+    else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
+  }
+  var nMasks=(efx.maskStack||[]).length
+  var tabs=[
+    {id:"primary",label:"Primary"},
+    {id:"layer",  label:"Layer"},
+    {id:"mask",   label:"Mask"+(nMasks>0?" ("+nMasks+")":""),color:"lv"},
+  ]
+  return (
+    <div className="card" style={{marginBottom:10}}>
+      <div className="card-hdr">
+        <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+          <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
+          <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
+        </div>
+        <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},efx,{enabled:!efx.enabled}))}} style={{color:efx.enabled?"var(--ac)":"var(--mu)",fontSize:18}}>
+          {efx.enabled?"●":"○"}
+        </button>
+        <span style={{flex:1,fontSize:12,color:efx.enabled?"var(--tx)":"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}>{efx.type}</span>
+        <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
+          {armed?"confirm x":"x"}
+        </button>
+      </div>
+      <TabBar tabs={tabs} active={tab} onChange={setTab}/>
+      {tab==="primary" && (
+        <div className="card-body">
+          <EfxPrimary efx={efx} onChange={props.onChange}/>
         </div>
       )}
-      {efx.type==="transform" && mOpen && (
-        <div style={{padding:"4px 6px 4px 8px",background:"rgba(4,4,14,.6)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--di)",minWidth:42}}>translate x</span>
-            <input type="range" min={-0.5} max={0.5} step={.005} value={efx.params.tx||0} onChange={function(e){upP({tx:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:28,textAlign:"right"}}>{Number(efx.params.tx||0).toFixed(3)}</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--di)",minWidth:42}}>translate y</span>
-            <input type="range" min={-0.5} max={0.5} step={.005} value={efx.params.ty||0} onChange={function(e){upP({ty:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:28,textAlign:"right"}}>{Number(efx.params.ty||0).toFixed(3)}</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--di)",minWidth:42}}>rotation °</span>
-            <input type="range" min={-180} max={180} step={1} value={efx.params.rot||0} onChange={function(e){upP({rot:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:28,textAlign:"right"}}>{Math.round(efx.params.rot||0)}°</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--di)",minWidth:42}}>scale unif</span>
-            <input type="range" min={0.05} max={4} step={.01} value={efx.params.su!=null?efx.params.su:1} onChange={function(e){upP({su:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:28,textAlign:"right"}}>{Number(efx.params.su!=null?efx.params.su:1).toFixed(2)}×</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--di)",minWidth:42}}>scale x</span>
-            <input type="range" min={0.05} max={4} step={.01} value={efx.params.sx!=null?efx.params.sx:1} onChange={function(e){upP({sx:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:28,textAlign:"right"}}>{Number(efx.params.sx!=null?efx.params.sx:1).toFixed(2)}×</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--di)",minWidth:42}}>scale y</span>
-            <input type="range" min={0.05} max={4} step={.01} value={efx.params.sy!=null?efx.params.sy:1} onChange={function(e){upP({sy:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:28,textAlign:"right"}}>{Number(efx.params.sy!=null?efx.params.sy:1).toFixed(2)}×</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
-            <span style={{fontSize:8,color:"var(--di)",minWidth:42}}>skew x °</span>
-            <input type="range" min={-60} max={60} step={1} value={efx.params.skX||0} onChange={function(e){upP({skX:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:28,textAlign:"right"}}>{Math.round(efx.params.skX||0)}°</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:3}}>
-            <span style={{fontSize:8,color:"var(--di)",minWidth:42}}>skew y °</span>
-            <input type="range" min={-60} max={60} step={1} value={efx.params.skY||0} onChange={function(e){upP({skY:+e.target.value})}} style={{flex:1}} />
-            <span style={{fontSize:7.5,color:"var(--ac)",minWidth:28,textAlign:"right"}}>{Math.round(efx.params.skY||0)}°</span>
-          </div>
+      {tab==="layer" && (
+        <div className="card-body">
+          <Sl l="opacity" v={efx.opacity} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){props.onChange(Object.assign({},efx,{opacity:v}))}}/>
+          <Se l="blend" v={efx.blendMode||"normal"} opts={EBMS} fn={function(v){props.onChange(Object.assign({},efx,{blendMode:v}))}}/>
         </div>
       )}
-      {efx.type!=="curves" && mOpen && (
-        <div className="sm2" style={{margin:"0 0 2px 8px"}}>
-          <MaskStack stack={efx.maskStack} autoExpand={true} onChange={function(ms){props.onChange(Object.assign({},efx,{maskStack:ms}))}} nodes={props.nodes} selfId={props.selfId} depth={(props.depth||0)+1} />
-        </div>
-      )}
-      {efx.type==="curves" && (
-        <div className="sm2" style={{margin:"0 0 2px 8px"}}>
-          <MaskStack stack={efx.maskStack} autoExpand={true} onChange={function(ms){props.onChange(Object.assign({},efx,{maskStack:ms}))}} nodes={props.nodes} selfId={props.selfId} depth={(props.depth||0)+1} />
+      {tab==="mask" && (
+        <div className="card-body" style={{paddingTop:8}}>
+          {nMasks===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no masks on this effect</div>}
+          {(efx.maskStack||[]).map(function(mk,mi){
+            return (
+              <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId}
+                onChange={function(nw){
+                  var ms=(efx.maskStack||[]).map(function(x,xi){return xi===mi?nw:x})
+                  props.onChange(Object.assign({},efx,{maskStack:ms}))
+                }}
+                onDel={function(){
+                  var ms=(efx.maskStack||[]).filter(function(_,xi){return xi!==mi})
+                  props.onChange(Object.assign({},efx,{maskStack:ms}))
+                }}
+                onEditEffects={function(){props.onDrillMask(mi)}}
+              />
+            )
+          })}
+          <button className="lv" style={{width:"100%",marginTop:4}} onClick={function(){
+            var ms=(efx.maskStack||[]).concat([mkMask()])
+            props.onChange(Object.assign({},efx,{maskStack:ms}))
+          }}>+ add mask</button>
         </div>
       )}
     </div>
   )
 }
-var EFX_GROUPS = [
-  {label:"Tonal",   items:["brightness","contrast","exposure","levels","curves","posterize"]},
-  {label:"Colour",  items:["hue-shift","saturation"]},
-  {label:"Pixel",   items:["blur","invert","threshold"]},
-  {label:"Transform", items:["transform"]},
+
+/* ─── ADD EFFECT MENU ─────────────────────────────────── */
+var EFX_GROUPS=[
+  {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
+  {label:"Colour",   items:["hue-shift","saturation","vibrance"]},
+  {label:"Pixel",    items:["blur","invert","threshold"]},
+  {label:"Transform",items:["transform"]},
 ]
+function AddEfxMenu(props) {
+  var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
+  var ref=useRef(null)
+  useEffect(function(){
+    if(!open)return
+    function h(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false)}
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[open])
+  return (
+    <div ref={ref} style={{position:"relative",marginTop:4}}>
+      <button className="ac" style={{width:"100%"}} onClick={function(){setOpen(!open)}}>+ add effect</button>
+      {open && (
+        <div className="eff-menu">
+          {EFX_GROUPS.map(function(grp){
+            return (
+              <div key={grp.label}>
+                <div className="drop-grp">{grp.label}</div>
+                {grp.items.map(function(t){
+                  return (
+                    <div key={t} className="drop-item" onClick={function(){props.onAdd(t);setOpen(false)}}>{t}</div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── EFFECT STACK ────────────────────────────────────── */
 function EfxStack(props) {
-  var menuState = useState(false)
-  var menuOpen=menuState[0], setMenuOpen=menuState[1]
-  var menuRef = useRef(null)
-
-  useEffect(function() {
-    if (!menuOpen) return
-    function onDown(e) { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false) }
-    document.addEventListener("mousedown", onDown)
-    return function() { document.removeEventListener("mousedown", onDown) }
-  }, [menuOpen])
-
-  function addEfx(type) { props.onChange(props.stack.concat([mkEfx(type)])); setMenuOpen(false) }
-  function upd(id,nw) { props.onChange(props.stack.map(function(e){return e.id===id?nw:e})) }
-  function del(id) { props.onChange(props.stack.filter(function(e){return e.id!==id})) }
-  function mv(idx,dir) {
-    var ni=Math.max(0,Math.min(props.stack.length-1,idx+dir)); if(ni===idx)return
-    var a=props.stack.slice(), tmp=a[idx]; a[idx]=a[ni]; a[ni]=tmp; props.onChange(a)
+  function addEfx(type){props.onChange(props.stack.concat([mkEfx(type)]))}
+  function upd(id,nw){props.onChange(props.stack.map(function(e){return e.id===id?nw:e}))}
+  function del(id){props.onChange(props.stack.filter(function(e){return e.id!==id}))}
+  function move(idx,dir){
+    var ni=Math.max(0,Math.min(props.stack.length-1,idx+dir))
+    if(ni===idx)return
+    var a=props.stack.slice(),tmp=a[idx];a[idx]=a[ni];a[ni]=tmp;props.onChange(a)
   }
   return (
-    <div className="se">
-      {props.stack.length===0 && <div style={{padding:"2px 6px",fontSize:8,color:"var(--di)"}}>no effects</div>}
-      {props.stack.map(function(e,i){
+    <div>
+      {props.stack.length===0 && <div className="empty">no effects</div>}
+      {props.stack.map(function(efx,i){
         return (
-          <EfxRow key={e.id} efx={e} idx={i} tot={props.stack.length}
-            onChange={function(nw){upd(e.id,nw)}} onDel={function(){del(e.id)}} onMv={mv}
-            nodes={props.nodes} selfId={props.selfId} depth={props.depth||0} />
+          <EfxCard key={efx.id} efx={efx} nodes={props.nodes} selfId={props.selfId}
+            isFirst={i===0} isLast={i===props.stack.length-1}
+            onChange={function(nw){upd(efx.id,nw)}}
+            onDel={function(){del(efx.id)}}
+            onMove={function(dir){move(i,dir)}}
+            onDrillMask={function(mi){
+              if(props.navPush) props.navPush({
+                label:efx.type+" / mask "+(mi+1),
+                getMask:function(){
+                  var cur=props.stack.find(function(e){return e.id===efx.id})
+                  return cur?(cur.maskStack||[])[mi]:null
+                },
+                setMask:function(newMask){
+                  var ms=(efx.maskStack||[]).map(function(x,xi){return xi===mi?newMask:x})
+                  upd(efx.id,Object.assign({},efx,{maskStack:ms}))
+                }
+              })
+            }}
+          />
         )
       })}
-      <div className="ad" style={{position:"relative"}} ref={menuRef}>
-        <button className="ac sm" style={{width:"100%"}} onClick={function(){setMenuOpen(!menuOpen)}}>
-          + add effect ▾
-        </button>
-        {menuOpen && (
-          <div style={{
-            position:"absolute",bottom:"100%",left:0,right:0,zIndex:400,
-            background:"#0e0e28",border:"1px solid var(--bd)",borderRadius:"3px",
-            boxShadow:"0 -6px 20px rgba(0,0,0,.7)",overflow:"hidden",marginBottom:2
-          }}>
-            {EFX_GROUPS.map(function(grp) {
-              return (
-                <div key={grp.label}>
-                  <div style={{fontSize:7,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",padding:"4px 8px 2px",borderTop:"1px solid rgba(255,255,255,.04)"}}>
-                    {grp.label}
-                  </div>
-                  {grp.items.map(function(t) {
-                    return (
-                      <div key={t}
-                        onClick={function(){addEfx(t)}}
-                        style={{padding:"4px 12px",fontSize:9.5,color:"var(--tx)",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",transition:"background .08s"}}
-                        onMouseEnter={function(e){e.currentTarget.style.background="var(--sl)";e.currentTarget.style.color="var(--ac)"}}
-                        onMouseLeave={function(e){e.currentTarget.style.background="";e.currentTarget.style.color="var(--tx)"}}>
-                        {t}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })}
+      <AddEfxMenu onAdd={addEfx}/>
+    </div>
+  )
+}
+
+/* ─── MASK STACK PANEL ────────────────────────────────── */
+function MaskStackPanel(props) {
+  function addMask(){props.onChange(props.stack.concat([mkMask()]))}
+  function upd(id,nw){props.onChange(props.stack.map(function(m){return m.id===id?nw:m}))}
+  function del(id){props.onChange(props.stack.filter(function(m){return m.id!==id}))}
+  return (
+    <div>
+      {props.stack.length===0 && <div className="empty">no masks</div>}
+      {props.stack.map(function(mk,mi){
+        return (
+          <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId}
+            onChange={function(nw){upd(mk.id,nw)}}
+            onDel={function(){del(mk.id)}}
+            onEditEffects={function(){
+              if(props.navPush) props.navPush({
+                label:"mask "+(mi+1)+" / effects",
+                getMask:function(){return props.stack.find(function(m){return m.id===mk.id})},
+                setMask:function(nm){upd(mk.id,nm)}
+              })
+            }}
+          />
+        )
+      })}
+      <button className="lv" style={{width:"100%",marginTop:4}} onClick={addMask}>+ add mask</button>
+    </div>
+  )
+}
+
+/* ─── SLOT PANEL ──────────────────────────────────────── */
+function SlotPanel(props) {
+  var slot=props.slot, onChange=props.onChange, nodes=props.nodes, selfId=props.selfId
+  var tabSt=useState("source"); var tab=tabSt[0], setTab=tabSt[1]
+  var nEfx=(slot.effectStack||[]).length, nMask=(slot.maskStack||[]).length
+  var tabs=[
+    {id:"source", label:"Source"},
+    {id:"effects",label:"Effects"+(nEfx>0?" ("+nEfx+")":""),color:"ac"},
+    {id:"masks",  label:"Masks"+(nMask>0?" ("+nMask+")":""),color:"lv"},
+  ]
+  return (
+    <div className="card">
+      <div className="card-hdr" style={{background:props.accent==="var(--ac)"?"rgba(36,204,168,.06)":"rgba(208,72,152,.06)"}}>
+        <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:props.accent}}>{props.label}</span>
+      </div>
+      <TabBar tabs={tabs} active={tab} onChange={setTab}/>
+      {tab==="source" && (
+        <div className="card-body">
+          <NRef l="source" v={slot.refId} nodes={nodes} selfId={selfId} fn={function(v){onChange(Object.assign({},slot,{refId:v}))}}/>
+        </div>
+      )}
+      {tab==="effects" && (
+        <div style={{padding:10}}>
+          <EfxStack stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
+            onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}}/>
+        </div>
+      )}
+      {tab==="masks" && (
+        <div style={{padding:10}}>
+          <MaskStackPanel stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
+            onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}}/>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── BLENDER PROPS ───────────────────────────────────── */
+function BlenderProps(props) {
+  var node=props.node, onChange=props.onChange, nodes=props.nodes
+  var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
+  function navPush(item){setNavStack(function(s){return s.concat([item])})}
+  function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
+
+  if(navStack.length>0){
+    var top=navStack[navStack.length-1]
+    var drillMask=top.getMask()
+    return (
+      <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
+        <div className="breadcrumb">
+          <button className="ghost" style={{fontSize:13,padding:"0 6px 0 0",minHeight:32}} onClick={navPop}>
+            Back
+          </button>
+          <span className="bc-item">Blender</span>
+          {navStack.map(function(n,i){return (
+            <span key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{color:"var(--mu)"}}>›</span>
+              <span className={"bc-item"+(i===navStack.length-1?" cur":"")}>{n.label}</span>
+            </span>
+          )})}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:10}}>
+          <div className="stack-lbl">effects on mask</div>
+          {drillMask && (
+            <EfxStack
+              stack={drillMask.effectStack||[]}
+              nodes={nodes} selfId={node.id}
+              navPush={navPush}
+              onChange={function(es){top.setMask(Object.assign({},drillMask,{effectStack:es}))}}
+            />
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  var nOutEfx=(node.outEfx||[]).length, nOutMask=(node.outMask||[]).length
+  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  var outTabs=[
+    {id:"effects",label:"Effects"+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
+    {id:"masks",  label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
+  ]
+  return (
+    <div style={{padding:10,overflowY:"auto"}}>
+      <SlotPanel label="Input A" slot={node.switched?node.inputB:node.inputA} accent="var(--ac)"
+        nodes={nodes} selfId={node.id} navPush={navPush}
+        onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}/>
+      <div className="card" style={{marginBottom:10}}>
+        <div className="card-hdr">
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--di)"}}>Blend</span>
+        </div>
+        <div className="card-body">
+          <Se l="mode" v={node.mode} opts={BMODES} fn={function(v){onChange(Object.assign({},node,{mode:v}))}}/>
+          <Sl l="amount" v={node.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){onChange(Object.assign({},node,{amount:v}))}}/>
+          <PR l="switch">
+            <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}} className={node.switched?"ac":""} style={{minHeight:36,padding:"0 14px"}}>
+              {node.switched?"B to A (switched)":"A to B (normal)"}
+            </button>
+          </PR>
+        </div>
+      </div>
+      <SlotPanel label="Input B" slot={node.switched?node.inputA:node.inputB} accent="var(--co)"
+        nodes={nodes} selfId={node.id} navPush={navPush}
+        onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}/>
+      <div className="card">
+        <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
+        </div>
+        <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
+        {outTab==="effects" && (
+          <div style={{padding:10}}>
+            <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}/>
+          </div>
+        )}
+        {outTab==="masks" && (
+          <div style={{padding:10}}>
+            <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}/>
           </div>
         )}
       </div>
     </div>
   )
 }
-function MaskRow(props) {
-  var eOpenState = useState(false)
-  var eOpen=eOpenState[0], setEOpen=eOpenState[1]
-  var mk=props.mk
-  return (
-    <div className="mi">
-      <div className="mr">
-        <button className="ib" onClick={function(){props.onMv(props.idx,-1)}} disabled={props.idx===0} style={{fontSize:7,padding:"0 2px",lineHeight:1.2}}>▲</button>
-        <button className="ib" onClick={function(){props.onMv(props.idx,1)}} disabled={props.idx===props.tot-1} style={{fontSize:7,padding:"0 2px",lineHeight:1.2}}>▼</button>
-        <span style={{fontSize:10,color:"var(--lv)",padding:"0 2px",flexShrink:0}}>◈</span>
-        <select value={mk.refId||""} onChange={function(e){props.onChange(Object.assign({},mk,{refId:e.target.value||null}))}} style={{flex:2,minWidth:55,fontSize:8.5,padding:"1px 2px"}}>
-          <option value="">—src—</option>
-          {props.nodes.filter(function(n){return n.id!==props.selfId&&n.section===1}).map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
-          {props.nodes.filter(function(n){return n.id!==props.selfId&&n.section===2}).map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
-        </select>
-        <select value={mk.channel} onChange={function(e){props.onChange(Object.assign({},mk,{channel:e.target.value}))}} style={{width:36,fontSize:8.5,padding:"1px 2px",flexShrink:0}}>
-          {MCH.map(function(c){return <option key={c}>{c}</option>})}
-        </select>
-        <input type="range" min={0} max={1} step={.01} value={mk.strength} onChange={function(e){props.onChange(Object.assign({},mk,{strength:+e.target.value}))}} style={{width:26,flexShrink:0}} />
-        <button className={mk.invert?"sm ac":"sm"} onClick={function(){props.onChange(Object.assign({},mk,{invert:!mk.invert}))}} style={{padding:"0 4px",fontSize:8}}>inv</button>
-        <input type="range" min={0} max={100} step={1} value={mk.opacity} onChange={function(e){props.onChange(Object.assign({},mk,{opacity:+e.target.value}))}} style={{width:26,flexShrink:0}} />
-        <span style={{fontSize:7.5,color:"var(--di)",minWidth:18,textAlign:"right"}}>{Math.round(mk.opacity)}%</span>
-        <select value={mk.blendMode} onChange={function(e){props.onChange(Object.assign({},mk,{blendMode:e.target.value}))}} style={{width:44,fontSize:8.5,padding:"1px 2px",flexShrink:0}}>
-          {MBMS.map(function(m){return <option key={m}>{m}</option>})}
-        </select>
-        <button className={mk.effectStack.length>0?"sm ac":"sm"} onClick={function(){setEOpen(!eOpen)}} style={{padding:"1px 4px",fontSize:8}}>
-          {mk.effectStack.length>0?"E("+mk.effectStack.length+")":"E"}
-        </button>
-        <button className="ib dng" onClick={props.onDel} style={{fontSize:11,padding:"0 2px"}}>×</button>
-      </div>
-      {eOpen && (
-        <div className="se" style={{margin:"0 0 2px 8px"}}>
-          <EfxStack stack={mk.effectStack} onChange={function(es){props.onChange(Object.assign({},mk,{effectStack:es}))}} nodes={props.nodes} selfId={props.selfId} depth={(props.depth||0)+1} />
-        </div>
-      )}
-    </div>
-  )
-}
-function MaskStack(props) {
-  // If autoExpand, add first mask immediately on mount (called from EfxRow M button)
-  useEffect(function() {
-    if (props.autoExpand && props.stack.length === 0) {
-      props.onChange([mkMask()])
-    }
-  }, [])
 
-  function add() { props.onChange(props.stack.concat([mkMask()])) }
-  function upd(id,nw) { props.onChange(props.stack.map(function(m){return m.id===id?nw:m})) }
-  function del(id) { props.onChange(props.stack.filter(function(m){return m.id!==id})) }
-  function mv(i,d) {
-    var ni=Math.max(0,Math.min(props.stack.length-1,i+d)); if(ni===i)return
-    var a=props.stack.slice(), tmp=a[i]; a[i]=a[ni]; a[ni]=tmp; props.onChange(a)
-  }
-  return (
-    <div className="sm2">
-      {props.stack.map(function(m,i){
-        return (
-          <MaskRow key={m.id} mk={m} idx={i} tot={props.stack.length}
-            onChange={function(nw){upd(m.id,nw)}} onDel={function(){del(m.id)}} onMv={mv}
-            nodes={props.nodes} selfId={props.selfId} depth={props.depth||0} />
-        )
-      })}
-      <div className="ad">
-        <button className="lv sm" onClick={add}>+ mask</button>
-      </div>
-    </div>
-  )
-}
-
-/* ─── COLLAPSIBLE STACK SECTION ─────────────────────────── */
-function StackSect(props) {
-  var openState = useState(false)
-  var open=openState[0], setOpen=openState[1]
-  return (
-    <div>
-      <div className="ps" onClick={function(){setOpen(!open)}}>
-        <span style={{fontSize:8,color:open?"var(--ac)":"var(--di)"}}>{open?"▼":"▶"}</span>
-        <span className="psl">{props.label}</span>
-        {props.n>0 && <span className={props.isE?"bdg bac":"bdg blv"}>{props.n}</span>}
-      </div>
-      {open && <div style={{background:"rgba(4,4,14,.5)"}}>{props.children}</div>}
-    </div>
-  )
-}
-
-/* ─── SLOT PANEL ─────────────────────────────────────────── */
-function SlotPanel(props) {
-  var slot=props.slot, onChange=props.onChange, nodes=props.nodes, selfId=props.selfId
-  return (
-    <div style={{borderTop:"1px solid var(--bd)"}}>
-      <div style={{padding:"4px 8px",background:"rgba(6,6,20,.9)"}}>
-        <div style={{fontSize:8.5,color:props.accent,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",marginBottom:3}}>{props.label}</div>
-        <NRef l="source" v={slot.refId} nodes={nodes} selfId={selfId} fn={function(v){onChange(Object.assign({},slot,{refId:v}))}} />
-      </div>
-      <StackSect label="Effect Stack" n={slot.effectStack.length} isE={true}>
-        <EfxStack stack={slot.effectStack} onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}} nodes={nodes} selfId={selfId} />
-      </StackSect>
-      <StackSect label="Mask Stack" n={slot.maskStack.length} isE={false}>
-        <MaskStack stack={slot.maskStack} onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}} nodes={nodes} selfId={selfId} />
-      </StackSect>
-    </div>
-  )
-}
-
-/* ─── BLENDER PROPS ─────────────────────────────────────── */
-function BlenderProps(props) {
-  var node=props.node, onChange=props.onChange, nodes=props.nodes
-  return (
-    <div>
-      <SlotPanel label="Input A" slot={node.inputA} onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}} nodes={nodes} selfId={node.id} accent="var(--ac)" />
-      <div style={{padding:"5px 8px",background:"rgba(4,4,16,.9)",borderTop:"1px solid var(--bd)",borderBottom:"1px solid var(--bd)"}}>
-        <div style={{fontSize:8.5,color:"var(--di)",fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",marginBottom:4}}>Blend</div>
-        <Se l="mode"   v={node.mode}   opts={BMODES} fn={function(v){onChange(Object.assign({},node,{mode:v}))}} />
-        <Sl l="amount" v={node.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){onChange(Object.assign({},node,{amount:v}))}} />
-        <PR l="switch">
-          <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}} className={node.switched?"ac":""} style={{fontSize:8.5}}>
-            {node.switched?"B→A (switched)":"A→B (normal)"}
-          </button>
-        </PR>
-      </div>
-      <SlotPanel label="Input B" slot={node.inputB} onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}} nodes={nodes} selfId={node.id} accent="var(--co)" />
-      <div style={{borderTop:"1px solid var(--bd)"}}>
-        <div style={{padding:"3px 8px",background:"rgba(6,6,20,.9)"}}>
-          <div style={{fontSize:8.5,color:"var(--lv)",fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em"}}>Output</div>
-        </div>
-        <StackSect label="Output Effects" n={node.outEfx.length} isE={true}>
-          <EfxStack stack={node.outEfx} onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}} nodes={nodes} selfId={node.id} />
-        </StackSect>
-        <StackSect label="Output Masks" n={node.outMask.length} isE={false}>
-          <MaskStack stack={node.outMask} onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}} nodes={nodes} selfId={node.id} />
-        </StackSect>
-      </div>
-    </div>
-  )
-}
-
-/* ─── NODE ITEM ROW ─────────────────────────────────────── */
-var TDOT = {solid:"#3850a0",shape:"#18b860",gradient:"#7820b0",noise:"#a87018",pattern:"#1878b0",image:"#2060a8",blender:"#b82880"}
-
+/* ─── NODE ITEM ───────────────────────────────────────── */
+var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","blender":"#b82880"}
 function NodeItem(props) {
   var node=props.node
-  var edState  = useState(false);     var ed=edState[0],   setEd=edState[1]
-  var nmState  = useState(node.name); var nm=nmState[0],   setNm=nmState[1]
-  var armedSt  = useState(false);     var armed=armedSt[0],setArmed=armedSt[1]
-  var inR    = useRef(null)
-  var timerR = useRef(null)
-
+  var edSt=useState(false);    var ed=edSt[0],     setEd=edSt[1]
+  var nmSt=useState(node.name); var nm=nmSt[0],    setNm=nmSt[1]
+  var armSt=useState(false);   var armed=armSt[0], setArmed=armSt[1]
+  var inR=useRef(null),timerR=useRef(null)
   useEffect(function(){setNm(node.name)},[node.name])
   useEffect(function(){if(ed&&inR.current)inR.current.focus()},[ed])
-  useEffect(function(){
-    return function(){ if(timerR.current)clearTimeout(timerR.current) }
-  },[])
-
+  useEffect(function(){return function(){if(timerR.current)clearTimeout(timerR.current)}},[])
   function commit(){setEd(false);if(nm.trim())props.onRen(nm.trim());else setNm(node.name)}
-
-  function handleDel(e) {
+  function handleDel(e){
     e.stopPropagation()
-    if (!armed) {
-      setArmed(true)
-      timerR.current = setTimeout(function(){ setArmed(false) }, 3000)
-    } else {
-      clearTimeout(timerR.current)
-      setArmed(false)
-      props.onDel(node.id)
-    }
+    if(!armed){setArmed(true);timerR.current=setTimeout(function(){setArmed(false)},3000)}
+    else{clearTimeout(timerR.current);setArmed(false);props.onDel(node.id)}
   }
-
   return (
     <div className={"nrow"+(props.isSel?" sel":"")+(props.isDsp?" dsp":"")+(!node.enabled?" off":"")}
-      onClick={function(){
-        if(armed){ setArmed(false); clearTimeout(timerR.current); return }
-        props.onSel(node.id)
-      }}>
-      <div style={{width:6,height:6,borderRadius:"50%",background:TDOT[node.type]||"#555",flexShrink:0}} />
+      onClick={function(){if(armed){setArmed(false);clearTimeout(timerR.current);return}props.onSel(node.id)}}>
+      <div style={{width:10,height:10,borderRadius:"50%",background:TDOT[node.type]||"#555",flexShrink:0}}/>
       <div style={{flex:1,overflow:"hidden",minWidth:0}}>
         {ed
-          ? <input ref={inR} className="ni" value={nm} onChange={function(e){setNm(e.target.value)}} onBlur={commit}
+          ? <input ref={inR} className="ninput" value={nm} onChange={function(e){setNm(e.target.value)}} onBlur={commit}
               onKeyDown={function(e){if(e.key==="Enter")commit();if(e.key==="Escape"){setEd(false);setNm(node.name)}}}
-              onClick={function(e){e.stopPropagation()}} />
-          : <span onDoubleClick={function(e){e.stopPropagation();setEd(true)}} style={{fontSize:10.5,color:props.isDsp?"var(--lv)":node.enabled?"var(--tx)":"#7080a8",fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block",userSelect:"none"}}>{node.name}</span>
+              onClick={function(e){e.stopPropagation()}}/>
+          : <span onDoubleClick={function(e){e.stopPropagation();setEd(true)}}
+              style={{fontSize:13,color:props.isDsp?"var(--lv)":node.enabled?"var(--tx)":"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block",userSelect:"none"}}>
+              {node.name}
+            </span>
         }
       </div>
       <span className={"ftag "+(node.section===1?"tgn":"tco")}>{node.type}</span>
-      <button className="ibq nrow-tog-off" onClick={function(e){e.stopPropagation();props.onTog(node.id)}}
-        style={{color:node.enabled?"var(--ac)":undefined,fontSize:12}}>
+      <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onTog(node.id)}} style={{color:node.enabled?"var(--ac)":"var(--mu)"}}>
         {node.enabled?"●":"○"}
       </button>
-      <button className="ibq nrow-dsp-off" onClick={function(e){e.stopPropagation();props.onDsp(node.id)}}
-        style={{color:props.isDsp?"var(--lv)":undefined,fontSize:13}}>
+      <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onDsp(node.id)}} style={{color:props.isDsp?"var(--lv)":"var(--mu)",fontSize:20}}>
         {props.isDsp?"◉":"◎"}
       </button>
-      <button className={"nrow-del"+(armed?" armed":"")} onClick={handleDel}
-        title={armed?"click again to confirm delete":"delete"}>
-        {armed?"✕ sure?":"×"}
+      <button onClick={handleDel} style={{minHeight:32,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?56:32}}>
+        {armed?"sure?":"×"}
       </button>
     </div>
   )
 }
 
-/* ─── ADD MENU ──────────────────────────────────────────── */
+/* ─── ADD MENU ────────────────────────────────────────── */
 function AddMenu(props) {
-  var openState = useState(false); var open=openState[0], setOpen=openState[1]
-  var ref = useRef(null)
+  var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
+  var ref=useRef(null)
   useEffect(function(){
     if(!open)return
     function h(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false)}
@@ -1196,32 +1228,31 @@ function AddMenu(props) {
   var items=props.sec===1?s1:[{t:"blender",l:"Blender"}]
   return (
     <div ref={ref} style={{position:"relative"}}>
-      <button className="ac" onClick={function(){setOpen(!open)}} style={{fontSize:8.5,padding:"2px 7px"}}>+Add▾</button>
+      <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
       {open && (
-        <div className="dm">
-          {items.map(function(item){
-            return <div key={item.t} className="dmi" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>
-          })}
+        <div className="drop-menu">
+          {items.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
         </div>
       )}
     </div>
   )
 }
 
-/* ─── SECTION ───────────────────────────────────────────── */
+/* ─── SECTION ─────────────────────────────────────────── */
 function Section(props) {
   var items=props.nodes.filter(function(n){return n.section===props.sec})
+  var color=props.sec===1?"var(--gn)":"var(--co)"
   return (
     <div style={{display:"flex",flexDirection:"column",flex:props.collapsed?"0 0 auto":1,overflow:"hidden",borderBottom:"1px solid var(--bd)"}}>
       <div className="shdr" style={{cursor:"pointer"}} onClick={props.onToggle}>
-        <span style={{fontSize:9,color:"var(--tx)"}}>{props.collapsed?"▶":"▼"}</span>
-        <span className="slbl" style={{flex:1,color:props.sec===1?"var(--gn)":"var(--co)"}}>{props.title}</span>
-        <span style={{fontSize:8.5,color:"var(--mu)",marginRight:5}}>{items.length}</span>
-        <div onClick={function(e){e.stopPropagation()}}><AddMenu sec={props.sec} onAdd={props.onAdd} /></div>
+        <span style={{fontSize:12,color:props.collapsed?"var(--mu)":"var(--di)"}}>{props.collapsed?"▶":"▼"}</span>
+        <span className="slbl" style={{flex:1,color}}>{props.title}</span>
+        <span style={{fontSize:11,color:"var(--mu)",marginRight:8}}>{items.length}</span>
+        <div onClick={function(e){e.stopPropagation()}}><AddMenu sec={props.sec} onAdd={props.onAdd}/></div>
       </div>
       {!props.collapsed && (
         <div style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
-          {items.length===0 && <div style={{padding:10,color:"var(--di)",fontSize:9.5,textAlign:"center"}}>no items</div>}
+          {items.length===0 && <div className="empty">no items — tap + Add</div>}
           {items.map(function(node){
             var isSel=props.selId===node.id, isDsp=props.dispId===node.id
             return (
@@ -1229,12 +1260,13 @@ function Section(props) {
                 <NodeItem node={node} isSel={isSel} isDsp={isDsp}
                   onSel={function(id){props.onSel(id===props.selId?null:id)}}
                   onDsp={props.onDsp} onDel={props.onDel}
-                  onRen={function(name){props.onRen(node.id,name)}} onTog={props.onTog} />
+                  onRen={function(name){props.onRen(node.id,name)}}
+                  onTog={props.onTog}/>
                 {isSel && (
-                  <div className="pw">
+                  <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
                     {props.sec===1
-                      ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} />
-                      : <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} />
+                      ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
+                      : <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes}/>
                     }
                   </div>
                 )}
@@ -1247,46 +1279,46 @@ function Section(props) {
   )
 }
 
-/* ─── LIVE PREVIEW ──────────────────────────────────────── */
+/* ─── LIVE PREVIEW ────────────────────────────────────── */
 function LivePreview(props) {
-  var zoomState = useState(1); var zoom=zoomState[0], setZoom=zoomState[1]
-  var fmtState  = useState("png"); var fmt=fmtState[0], setFmt=fmtState[1]
+  var zSt=useState(1); var zoom=zSt[0], setZoom=zSt[1]
+  var fSt=useState("png"); var fmt=fSt[0], setFmt=fSt[1]
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
-      <div style={{display:"flex",alignItems:"center",gap:4,padding:"4px 9px",background:"var(--pn)",borderBottom:"1px solid var(--bd)",flexShrink:0,flexWrap:"wrap"}}>
-        <span className="slbl" style={{fontSize:9,color:"var(--tx)"}}>Live Preview</span>
+    <div style={{display:"flex",flexDirection:"column",flex:1,minHeight:0,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"var(--pn)",borderBottom:"1px solid var(--bd)",flexShrink:0,overflowX:"auto"}}>
+        <span className="slbl" style={{fontSize:10,color:"var(--di)"}}>Preview</span>
         {props.active
-          ? <span style={{fontSize:8,padding:"1px 5px",borderRadius:2,background:"rgba(168,78,232,.12)",color:"#b878ee",border:"1px solid rgba(168,78,232,.24)"}}>◉ {props.active.name}</span>
-          : <span style={{fontSize:8,color:"var(--di)"}}>—none—</span>}
-        <span style={{flex:1}} />
-        <select value={String(props.sz)} onChange={function(e){props.onResize(parseInt(e.target.value))}} style={{width:55,fontSize:8.5,padding:"1px 3px"}}>
+          ? <span style={{fontSize:9,padding:"2px 8px",borderRadius:4,background:"rgba(176,96,240,.14)",color:"#c87aff",border:"1px solid rgba(176,96,240,.28)"}}>◉ {props.active.name}</span>
+          : <span style={{fontSize:9,color:"var(--mu)"}}>none selected</span>}
+        <span style={{flex:1}}/>
+        <select value={String(props.sz)} onChange={function(e){props.onResize(parseInt(e.target.value))}} style={{width:58,fontSize:10,padding:"3px 4px",flexShrink:0}}>
           {["256","400","512","768","1024"].map(function(s){return <option key={s} value={s}>{s}</option>})}
         </select>
-        <button onClick={function(){setZoom(function(z){return Math.max(.25,z-.25)})}} style={{padding:"1px 5px",fontSize:11}}>−</button>
-        <span style={{fontSize:8.5,color:"var(--di)",minWidth:26,textAlign:"center"}}>{Math.round(zoom*100)}%</span>
-        <button onClick={function(){setZoom(function(z){return Math.min(4,z+.25)})}} style={{padding:"1px 5px",fontSize:11}}>+</button>
-        <button onClick={function(){setZoom(1)}} style={{padding:"1px 4px",fontSize:8.5}}>1:1</button>
-        <select value={fmt} onChange={function(e){setFmt(e.target.value)}} style={{width:46,fontSize:8.5,padding:"1px 2px"}}>
+        <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.max(.25,z-.25)})}} style={{fontSize:16,width:32,height:32}}>-</button>
+        <span style={{fontSize:10,color:"var(--di)",minWidth:30,textAlign:"center",flexShrink:0}}>{Math.round(zoom*100)}%</span>
+        <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.min(4,z+.25)})}} style={{fontSize:16,width:32,height:32}}>+</button>
+        <button onClick={function(){setZoom(1)}} style={{fontSize:10,padding:"0 8px",minHeight:30,flexShrink:0}}>1:1</button>
+        <select value={fmt} onChange={function(e){setFmt(e.target.value)}} style={{width:50,fontSize:10,padding:"3px 3px",flexShrink:0}}>
           {["png","jpeg","webp"].map(function(f){return <option key={f}>{f}</option>})}
         </select>
-        <button className="ac" onClick={function(){props.onExport(fmt)}} style={{padding:"1px 7px",fontSize:8.5}}>↓export</button>
+        <button className="ac" onClick={function(){props.onExport(fmt)}} style={{padding:"0 10px",fontSize:11,flexShrink:0}}>↓</button>
       </div>
-      <div className="checker" style={{flex:1,overflow:"auto",display:"flex",alignItems:"center",justifyContent:"center",padding:16,position:"relative"}}>
+      <div className="checker" style={{flex:1,overflow:"auto",display:"flex",alignItems:"center",justifyContent:"center",padding:20,position:"relative"}}>
         {!props.active && (
           <div style={{position:"absolute",textAlign:"center",pointerEvents:"none"}}>
-            <div style={{fontSize:28,color:"var(--bd)",marginBottom:6}}>◎</div>
-            <div style={{fontSize:9,color:"var(--mu)"}}>Click ◎ on any item to preview</div>
+            <div style={{fontSize:40,color:"var(--bd)",marginBottom:12}}>◎</div>
+            <div style={{fontSize:12,color:"var(--mu)"}}>Tap ◎ on any item to preview</div>
           </div>
         )}
-        <div style={{transform:"scale("+zoom+")",transformOrigin:"center center",boxShadow:"0 12px 50px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.04)",lineHeight:0}}>
-          <canvas ref={props.cvRef} width={props.sz} height={props.sz} style={{display:"block",imageRendering:zoom>2?"pixelated":"auto"}} />
+        <div style={{transform:"scale("+zoom+")",transformOrigin:"center center",boxShadow:"0 12px 60px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.04)",lineHeight:0}}>
+          <canvas ref={props.cvRef} width={props.sz} height={props.sz} style={{display:"block",imageRendering:zoom>2?"pixelated":"auto"}}/>
         </div>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:8,padding:"3px 9px",background:"var(--pn)",borderTop:"1px solid var(--bd)",flexShrink:0}}>
-        <span style={{fontSize:8,color:"var(--di)"}}>{props.sz}×{props.sz}px</span>
-        {props.active && <span style={{fontSize:8,color:"var(--di)",fontFamily:"'IBM Plex Mono',monospace"}}>[{props.active.type}]</span>}
-        <span style={{flex:1}} />
-        <span style={{fontSize:7,color:"var(--bd)",letterSpacing:".1em"}}>NLICS v3.1</span>
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",background:"var(--pn)",borderTop:"1px solid var(--bd)",flexShrink:0}}>
+        <span style={{fontSize:9,color:"var(--mu)"}}>{props.sz}x{props.sz}px</span>
+        {props.active && <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>[{props.active.type}]</span>}
+        <span style={{flex:1}}/>
+        <span style={{fontSize:8,color:"var(--bd)",letterSpacing:".1em"}}>NLICS v3.2 mobile</span>
       </div>
     </div>
   )
@@ -1333,6 +1365,277 @@ function initState() {
   return {nodes:nodes,dispId:"b3"}
 }
 
+/* ─── SETTINGS SHEET ─────────────────────────────────────── */
+function SegCtrl(props) {
+  return (
+    <div className="seg-ctrl">
+      {props.options.map(function(opt) {
+        var on = props.value === opt.v
+        return (
+          <button key={opt.v}
+            className={"seg-btn" + (on ? " on" + (props.accent ? " "+props.accent : "") : "")}
+            onClick={function(){ props.onChange(opt.v) }}>
+            {opt.l}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function SettingsSheet(props) {
+  // props: open, onClose, settings, onSettings
+  // settings: {viewMode, previewPinned, stickyHeaders, panelStyle}
+  var s = props.settings
+  function set(k, v) { props.onSettings(Object.assign({}, s, {[k]: v})) }
+
+  if (!props.open) return null
+  return (
+    <div className="sheet-scrim" onClick={function(e){ if(e.target===e.currentTarget) props.onClose() }}>
+      <div className="sheet-body">
+        <div className="sheet-grip"/>
+        <div className="sheet-hdr">
+          <span className="sheet-title">Layout Settings</span>
+          <button className="ghost" style={{fontSize:20,minHeight:36}} onClick={props.onClose}>×</button>
+        </div>
+        <div className="sheet-scroll">
+
+          <div className="setting-grp">
+            <div className="setting-grp-lbl">View mode</div>
+            <div className="setting-row">
+              <div>
+                <div className="setting-lbl">Layout style</div>
+                <div className="setting-desc">Split keeps lists and preview in separate resizable panels. Unified scrolls everything in one column.</div>
+              </div>
+            </div>
+            <SegCtrl
+              value={s.viewMode}
+              options={[{v:"split",l:"Split"},{v:"unified",l:"Unified scroll"}]}
+              accent="ac"
+              onChange={function(v){ set("viewMode", v) }}/>
+          </div>
+
+          {s.viewMode==="unified" && (
+            <div className="setting-grp">
+              <div className="setting-grp-lbl">Unified options</div>
+              <div className="setting-row">
+                <div style={{flex:1}}>
+                  <div className="setting-lbl">Preview</div>
+                  <div className="setting-desc">Pinned keeps the preview locked at the top while lists scroll below. Scrollable lets the preview scroll with the lists.</div>
+                </div>
+              </div>
+              <SegCtrl
+                value={s.previewPinned?"pinned":"scrollable"}
+                options={[{v:"pinned",l:"Pinned"},{v:"scrollable",l:"Scrollable"}]}
+                accent="ac"
+                onChange={function(v){ set("previewPinned", v==="pinned") }}/>
+
+              <div className="setting-row" style={{marginTop:16}}>
+                <div style={{flex:1}}>
+                  <div className="setting-lbl">Section headers</div>
+                  <div className="setting-desc">Sticky keeps §1 and §2 headers fixed while you scroll their contents. Flowing lets them scroll away.</div>
+                </div>
+              </div>
+              <SegCtrl
+                value={s.stickyHeaders?"sticky":"flowing"}
+                options={[{v:"sticky",l:"Sticky"},{v:"flowing",l:"Flowing"}]}
+                onChange={function(v){ set("stickyHeaders", v==="sticky") }}/>
+            </div>
+          )}
+
+          <div className="setting-grp">
+            <div className="setting-grp-lbl">Node settings panel</div>
+            <div className="setting-row">
+              <div style={{flex:1}}>
+                <div className="setting-lbl">Panel style</div>
+                <div className="setting-desc">Inline expands settings below the node row, pushing content down. Sheet slides up from the bottom as an overlay, keeping the list visible.</div>
+              </div>
+            </div>
+            <SegCtrl
+              value={s.panelStyle}
+              options={[{v:"inline",l:"Inline"},{v:"sheet",l:"Sheet"}]}
+              onChange={function(v){ set("panelStyle", v) }}/>
+          </div>
+
+          <div className="setting-grp">
+            <div className="setting-grp-lbl">Orientation</div>
+            <div className="setting-row">
+              <div style={{flex:1}}>
+                <div className="setting-lbl">Layout axis</div>
+                <div className="setting-desc">Vertical stacks panels top/bottom. Horizontal places them side by side.</div>
+              </div>
+              <SegCtrl
+                value={props.isVert?"vert":"horiz"}
+                options={[{v:"vert",l:"Vertical"},{v:"horiz",l:"Horizontal"}]}
+                onChange={function(v){ props.onIsVert(v==="vert") }}/>
+            </div>
+            {props.isVert && (
+              <div>
+                <div className="setting-row" style={{marginTop:12}}>
+                  <div style={{flex:1}}>
+                    <div className="setting-lbl">Panel order</div>
+                    <div className="setting-desc">Choose whether the preview or the lists appear at the top.</div>
+                  </div>
+                </div>
+                <SegCtrl
+                  value={props.flipped?"preview-top":"lists-top"}
+                  options={[{v:"preview-top",l:"Preview top"},{v:"lists-top",l:"Lists top"}]}
+                  onChange={function(v){ props.onFlipped(v==="preview-top") }}/>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── NODE DETAIL SHEET (panel style = sheet) ──────────────── */
+function NodeDetailSheet(props) {
+  // props: node, sec, open, onClose, onUpdate, onLoad, nodes
+  if (!props.open || !props.node) return null
+  return (
+    <div className="sheet-scrim" onClick={function(e){ if(e.target===e.currentTarget) props.onClose() }}>
+      <div className="node-sheet">
+        <div className="node-sheet-hdr">
+          <div className="sheet-grip" style={{position:"absolute",top:8,left:"50%",transform:"translateX(-50%)"}}/>
+          <span style={{flex:1,fontSize:13,fontFamily:"'IBM Plex Mono',monospace",color:"var(--tx)",fontWeight:500,marginTop:4}}>
+            {props.node.name}
+          </span>
+          <button className="ghost" style={{fontSize:20,minHeight:36}} onClick={props.onClose}>×</button>
+        </div>
+        <div className="node-sheet-scroll">
+          {props.sec===1
+            ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad}/>
+            : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes}/>
+          }
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── SECTION (updated: stickyHeader + sheet panel style) ─── */
+function Section(props) {
+  var items = props.nodes.filter(function(n){ return n.section===props.sec })
+  var color = props.sec===1 ? "var(--gn)" : "var(--co)"
+  var shdrCls = "shdr" + (props.stickyHeaders ? " sticky" : "")
+  return (
+    <div style={{borderBottom:"1px solid var(--bd)"}}>
+      <div className={shdrCls} style={{cursor:"pointer"}} onClick={props.onToggle}>
+        <span style={{fontSize:12,color:props.collapsed?"var(--mu)":"var(--di)"}}>{props.collapsed?"▶":"▼"}</span>
+        <span className="slbl" style={{flex:1,color}}>{props.title}</span>
+        <span style={{fontSize:11,color:"var(--mu)",marginRight:8}}>{items.length}</span>
+        <div onClick={function(e){e.stopPropagation()}}><AddMenu sec={props.sec} onAdd={props.onAdd}/></div>
+      </div>
+      {!props.collapsed && (
+        <div>
+          {items.length===0 && <div className="empty">no items — tap + Add</div>}
+          {items.map(function(node){
+            var isSel = props.selId===node.id
+            var isDsp = props.dispId===node.id
+            return (
+              <div key={node.id}>
+                <NodeItem node={node} isSel={isSel} isDsp={isDsp}
+                  onSel={function(id){ props.onSel(id===props.selId?null:id) }}
+                  onDsp={props.onDsp} onDel={props.onDel}
+                  onRen={function(name){ props.onRen(node.id,name) }}
+                  onTog={props.onTog}/>
+                {/* Inline panel style */}
+                {isSel && props.panelStyle!=="sheet" && (
+                  <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
+                    {props.sec===1
+                      ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
+                      : <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes}/>
+                    }
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── UNIFIED SCROLL LAYOUT ───────────────────────────────── */
+function UnifiedLayout(props) {
+  // props: settings, sp, cvRef, active, sz, onResize, onExport, dragRef, appRef, s1Col, setS1Col, s2Col, setS2Col
+  var s = props.settings
+  var resizeRef = useRef(null)
+
+  function onResizeHandleDown(e) {
+    e.preventDefault()
+    var el = resizeRef.current
+    if (el) el.classList.add("drag")
+    var app = props.appRef.current
+    var tot = app ? app.offsetHeight : window.innerHeight
+    var startY = e.clientY
+    var startH = props.previewH
+
+    function onMove(me) {
+      var delta = me.clientY - startY
+      var next = Math.max(15, Math.min(80, startH + (delta / tot) * 100))
+      props.setPreviewH(next)
+    }
+    function onUp() {
+      if (el) el.classList.remove("drag")
+      document.removeEventListener("pointermove", onMove)
+      document.removeEventListener("pointerup", onUp)
+    }
+    document.addEventListener("pointermove", onMove)
+    document.addEventListener("pointerup", onUp)
+  }
+
+  var previewBlock = (
+    <div style={{height:props.previewH+"vh",display:"flex",flexDirection:"column"}}>
+      <props.LivePreviewCmp cvRef={props.cvRef} active={props.active} sz={props.sz}
+        onResize={props.onResize} onExport={props.onExport}/>
+    </div>
+  )
+
+  var resizeHandle = (
+    <div ref={resizeRef} className="unified-resize-handle"
+      onPointerDown={onResizeHandleDown}
+      style={{userSelect:"none"}}/>
+  )
+
+  if (s.previewPinned) {
+    return (
+      <div style={{height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{flexShrink:0}}>
+          {previewBlock}
+          {resizeHandle}
+        </div>
+        <div style={{flex:1,overflowY:"auto"}}>
+          <Section sec={1} title="§1 · Pixel Creators" {...props.sp}
+            collapsed={props.s1Col} onToggle={function(){props.setS1Col(!props.s1Col)}}
+            stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle}/>
+          <Section sec={2} title="§2 · Compositors" {...props.sp}
+            collapsed={props.s2Col} onToggle={function(){props.setS2Col(!props.s2Col)}}
+            stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle}/>
+        </div>
+      </div>
+    )
+  }
+
+  // Free scroll — everything in one column
+  return (
+    <div style={{height:"100vh",overflowY:"auto"}}>
+      {previewBlock}
+      {resizeHandle}
+      <Section sec={1} title="§1 · Pixel Creators" {...props.sp}
+        collapsed={props.s1Col} onToggle={function(){props.setS1Col(!props.s1Col)}}
+        stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle}/>
+      <Section sec={2} title="§2 · Compositors" {...props.sp}
+        collapsed={props.s2Col} onToggle={function(){props.setS2Col(!props.s2Col)}}
+        stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle}/>
+    </div>
+  )
+}
+
 /* ─── APP ROOT ──────────────────────────────────────────── */
 export default function App() {
   var init = initState()
@@ -1344,10 +1647,19 @@ export default function App() {
   var s6 = useState(false);       var s1Col=s6[0],   setS1Col=s6[1]
   var s7 = useState(false);       var s2Col=s7[0],   setS2Col=s7[1]
   var s8 = useState(false);       var isVert=s8[0],  setIsVert=s8[1]
-  var s9 = useState(false);       var flipped=s9[0], setFlipped=s9[1]
+  var s9 = useState(true);        var flipped=s9[0], setFlipped=s9[1]  // default: preview on top
   var s10= useState(false);       var leftFS=s10[0], setLeftFS=s10[1]
   var s11= useState(false);       var rightFS=s11[0],setRightFS=s11[1]
   var s12= useState(400);         var sz=s12[0],     setSz=s12[1]
+
+  // Settings state
+  var DEFAULTS = {viewMode:"split",previewPinned:true,stickyHeaders:true,panelStyle:"inline",previewH:44,isVert:false,flipped:true}
+  var ss1 = useState(DEFAULTS)
+  var settings=ss1[0], setSettings=ss1[1]
+  var ss2 = useState(false); var settingsOpen=ss2[0], setSettingsOpen=ss2[1]
+  var ss3 = useState(44);   var previewH=ss3[0],    setPreviewH=ss3[1]    // unified preview height %
+  // Sheet-mode selected node
+  var ss4 = useState(null);  var sheetNode=ss4[0],   setSheetNode=ss4[1]   // {node, sec}
 
   var appRef=useRef(null), cvRef=useRef(null), iC=useRef(new Map()), stRef=useRef({nodes:nodes,dispId:dispId})
   var histRef  = useRef([])        // undo ring: array of {nodes} snapshots
@@ -1374,6 +1686,48 @@ export default function App() {
 
   useEffect(function(){stRef.current={nodes:nodes,dispId:dispId}},[nodes,dispId])
 
+  // ── Persist settings to storage ──────────────────────────────────────────
+  // Load on mount
+  useEffect(function(){
+    if (!window.storage) return
+    window.storage.get('nlics:ui-settings').then(function(result) {
+      if (!result) return
+      try {
+        var saved = JSON.parse(result.value)
+        // Merge with defaults so new keys added in future are present
+        var merged = Object.assign({}, DEFAULTS, saved)
+        setSettings({
+          viewMode:      merged.viewMode,
+          previewPinned: merged.previewPinned,
+          stickyHeaders: merged.stickyHeaders,
+          panelStyle:    merged.panelStyle,
+        })
+        if (merged.previewH) setPreviewH(merged.previewH)
+        if (merged.isVert   !== undefined) setIsVert(merged.isVert)
+        if (merged.flipped  !== undefined) setFlipped(merged.flipped)
+        if (merged.leftW)   setLeftW(merged.leftW)
+        if (merged.topH)    setTopH(merged.topH)
+      } catch(e) {}
+    }).catch(function(){})
+  }, [])
+
+  // Save whenever any persisted value changes
+  useEffect(function(){
+    if (!window.storage) return
+    var payload = JSON.stringify({
+      viewMode:      settings.viewMode,
+      previewPinned: settings.previewPinned,
+      stickyHeaders: settings.stickyHeaders,
+      panelStyle:    settings.panelStyle,
+      previewH:      previewH,
+      isVert:        isVert,
+      flipped:       flipped,
+      leftW:         leftW,
+      topH:          topH,
+    })
+    window.storage.set('nlics:ui-settings', payload).catch(function(){})
+  }, [settings, previewH, isVert, flipped, leftW, topH])
+
   useEffect(function(){
     function onKey(e){
       if((e.ctrlKey||e.metaKey)&&e.key==="z"&&!e.shiftKey){
@@ -1388,9 +1742,18 @@ export default function App() {
     check(); window.addEventListener("resize",check)
     return function(){window.removeEventListener("resize",check)}
   },[])
+  // Immediate re-render on data changes
   useEffect(function(){
-    if(cvRef.current)renderPipeline(cvRef.current,dispId,nodes,iC.current)
+    if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current)
   },[nodes,dispId,sz])
+  // Deferred re-render on layout changes — waits for browser reflow so
+  // canvas has correct dimensions and cvRef is attached to the live canvas
+  useEffect(function(){
+    var t = setTimeout(function(){
+      if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current)
+    }, 60)
+    return function(){ clearTimeout(t) }
+  },[flipped,isVert])
 
   function loadUrl(url){
     if(!url||iC.current.has(url))return
@@ -1401,7 +1764,11 @@ export default function App() {
   }
   function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
   function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id)setDispId(null)}
-  function upd(u){setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})}
+  function upd(u){
+    setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})
+    // Keep sheet node in sync if it's the one being updated
+    setSheetNode(function(sn){ return sn&&sn.node.id===u.id ? {node:u,sec:u.section} : sn })
+  }
   function ren(id,name){pushHistory({nodes:nodes});setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{name:name}):n})})}
   function tog(id){setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{enabled:!n.enabled}):n})})}
   function dsp(id){setDispId(function(p){return p===id?null:id})}
@@ -1426,7 +1793,11 @@ export default function App() {
     var dr = dragRef.current; if (!dr) return
     var coord = dr.vert ? e.clientY : e.clientX
     var delta = coord - dr.start
-    var next  = Math.max(15, Math.min(85, dr.pct0 + (delta / dr.tot) * 100))
+    // When flipped+vert the preview is on top and controls at bottom.
+    // topH drives the bottom (controls) panel — dragging divider down should
+    // shrink controls (topH decreases), so we negate the delta.
+    var sign  = (dr.vert && flipped) ? -1 : 1
+    var next  = Math.max(15, Math.min(85, dr.pct0 + sign * (delta / dr.tot) * 100))
     if (dr.vert) setTopH(next); else setLeftW(next)
   }
   function handleRootPointerUp(e) {
@@ -1439,7 +1810,19 @@ export default function App() {
   var vDivHook = useDivider(true,  handleDragStart)
   var divHook  = isVert ? vDivHook : hDivHook
   var active=nodes.find(function(n){return n.id===dispId})||null
-  var sp={nodes:nodes,selId:selId,dispId:dispId,onSel:sel,onDsp:dsp,onDel:del,onAdd:add,onUpd:upd,onLoad:loadUrl,onRen:ren,onTog:tog}
+  function selWithSheet(id) {
+    var actual = id===selId ? null : id
+    setSelId(actual)
+    if (settings.panelStyle==="sheet" && actual) {
+      var node = nodes.find(function(n){return n.id===actual})
+      if (node) setSheetNode({node:node, sec:node.section})
+    } else {
+      setSheetNode(null)
+    }
+  }
+  var sp={nodes:nodes,selId:selId,dispId:dispId,
+    onSel:selWithSheet,onDsp:dsp,onDel:del,onAdd:add,onUpd:upd,onLoad:loadUrl,onRen:ren,onTog:tog,
+    panelStyle:settings.panelStyle}
 
   var leftBoxStyle = Object.assign(
     {display:rightFS?"none":"flex",flexDirection:"column",background:"var(--pn)"},
@@ -1455,11 +1838,45 @@ export default function App() {
   function handleResize(s){setSz(s);setTimeout(function(){var st=stRef.current;renderPipeline(cvRef.current,st.dispId,st.nodes,iC.current)},30)}
 
   var anyFS = leftFS || rightFS
-  function exitFS() { setLeftFS(false); setRightFS(false) }
+
+  // Header bar — shared across both layout modes
+  function HeaderBar(hProps) {
+    return (
+      <div style={{display:"flex",alignItems:"center",padding:"8px 12px",gap:8,background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
+        <span style={{fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:800,color:"var(--ac)",letterSpacing:".2em"}}>NLICS</span>
+        <span style={{fontSize:7,color:"var(--mu)",marginTop:1}}>Non-Linear Image Compositing</span>
+        <span style={{flex:1}}/>
+        <button className="hico" title="Layout settings" onClick={function(){setSettingsOpen(true)}}>⚙</button>
+        <button className="hico" onClick={function(){setIsVert(!isVert)}} title="Toggle orientation">{isVert?"⇔":"⇕"}</button>
+        {isVert && <button className="hico" onClick={function(){setFlipped(!flipped)}} title="Flip panel order">⇅</button>}
+        {hProps.showExpand && <button className={"hico"+(leftFS?" exit":"")} onClick={function(){setLeftFS(!leftFS)}}>{leftFS?"⊠":"⊞"}</button>}
+      </div>
+    )
+  }
+  function PreviewBar(pProps) {
+    return (
+      <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"8px 12px",gap:8,background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
+        <button className={"hico"+(rightFS?" exit":"")} onClick={function(){setRightFS(!rightFS)}}>{rightFS?"⊠":"⊡"}</button>
+      </div>
+    )
+  }
 
   return (
-    <div ref={appRef} onPointerMove={handleRootPointerMove} onPointerUp={handleRootPointerUp} style={{display:"flex",flexDirection:isVert?"column":"row",height:"100vh",width:"100vw",overflow:"hidden",background:"var(--bg)",fontFamily:"'IBM Plex Mono','Courier New',monospace",fontSize:12,color:"var(--tx)"}}>
+    <div ref={appRef} onPointerMove={handleRootPointerMove} onPointerUp={handleRootPointerUp}
+      style={{display:settings.viewMode==="unified"?"block":"flex",flexDirection:isVert?"column":"row",height:"100vh",width:"100vw",overflow:"hidden",background:"var(--bg)",fontFamily:"'IBM Plex Mono','Courier New',monospace",fontSize:12,color:"var(--tx)"}}>
       <StyleInjector />
+
+      <SettingsSheet open={settingsOpen} onClose={function(){setSettingsOpen(false)}}
+        settings={settings} onSettings={setSettings}
+        isVert={isVert} onIsVert={setIsVert}
+        flipped={flipped} onFlipped={setFlipped}/>
+
+      <NodeDetailSheet
+        open={settings.panelStyle==="sheet" && sheetNode!==null}
+        node={sheetNode?sheetNode.node:null}
+        sec={sheetNode?sheetNode.sec:null}
+        onClose={function(){setSheetNode(null);setSelId(null)}}
+        onUpdate={upd} onLoad={loadUrl} nodes={nodes}/>
 
       {anyFS && (
         <button className="fs-escape" onClick={function(){setLeftFS(false);setRightFS(false)}}>
@@ -1467,97 +1884,66 @@ export default function App() {
         </button>
       )}
 
-      <div style={flipped&&isVert ? rightBoxStyle : leftBoxStyle}>
-        {flipped&&isVert ? (
-          <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",
-            padding:isVert?"8px 12px":"5px 9px",gap:isVert?12:6,
-            background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
-            <button className={"hico"+(rightFS?" exit":"")+(isVert?" vert":"")}
-              onClick={function(){setRightFS(!rightFS)}}
-              title={rightFS?"Exit fullscreen":"Expand preview"}>
-              {rightFS?"⊠":"⊡"}
-            </button>
+      {settings.viewMode==="unified" ? (
+        <div style={{height:"100vh",display:"flex",flexDirection:"column"}}>
+          <HeaderBar showExpand={false}/>
+          <UnifiedLayout
+            settings={settings}
+            sp={sp}
+            cvRef={cvRef}
+            active={active}
+            sz={sz}
+            previewH={previewH}
+            setPreviewH={setPreviewH}
+            onResize={handleResize}
+            onExport={doExport}
+            appRef={appRef}
+            s1Col={s1Col} setS1Col={setS1Col}
+            s2Col={s2Col} setS2Col={setS2Col}
+            LivePreviewCmp={LivePreview}
+          />
+        </div>
+      ) : (
+        <div style={{display:"contents"}}>
+          <div style={flipped&&isVert ? rightBoxStyle : leftBoxStyle}>
+            {flipped&&isVert
+              ? <PreviewBar/>
+              : <HeaderBar showExpand={true}/>
+            }
+            {flipped&&isVert
+              ? <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport}/>
+              : <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+                  <Section sec={1} title="§1 · Pixel Creators" {...sp}
+                    collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
+                    stickyHeaders={false} panelStyle={settings.panelStyle}/>
+                  <Section sec={2} title="§2 · Compositors" {...sp}
+                    collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}}
+                    stickyHeaders={false} panelStyle={settings.panelStyle}/>
+                </div>
+            }
           </div>
-        ) : (
-          <div style={{display:"flex",alignItems:"center",
-            padding:isVert?"8px 12px":"5px 9px",gap:isVert?12:6,
-            background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
-            <span style={{fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:800,color:"var(--ac)",letterSpacing:".2em"}}>NLICS</span>
-            <span style={{fontSize:7,color:"var(--mu)",marginTop:1}}>Non-Linear Image Compositing</span>
-            <span style={{fontSize:6.5,color:"var(--di)",marginTop:1}}>⌘Z</span>
-            <span style={{flex:1}} />
-            <button className={"hico"+(isVert?" vert":"")} title="Toggle layout orientation"
-              onClick={function(){setIsVert(!isVert)}}>
-              {isVert?"⇔":"⇕"}
-            </button>
-            {isVert && (
-              <button className="hico vert" title="Flip panel order"
-                onClick={function(){setFlipped(!flipped)}}>
-                ⇅
-              </button>
-            )}
-            <button className={"hico"+(leftFS?" exit":"")+(isVert?" vert":"")}
-              title={leftFS?"Exit fullscreen":"Expand left panel"}
-              onClick={function(){setLeftFS(!leftFS)}}>
-              {leftFS?"⊠":"⊞"}
-            </button>
-          </div>
-        )}
-        {flipped&&isVert
-          ? <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport} />
-          : <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-              <Section sec={1} title="§1 · Pixel Creators" {...sp} collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}} />
-              <Section sec={2} title="§2 · Compositors"   {...sp} collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}} />
-            </div>
-        }
-      </div>
 
-      <div ref={divHook.ref} onPointerDown={divHook.onPointerDown} className={isVert?"divv":"divh"} style={{userSelect:"none"}} />
+          <div ref={divHook.ref} onPointerDown={divHook.onPointerDown} className={isVert?"divv":"divh"} style={{userSelect:"none"}}/>
 
-      <div style={flipped&&isVert ? leftBoxStyle : rightBoxStyle}>
-        {flipped&&isVert ? (
-          <div style={{display:"flex",alignItems:"center",
-            padding:isVert?"8px 12px":"5px 9px",gap:isVert?12:6,
-            background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
-            <span style={{fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:800,color:"var(--ac)",letterSpacing:".2em"}}>NLICS</span>
-            <span style={{fontSize:7,color:"var(--mu)",marginTop:1}}>Non-Linear Image Compositing</span>
-            <span style={{fontSize:6.5,color:"var(--di)",marginTop:1}}>⌘Z</span>
-            <span style={{flex:1}} />
-            <button className={"hico"+(isVert?" vert":"")} title="Toggle layout orientation"
-              onClick={function(){setIsVert(!isVert)}}>
-              {isVert?"⇔":"⇕"}
-            </button>
-            {isVert && (
-              <button className="hico vert" title="Flip panel order"
-                onClick={function(){setFlipped(!flipped)}}>
-                ⇅
-              </button>
-            )}
-            <button className={"hico"+(leftFS?" exit":"")+(isVert?" vert":"")}
-              title={leftFS?"Exit fullscreen":"Expand left panel"}
-              onClick={function(){setLeftFS(!leftFS)}}>
-              {leftFS?"⊠":"⊞"}
-            </button>
+          <div style={flipped&&isVert ? leftBoxStyle : rightBoxStyle}>
+            {flipped&&isVert
+              ? <HeaderBar showExpand={true}/>
+              : <PreviewBar/>
+            }
+            {flipped&&isVert
+              ? <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+                  <Section sec={1} title="§1 · Pixel Creators" {...sp}
+                    collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
+                    stickyHeaders={false} panelStyle={settings.panelStyle}/>
+                  <Section sec={2} title="§2 · Compositors" {...sp}
+                    collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}}
+                    stickyHeaders={false} panelStyle={settings.panelStyle}/>
+                </div>
+              : <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport}/>
+            }
           </div>
-        ) : (
-          <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",
-            padding:isVert?"8px 12px":"5px 9px",gap:isVert?12:6,
-            background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
-            <button className={"hico"+(rightFS?" exit":"")+(isVert?" vert":"")}
-              title={rightFS?"Exit fullscreen":"Expand preview"}
-              onClick={function(){setRightFS(!rightFS)}}>
-              {rightFS?"⊠":"⊡"}
-            </button>
-          </div>
-        )}
-        {flipped&&isVert
-          ? <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-              <Section sec={1} title="§1 · Pixel Creators" {...sp} collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}} />
-              <Section sec={2} title="§2 · Compositors"   {...sp} collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}} />
-            </div>
-          : <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport} />
-        }
-      </div>
+        </div>
+      )}
 
       <div className={"undo-toast"+(toastOn?" show":"")}>↩ undo restored</div>
     </div>
