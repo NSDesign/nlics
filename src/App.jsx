@@ -1245,11 +1245,6 @@ function LivePreview(props) {
   return (
     <div style={{display:"flex",flexDirection:"column",flex:1,minHeight:0,overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"var(--pn)",borderBottom:"1px solid var(--bd)",flexShrink:0,overflowX:"auto"}}>
-        <span className="slbl" style={{fontSize:10,color:"var(--di)"}}>Preview</span>
-        {props.active
-          ? <span style={{fontSize:9,padding:"2px 8px",borderRadius:4,background:"rgba(176,96,240,.14)",color:"#c87aff",border:"1px solid rgba(176,96,240,.28)"}}>◉ {props.active.name}</span>
-          : <span style={{fontSize:9,color:"var(--mu)"}}>none selected</span>}
-        <span style={{flex:1}}/>
         <select value={String(props.sz)} onChange={function(e){props.onResize(parseInt(e.target.value))}} style={{width:58,fontSize:10,padding:"3px 4px",flexShrink:0}}>
           {["256","400","512","768","1024"].map(function(s){return <option key={s} value={s}>{s}</option>})}
         </select>
@@ -1821,7 +1816,12 @@ export default function App() {
   }
   function PreviewBar(pProps) {
     return (
-      <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"8px 12px",gap:8,background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
+      <div style={{display:"flex",alignItems:"center",padding:"8px 12px",gap:8,background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
+        <span className="slbl" style={{fontSize:10,color:"var(--di)"}}>Preview</span>
+        {active
+          ? <span style={{fontSize:9,padding:"2px 8px",borderRadius:4,background:"rgba(176,96,240,.14)",color:"#c87aff",border:"1px solid rgba(176,96,240,.28)"}}>◉ {active.name}</span>
+          : <span style={{fontSize:9,color:"var(--mu)"}}>none selected</span>}
+        <span style={{flex:1}}/>
         <button className={"hico"+(rightFS?" exit":"")} onClick={function(){setRightFS(!rightFS)}}>{rightFS?"⊠":"⊡"}</button>
       </div>
     )
