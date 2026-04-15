@@ -1238,47 +1238,6 @@ function AddMenu(props) {
   )
 }
 
-/* ─── SECTION ─────────────────────────────────────────── */
-function Section(props) {
-  var items=props.nodes.filter(function(n){return n.section===props.sec})
-  var color=props.sec===1?"var(--gn)":"var(--co)"
-  return (
-    <div style={{display:"flex",flexDirection:"column",flex:props.collapsed?"0 0 auto":1,overflow:"hidden",borderBottom:"1px solid var(--bd)"}}>
-      <div className="shdr" style={{cursor:"pointer"}} onClick={props.onToggle}>
-        <span style={{fontSize:12,color:props.collapsed?"var(--mu)":"var(--di)"}}>{props.collapsed?"▶":"▼"}</span>
-        <span className="slbl" style={{flex:1,color}}>{props.title}</span>
-        <span style={{fontSize:11,color:"var(--mu)",marginRight:8}}>{items.length}</span>
-        <div onClick={function(e){e.stopPropagation()}}><AddMenu sec={props.sec} onAdd={props.onAdd}/></div>
-      </div>
-      {!props.collapsed && (
-        <div style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
-          {items.length===0 && <div className="empty">no items — tap + Add</div>}
-          {items.map(function(node){
-            var isSel=props.selId===node.id, isDsp=props.dispId===node.id
-            return (
-              <div key={node.id}>
-                <NodeItem node={node} isSel={isSel} isDsp={isDsp}
-                  onSel={function(id){props.onSel(id===props.selId?null:id)}}
-                  onDsp={props.onDsp} onDel={props.onDel}
-                  onRen={function(name){props.onRen(node.id,name)}}
-                  onTog={props.onTog}/>
-                {isSel && (
-                  <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
-                    {props.sec===1
-                      ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
-                      : <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes}/>
-                    }
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 /* ─── LIVE PREVIEW ────────────────────────────────────── */
 function LivePreview(props) {
   var zSt=useState(1); var zoom=zSt[0], setZoom=zSt[1]
