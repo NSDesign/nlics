@@ -1847,8 +1847,6 @@ export default function App() {
         <span style={{fontSize:7,color:"var(--mu)",marginTop:1}}>Non-Linear Image Compositing</span>
         <span style={{flex:1}}/>
         <button className="hico" title="Layout settings" onClick={function(){setSettingsOpen(true)}}>⚙</button>
-        <button className="hico" onClick={function(){setIsVert(!isVert)}} title="Toggle orientation">{isVert?"⇔":"⇕"}</button>
-        {isVert && <button className="hico" onClick={function(){setFlipped(!flipped)}} title="Flip panel order">⇅</button>}
         {hProps.showExpand && <button className={"hico"+(leftFS?" exit":"")} onClick={function(){setLeftFS(!leftFS)}}>{leftFS?"⊠":"⊞"}</button>}
       </div>
     )
