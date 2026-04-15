@@ -1566,19 +1566,21 @@ function UnifiedLayout(props) {
   )
 
   if (s.previewPinned) {
+    // flex:1 + minHeight:0 fills the space left after HeaderBar without overflowing the viewport
     return (
-      <div style={{height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{flexShrink:0}}>
           {previewBlock}
           {resizeHandle}
         </div>
-        <div style={{flex:1,overflowY:"auto"}}>
+        <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
           <Section sec={1} title="§1 · Pixel Creators" {...props.sp}
             collapsed={props.s1Col} onToggle={function(){props.setS1Col(!props.s1Col)}}
             stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
           <Section sec={2} title="§2 · Compositors" {...props.sp}
             collapsed={props.s2Col} onToggle={function(){props.setS2Col(!props.s2Col)}}
             stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
+          <div style={{height:24}}/>
         </div>
       </div>
     )
@@ -1586,7 +1588,7 @@ function UnifiedLayout(props) {
 
   // Free scroll — everything in one column
   return (
-    <div style={{height:"100vh",overflowY:"auto"}}>
+    <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
       {previewBlock}
       {resizeHandle}
       <Section sec={1} title="§1 · Pixel Creators" {...props.sp}
@@ -1595,6 +1597,7 @@ function UnifiedLayout(props) {
       <Section sec={2} title="§2 · Compositors" {...props.sp}
         collapsed={props.s2Col} onToggle={function(){props.setS2Col(!props.s2Col)}}
         stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
+      <div style={{height:24}}/>
     </div>
   )
 }
