@@ -1475,13 +1475,23 @@ function NodeDetailSheet(props) {
   )
 }
 
-/* ─── SECTION (updated: stickyHeader + sheet panel style) ─── */
+/* ─── SECTION (stickyHeader + sheet panel style) ─── */
 function Section(props) {
   var items = props.nodes.filter(function(n){ return n.section===props.sec })
   var color = props.sec===1 ? "var(--gn)" : "var(--co)"
   var shdrCls = "shdr" + (props.stickyHeaders ? " sticky" : "")
+  // In split mode (inScroll=false): section is a flex column that fills available
+  // space with an internal scroll area. In unified/scroll mode (inScroll=true):
+  // section expands to natural height and the parent container scrolls.
+  var outerStyle = props.inScroll
+    ? {borderBottom:"1px solid var(--bd)"}
+    : {display:"flex",flexDirection:"column",flex:props.collapsed?"0 0 auto":1,
+       overflow:"hidden",borderBottom:"1px solid var(--bd)"}
+  var innerStyle = props.inScroll
+    ? {}
+    : {flex:1,overflowY:"auto",overflowX:"hidden"}
   return (
-    <div style={{borderBottom:"1px solid var(--bd)"}}>
+    <div style={outerStyle}>
       <div className={shdrCls} style={{cursor:"pointer"}} onClick={props.onToggle}>
         <span style={{fontSize:12,color:props.collapsed?"var(--mu)":"var(--di)"}}>{props.collapsed?"▶":"▼"}</span>
         <span className="slbl" style={{flex:1,color}}>{props.title}</span>
@@ -1489,7 +1499,7 @@ function Section(props) {
         <div onClick={function(e){e.stopPropagation()}}><AddMenu sec={props.sec} onAdd={props.onAdd}/></div>
       </div>
       {!props.collapsed && (
-        <div>
+        <div style={innerStyle}>
           {items.length===0 && <div className="empty">no items — tap + Add</div>}
           {items.map(function(node){
             var isSel = props.selId===node.id
@@ -1501,7 +1511,6 @@ function Section(props) {
                   onDsp={props.onDsp} onDel={props.onDel}
                   onRen={function(name){ props.onRen(node.id,name) }}
                   onTog={props.onTog}/>
-                {/* Inline panel style */}
                 {isSel && props.panelStyle!=="sheet" && (
                   <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
                     {props.sec===1
@@ -1571,10 +1580,10 @@ function UnifiedLayout(props) {
         <div style={{flex:1,overflowY:"auto"}}>
           <Section sec={1} title="§1 · Pixel Creators" {...props.sp}
             collapsed={props.s1Col} onToggle={function(){props.setS1Col(!props.s1Col)}}
-            stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle}/>
+            stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
           <Section sec={2} title="§2 · Compositors" {...props.sp}
             collapsed={props.s2Col} onToggle={function(){props.setS2Col(!props.s2Col)}}
-            stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle}/>
+            stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
         </div>
       </div>
     )
@@ -1587,10 +1596,10 @@ function UnifiedLayout(props) {
       {resizeHandle}
       <Section sec={1} title="§1 · Pixel Creators" {...props.sp}
         collapsed={props.s1Col} onToggle={function(){props.setS1Col(!props.s1Col)}}
-        stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle}/>
+        stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
       <Section sec={2} title="§2 · Compositors" {...props.sp}
         collapsed={props.s2Col} onToggle={function(){props.setS2Col(!props.s2Col)}}
-        stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle}/>
+        stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
     </div>
   )
 }
@@ -1872,10 +1881,10 @@ export default function App() {
               : <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
                   <Section sec={1} title="§1 · Pixel Creators" {...sp}
                     collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
-                    stickyHeaders={false} panelStyle={settings.panelStyle}/>
+                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
                   <Section sec={2} title="§2 · Compositors" {...sp}
                     collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}}
-                    stickyHeaders={false} panelStyle={settings.panelStyle}/>
+                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
                 </div>
             }
           </div>
@@ -1891,10 +1900,10 @@ export default function App() {
               ? <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
                   <Section sec={1} title="§1 · Pixel Creators" {...sp}
                     collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
-                    stickyHeaders={false} panelStyle={settings.panelStyle}/>
+                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
                   <Section sec={2} title="§2 · Compositors" {...sp}
                     collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}}
-                    stickyHeaders={false} panelStyle={settings.panelStyle}/>
+                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
                 </div>
               : <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport}/>
             }
