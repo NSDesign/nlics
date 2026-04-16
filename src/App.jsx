@@ -1241,6 +1241,8 @@ function SlotPanel(props) {
 function BlenderProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
+  // Must be declared before any early return to satisfy Rules of Hooks
+  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
   function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
 
@@ -1277,7 +1279,6 @@ function BlenderProps(props) {
   }
 
   var nOutEfx=(node.outEfx||[]).length, nOutMask=(node.outMask||[]).length
-  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
   var outTabs=[
     {id:"effects",label:"Effects"+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
     {id:"masks",  label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
@@ -1693,6 +1694,8 @@ function StackInputCard(props) {
 function StackProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
+  // Hoisted before early return to satisfy Rules of Hooks
+  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
   function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
 
@@ -1731,7 +1734,6 @@ function StackProps(props) {
   }
 
   var nOutEfx=(node.outEfx||[]).length, nOutMask=(node.outMask||[]).length
-  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
   var outTabs=[
     {id:"effects",label:"Effects"+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
     {id:"masks",  label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
