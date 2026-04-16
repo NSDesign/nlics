@@ -181,7 +181,7 @@ function mkEfx(t) {
   if(t==="transform") params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
   return { id:uid(), type:t, enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[] }
 }
-function mkMask() { return { id:uid(), refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[] } }
+function mkMask() { return { id:uid(), refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[] } }
 function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"screen", amount:100, switched:false, outEfx:[], outMask:[] } }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:Object.assign({},CPROPS[t]) } }
@@ -193,7 +193,7 @@ function mkStackInput() {
 // Stack compositor — N inputs composited top-to-bottom
 function mkStack() {
   return { id:uid(), name:"Stack "+(_uid-100), type:"stack", section:2, enabled:true,
-    inputs:[mkStackInput(), mkStackInput()], outEfx:[], outMask:[] }
+    baseRefId:null, inputs:[mkStackInput(), mkStackInput()], outEfx:[], outMask:[] }
 }
 // Promoted node — a named tap point on an intermediate chain state
 // tapPath describes exactly where in which chain the tap lives
@@ -485,7 +485,7 @@ function applyBack(pre,post,mv,opacity,mode) {
 function compMasks(stack,cmap,cache,iC,w,h,vis) {
   var out=new Float32Array(w*h).fill(1),any=false
   for(var mi=0;mi<stack.length;mi++){
-    var mk=stack[mi];if(!mk.refId||vis.has(mk.refId))continue
+    var mk=stack[mi];if(mk.enabled===false||!mk.refId||vis.has(mk.refId))continue
     var cv=compAny(mk.refId,cmap,cache,iC,w,h,new Set(vis));if(!cv)continue;any=true
     if(mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,new Set(vis))}
     var src=clCv(cv,w,h).getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
@@ -597,7 +597,7 @@ function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
 function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
   var out=new Float32Array(w*h).fill(1),any=false
   for(var mi=0;mi<stack.length;mi++){
-    var mk=stack[mi];if(!mk.refId||vis.has(mk.refId))continue
+    var mk=stack[mi];if(mk.enabled===false||!mk.refId||vis.has(mk.refId))continue
     var cv=compAny(mk.refId,cmap,cache,iC,w,h,new Set(vis));if(!cv)continue;any=true
     var useSub = withSub || mk.id!==afterId
     if(useSub&&mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,new Set(vis))}
@@ -686,14 +686,19 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   // ── Stack compositor ─────────────────────────────────────
   if(n.type==="stack"){
     var scv=mkCv(w,h),sctx=scv.getContext("2d")
+    // Draw base source first (bottom-most layer, no blend)
+    if(n.baseRefId&&!vis.has(n.baseRefId)){
+      var baseCv=compAny(n.baseRefId,cmap,cache,iC,w,h,new Set(vis))
+      if(baseCv)sctx.drawImage(baseCv,0,0)
+    }
     // Inputs composited top-to-bottom. Bottom input drawn first, each subsequent blended on top.
     var inputs=(n.inputs||[]).slice().reverse() // reverse so top of list = top layer = drawn last
     for(var si=inputs.length-1;si>=0;si--){
       var inp=inputs[si]; if(!inp.enabled||!inp.refId)continue
       var resolvedInp=resolveSlot(inp,cmap,cache,iC,w,h,new Set(vis))
       if(resolvedInp){
-        if(sctx.getImageData(0,0,1,1).data[3]===0&&si===inputs.length-1){
-          sctx.drawImage(resolvedInp,0,0) // first valid input — draw direct
+        if(!n.baseRefId&&sctx.getImageData(0,0,1,1).data[3]===0&&si===inputs.length-1){
+          sctx.drawImage(resolvedInp,0,0) // no base + first valid input — draw direct
         }else{
           blendCv(sctx,resolvedInp,inp.blendMode||"normal",inp.opacity,w,h)
         }
@@ -977,9 +982,22 @@ function EfxPrimary(props) {
 /* ─── MASK CARD ───────────────────────────────────────── */
 function MaskCard(props) {
   var mk=props.mask
+  var armSt=useState(false); var armed=armSt[0],setArmed=armSt[1]
+  var timerRef=useRef(null)
+  useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
+  function handleDel(){
+    if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
+    else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
+  }
   return (
-    <div className="mask-card">
-      <span style={{fontSize:18,color:"var(--lv)",flexShrink:0,paddingTop:2}}>◈</span>
+    <div className="mask-card" style={{opacity:mk.enabled===false?.4:1}}>
+      <div style={{display:"flex",flexDirection:"column",gap:2,alignSelf:"flex-start",flexShrink:0,marginRight:4}}>
+        {props.onMove&&<button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:26}}>▲</button>}
+        <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},mk,{enabled:mk.enabled===false}))}}
+          style={{color:mk.enabled===false?"var(--mu)":"var(--ac)",fontSize:16,height:28,width:26}}>{mk.enabled===false?"○":"●"}</button>
+        {props.onMove&&<button className="icon-btn sm" onClick={function(){props.onMove(1)}} disabled={props.isLast} style={{fontSize:11,height:20,width:26}}>▼</button>}
+      </div>
+      <span style={{fontSize:16,color:"var(--lv)",flexShrink:0,paddingTop:2}}>◈</span>
       <div style={{flex:1,minWidth:0}}>
         <select value={mk.refId||""} onChange={function(e){props.onChange(Object.assign({},mk,{refId:e.target.value||null}))}} style={{width:"100%",marginBottom:8}}>
           <option value="">— select source —</option>
@@ -1013,7 +1031,9 @@ function MaskCard(props) {
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:4,alignSelf:"flex-start",flexShrink:0}}>
         {props.onPromote&&<button className="promote-btn" style={{padding:"2px 6px",fontSize:9}} onClick={props.onPromote} title="Promote">↗</button>}
-        <button className="icon-btn sm" style={{color:"var(--dng)"}} onClick={props.onDel}>×</button>
+        <button onClick={handleDel} style={{minHeight:30,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?52:28}}>
+          {armed?"sure?":"×"}
+        </button>
       </div>
     </div>
   )
@@ -1167,7 +1187,13 @@ function EfxStack(props) {
           />
         )
       })}
-      <AddEfxMenu onAdd={addEfx}/>
+      <div style={{display:"flex",gap:6,marginTop:4}}>
+        <div style={{flex:1}}><AddEfxMenu onAdd={addEfx}/></div>
+        {props.onExtract && props.stack.length>0 && (
+          <button className="promote-btn" style={{flexShrink:0}} onClick={props.onExtract}
+            title="Extract this effect stack to a new Stack node">↗ Extract</button>
+        )}
+      </div>
     </div>
   )
 }
@@ -1177,12 +1203,18 @@ function MaskStackPanel(props) {
   function addMask(){props.onChange(props.stack.concat([mkMask()]))}
   function upd(id,nw){props.onChange(props.stack.map(function(m){return m.id===id?nw:m}))}
   function del(id){props.onChange(props.stack.filter(function(m){return m.id!==id}))}
+  function move(idx,dir){
+    var ni=Math.max(0,Math.min(props.stack.length-1,idx+dir)); if(ni===idx)return
+    var a=props.stack.slice(),tmp=a[idx];a[idx]=a[ni];a[ni]=tmp; props.onChange(a)
+  }
   return (
     <div>
       {props.stack.length===0 && <div className="empty">no masks</div>}
       {props.stack.map(function(mk,mi){
         return (
           <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId}
+            isFirst={mi===0} isLast={mi===props.stack.length-1}
+            onMove={function(dir){move(mi,dir)}}
             onChange={function(nw){upd(mk.id,nw)}}
             onDel={function(){del(mk.id)}}
             onEditEffects={function(){
@@ -1195,7 +1227,13 @@ function MaskStackPanel(props) {
           />
         )
       })}
-      <button className="lv" style={{width:"100%",marginTop:4}} onClick={addMask}>+ add mask</button>
+      <div style={{display:"flex",gap:6,marginTop:4}}>
+        <button className="lv" style={{flex:1}} onClick={addMask}>+ add mask</button>
+        {props.onExtract && props.stack.length>0 && (
+          <button className="promote-btn" style={{flexShrink:0}} onClick={props.onExtract}
+            title="Extract this mask stack to a new Stack node">↗ Extract</button>
+        )}
+      </div>
     </div>
   )
 }
@@ -1224,13 +1262,15 @@ function SlotPanel(props) {
       {tab==="effects" && (
         <div style={{padding:10}}>
           <EfxStack stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
-            onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}}/>
+            onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}}
+            onExtract={props.onExtract ? function(){props.onExtract("effect")} : null}/>
         </div>
       )}
       {tab==="masks" && (
         <div style={{padding:10}}>
           <MaskStackPanel stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
-            onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}}/>
+            onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}}
+            onExtract={props.onExtract ? function(){props.onExtract("mask")} : null}/>
         </div>
       )}
     </div>
@@ -1285,9 +1325,10 @@ function BlenderProps(props) {
   ]
   return (
     <div style={{padding:10,overflowY:"auto"}}>
-      <SlotPanel label="Input A" slot={node.switched?node.inputB:node.inputA} accent="var(--ac)"
+      <SlotPanel label="Input A" slot={node.inputA} accent="var(--ac)"
         nodes={nodes} selfId={node.id} navPush={navPush}
-        onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}/>
+        onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
+        onExtract={props.onExtract ? function(kind){props.onExtract({slot:"inputA",slotObj:node.inputA,kind:kind,owner:node,setSlot:function(s){onChange(Object.assign({},node,{inputA:s}))}})} : null}/>
       <div className="card" style={{marginBottom:10}}>
         <div className="card-hdr">
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--di)"}}>Blend</span>
@@ -1302,9 +1343,10 @@ function BlenderProps(props) {
           </PR>
         </div>
       </div>
-      <SlotPanel label="Input B" slot={node.switched?node.inputA:node.inputB} accent="var(--co)"
+      <SlotPanel label="Input B" slot={node.inputB} accent="var(--co)"
         nodes={nodes} selfId={node.id} navPush={navPush}
-        onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}/>
+        onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
+        onExtract={props.onExtract ? function(kind){props.onExtract({slot:"inputB",slotObj:node.inputB,kind:kind,owner:node,setSlot:function(s){onChange(Object.assign({},node,{inputB:s}))}})} : null}/>
       <div className="card">
         <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
@@ -1741,6 +1783,18 @@ function StackProps(props) {
 
   return (
     <div style={{padding:10,overflowY:"auto"}}>
+      <div style={{marginBottom:12}}>
+        <div className="card" style={{marginBottom:8}}>
+          <div className="card-hdr" style={{background:"rgba(36,164,204,.06)"}}>
+            <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"#40c8e8"}}>Base source</span>
+            <span style={{fontSize:9,color:"var(--mu)"}}>optional background layer</span>
+          </div>
+          <div className="card-body">
+            <NRef l="source" v={node.baseRefId||null} nodes={nodes} selfId={node.id}
+              fn={function(v){onChange(Object.assign({},node,{baseRefId:v||null}))}}/>
+          </div>
+        </div>
+      </div>
       <div style={{marginBottom:8}}>
         <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Inputs — top to bottom</div>
         {node.inputs.map(function(inp,i){
@@ -1841,7 +1895,7 @@ function Section(props) {
                     {props.sec===1
                       ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
                       : node.type==="blender"
-                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes}/>
+                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} onExtract={props.onExtract} onPromote={props.onPromote}/>
                         : node.type==="stack"
                           ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} onPromote={props.onPromote}/>
                           : null
@@ -2158,10 +2212,45 @@ export default function App() {
     pushHistory({nodes:nodes})
     setNodes(function(p){ return p.concat([pNode]) })
   }
+  function handleExtract(info) {
+    // info: {slot, slotObj, kind:"effect"|"mask", owner, setSlot}
+    var suggestName = (info.owner ? info.owner.name+" " : "") + info.slot + " " + info.kind + " stack"
+    var name = window.prompt ? (window.prompt("Name this new Stack:", suggestName)||suggestName) : suggestName
+    // Build a Stack node that wraps the current slot (source + the stack being extracted)
+    var newStack = mkStack()
+    newStack.name = name
+    // First input of the new Stack = current slot (keeps source + the full stack)
+    var firstInp = mkStackInput()
+    firstInp.refId = info.slotObj.refId
+    if(info.kind==="effect") {
+      firstInp.effectStack = (info.slotObj.effectStack||[]).slice()
+    } else {
+      firstInp.maskStack = (info.slotObj.maskStack||[]).slice()
+    }
+    newStack.inputs = [firstInp]
+    // Clear the inline stack from the original slot, point it at the new Stack
+    var updatedSlot = Object.assign({}, info.slotObj, {
+      refId: newStack.id,
+      effectStack: info.kind==="effect" ? [] : (info.slotObj.effectStack||[]),
+      maskStack:   info.kind==="mask"   ? [] : (info.slotObj.maskStack||[]),
+    })
+    pushHistory({nodes:nodes})
+    setNodes(function(p){
+      var withStack = p.concat([newStack])
+      // Update the owner node's slot to reference the new Stack
+      return withStack.map(function(n){
+        if(!info.owner||n.id!==info.owner.id)return n
+        var updated = Object.assign({},n)
+        if(info.slot==="inputA")updated.inputA=updatedSlot
+        if(info.slot==="inputB")updated.inputB=updatedSlot
+        return updated
+      })
+    })
+  }
 
   var sp={nodes:nodes,selId:selId,dispId:dispId,
     onSel:selWithSheet,onDsp:dsp,onDel:del,onAdd:add,onUpd:upd,onLoad:loadUrl,onRen:ren,onTog:tog,
-    panelStyle:settings.panelStyle,onPromote:handlePromote}
+    panelStyle:settings.panelStyle,onPromote:handlePromote,onExtract:handleExtract}
 
   var leftBoxStyle = Object.assign(
     {display:rightFS?"none":"flex",flexDirection:"column",background:"var(--pn)"},
