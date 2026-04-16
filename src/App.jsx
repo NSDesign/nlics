@@ -193,7 +193,8 @@ function mkStackInput() {
 // Stack compositor — N inputs composited top-to-bottom
 function mkStack(stackType) {
   // stackType: "effect" | "mask" — immutable once set
-  return { id:uid(), name:"Stack "+(_uid-100), type:"stack", stackType:stackType||"effect", section:2, enabled:true,
+  var stype=stackType||"effect"
+  return { id:uid(), name:(stype==="mask"?"Mask":"Effect")+" Stack "+(_uid-100), type:"stack", stackType:stype, section:2, enabled:true,
     inputs:[mkStackInput(), mkStackInput()], outEfx:[], outMask:[] }
 }
 // Promoted node — a named tap point on an intermediate chain state
@@ -630,6 +631,10 @@ function compPromoted(n,cmap,cache,iC,w,h,vis){
   var slot
   if(tp.slot==="inputA")slot=srcNode.inputA
   else if(tp.slot==="inputB")slot=srcNode.inputB
+  else if(tp.slot&&tp.slot.indexOf("input_")===0){
+    var idx=parseInt(tp.slot.slice(6))
+    slot=srcNode.inputs&&srcNode.inputs[idx]
+  }
   else if(tp.slot==="outEfx"||tp.slot==="outMask"){
     // Start from the fully composited output of the source node, then partially apply out stack
     var baseOut=compAny(tp.nodeId,cmap,cache,iC,w,h,new Set(vis))
@@ -1399,7 +1404,7 @@ function NodeItem(props) {
             </span>
         }
       </div>
-      <span className={"ftag "+(node.type==="stack"?"tstack":node.type==="promoted"?"tprom":node.section===1?"tgn":"tco")}>{node.type}</span>
+      <span className={"ftag "+(node.type==="stack"?"tstack":node.type==="promoted"?"tprom":node.section===1?"tgn":"tco")}>{node.type==="stack"?(node.stackType||"effect")+" stack":node.type}</span>
       <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onTog(node.id)}} style={{color:node.enabled?"var(--ac)":"var(--mu)"}}>
         {node.enabled?"●":"○"}
       </button>
@@ -1661,7 +1666,13 @@ function NodeDetailSheet(props) {
         <div className="node-sheet-scroll">
           {props.sec===1
             ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad}/>
-            : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes}/>
+            : props.node.type==="stack"
+              ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes}
+                  onPromote={props.onPromote} onExtract={props.onExtract}/>
+              : props.node.type==="promoted"
+                ? <PromotedProps node={props.node} nodes={props.nodes}/>
+                : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes}
+                    onPromote={props.onPromote} onExtract={props.onExtract}/>
           }
         </div>
       </div>
@@ -1716,14 +1727,18 @@ function StackInputCard(props) {
         <div style={{padding:10}}>
           <EfxStack stack={inp.effectStack||[]} nodes={props.nodes} selfId={props.selfId}
             navPush={props.navPush}
-            onChange={function(es){props.onChange(Object.assign({},inp,{effectStack:es}))}}/>
+            onChange={function(es){props.onChange(Object.assign({},inp,{effectStack:es}))}}
+            onPromote={props.onPromote ? function(tapPath){props.onPromote(tapPath)} : null}
+            onExtract={props.onExtract ? function(){props.onExtract("effect")} : null}/>
         </div>
       )}
       {tab==="masks"&&(
         <div style={{padding:10}}>
           <MaskStackPanel stack={inp.maskStack||[]} nodes={props.nodes} selfId={props.selfId}
             navPush={props.navPush}
-            onChange={function(ms){props.onChange(Object.assign({},inp,{maskStack:ms}))}}/>
+            onChange={function(ms){props.onChange(Object.assign({},inp,{maskStack:ms}))}}
+            onPromote={props.onPromote ? function(tapPath){props.onPromote(tapPath)} : null}
+            onExtract={props.onExtract ? function(){props.onExtract("mask")} : null}/>
         </div>
       )}
     </div>
@@ -1798,7 +1813,13 @@ function StackProps(props) {
               navPush={navPush}
               onMove={function(dir){moveInp(i,dir)}}
               onChange={function(nw){updInp(i,nw)}}
-              onDel={function(){delInp(i)}}/>
+              onDel={function(){delInp(i)}}
+              onPromote={props.onPromote ? function(tapPath){
+                props.onPromote(Object.assign({},tapPath,{nodeId:node.id,slot:"input_"+i}))
+              } : null}
+              onExtract={props.onExtract ? function(kind){
+                props.onExtract({slot:"input_"+i,inputIdx:i,slotObj:inp,kind:kind,owner:node})
+              } : null}/>
           )
         })}
         <button className="ac" style={{width:"100%",marginTop:4}} onClick={addInp}>+ add input</button>
@@ -2231,12 +2252,15 @@ export default function App() {
     pushHistory({nodes:nodes})
     setNodes(function(p){
       var withStack = p.concat([newStack])
-      // Update the owner node's slot to reference the new Stack
       return withStack.map(function(n){
         if(!info.owner||n.id!==info.owner.id)return n
         var updated = Object.assign({},n)
         if(info.slot==="inputA")updated.inputA=updatedSlot
-        if(info.slot==="inputB")updated.inputB=updatedSlot
+        else if(info.slot==="inputB")updated.inputB=updatedSlot
+        else if(info.inputIdx!==undefined&&updated.inputs){
+          // Stack input — update by index
+          updated.inputs=updated.inputs.map(function(x,i){return i===info.inputIdx?updatedSlot:x})
+        }
         return updated
       })
     })
@@ -2301,7 +2325,8 @@ export default function App() {
         node={sheetNode?sheetNode.node:null}
         sec={sheetNode?sheetNode.sec:null}
         onClose={function(){setSheetNode(null);setSelId(null)}}
-        onUpdate={upd} onLoad={loadUrl} nodes={nodes}/>
+        onUpdate={upd} onLoad={loadUrl} nodes={nodes}
+        onPromote={handlePromote} onExtract={handleExtract}/>
 
       {anyFS && (
         <button className="fs-escape" onClick={function(){setLeftFS(false);setRightFS(false)}}>
