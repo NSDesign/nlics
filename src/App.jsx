@@ -191,9 +191,10 @@ function mkStackInput() {
   return { id:uid(), refId:null, effectStack:[], maskStack:[], opacity:100, blendMode:"normal", enabled:true }
 }
 // Stack compositor — N inputs composited top-to-bottom
-function mkStack() {
-  return { id:uid(), name:"Stack "+(_uid-100), type:"stack", section:2, enabled:true,
-    baseRefId:null, inputs:[mkStackInput(), mkStackInput()], outEfx:[], outMask:[] }
+function mkStack(stackType) {
+  // stackType: "effect" | "mask" — immutable once set
+  return { id:uid(), name:"Stack "+(_uid-100), type:"stack", stackType:stackType||"effect", section:2, enabled:true,
+    inputs:[mkStackInput(), mkStackInput()], outEfx:[], outMask:[] }
 }
 // Promoted node — a named tap point on an intermediate chain state
 // tapPath describes exactly where in which chain the tap lives
@@ -686,22 +687,15 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   // ── Stack compositor ─────────────────────────────────────
   if(n.type==="stack"){
     var scv=mkCv(w,h),sctx=scv.getContext("2d")
-    // Draw base source first (bottom-most layer, no blend)
-    if(n.baseRefId&&!vis.has(n.baseRefId)){
-      var baseCv=compAny(n.baseRefId,cmap,cache,iC,w,h,new Set(vis))
-      if(baseCv)sctx.drawImage(baseCv,0,0)
-    }
-    // Inputs composited top-to-bottom. Bottom input drawn first, each subsequent blended on top.
+    // Inputs composited top-to-bottom. Bottom of list is base layer drawn direct.
     var inputs=(n.inputs||[]).slice().reverse() // reverse so top of list = top layer = drawn last
+    var firstDrawn=false
     for(var si=inputs.length-1;si>=0;si--){
       var inp=inputs[si]; if(!inp.enabled||!inp.refId)continue
       var resolvedInp=resolveSlot(inp,cmap,cache,iC,w,h,new Set(vis))
       if(resolvedInp){
-        if(!n.baseRefId&&sctx.getImageData(0,0,1,1).data[3]===0&&si===inputs.length-1){
-          sctx.drawImage(resolvedInp,0,0) // no base + first valid input — draw direct
-        }else{
-          blendCv(sctx,resolvedInp,inp.blendMode||"normal",inp.opacity,w,h)
-        }
+        if(!firstDrawn){sctx.drawImage(resolvedInp,0,0);firstDrawn=true}
+        else{blendCv(sctx,resolvedInp,inp.blendMode||"normal",inp.opacity,w,h)}
       }
     }
     if(n.outEfx&&n.outEfx.length>0)applyEfxStk(sctx,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
@@ -775,6 +769,10 @@ function NRef(props) {
     if(n.section!==2)return false
     if(mode==="intermediate")return n.type==="promoted"
     if(mode==="source")return n.type!=="promoted"
+    // "effect-source": any compositor + effect-type stacks only
+    if(mode==="effect-source")return n.type!=="promoted"&&(n.type!=="stack"||(n.stackType==="effect"))
+    // "mask-source": any compositor + mask-type stacks only
+    if(mode==="mask-source")return n.type!=="promoted"&&(n.type!=="stack"||(n.stackType==="mask"))
     return true
   })
   return (
@@ -1426,7 +1424,7 @@ function AddMenu(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
   var s1=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
-  var items=props.sec===1?s1:[{t:"blender",l:"Blender"},{t:"stack",l:"Stack"}]
+  var items=props.sec===1?s1:[{t:"blender",l:"Blender"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
   return (
     <div ref={ref} style={{position:"relative"}}>
       <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
@@ -1783,20 +1781,16 @@ function StackProps(props) {
 
   return (
     <div style={{padding:10,overflowY:"auto"}}>
-      <div style={{marginBottom:12}}>
-        <div className="card" style={{marginBottom:8}}>
-          <div className="card-hdr" style={{background:"rgba(36,164,204,.06)"}}>
-            <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"#40c8e8"}}>Base source</span>
-            <span style={{fontSize:9,color:"var(--mu)"}}>optional background layer</span>
-          </div>
-          <div className="card-body">
-            <NRef l="source" v={node.baseRefId||null} nodes={nodes} selfId={node.id}
-              fn={function(v){onChange(Object.assign({},node,{baseRefId:v||null}))}}/>
-          </div>
-        </div>
-      </div>
       <div style={{marginBottom:8}}>
-        <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Inputs — top to bottom</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <span style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em"}}>Inputs — top to bottom</span>
+          <span style={{fontSize:9,padding:"1px 7px",borderRadius:4,
+            background:node.stackType==="mask"?"rgba(176,96,240,.15)":"rgba(36,204,168,.12)",
+            color:node.stackType==="mask"?"var(--lv)":"var(--ac)",
+            border:node.stackType==="mask"?"1px solid rgba(176,96,240,.3)":"1px solid rgba(36,204,168,.25)"}}>
+            {node.stackType||"effect"} stack
+          </span>
+        </div>
         {node.inputs.map(function(inp,i){
           return (
             <StackInputCard key={inp.id} input={inp} nodes={nodes} selfId={node.id}
@@ -2146,7 +2140,7 @@ export default function App() {
     img.onerror=function(){iC.current.set(url,{complete:false,naturalWidth:0})}
     img.src=url; iC.current.set(url,img)
   }
-  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="stack"?mkStack():mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
+  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
   function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id)setDispId(null)}
   function upd(u){
     setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})
@@ -2217,7 +2211,7 @@ export default function App() {
     var suggestName = (info.owner ? info.owner.name+" " : "") + info.slot + " " + info.kind + " stack"
     var name = window.prompt ? (window.prompt("Name this new Stack:", suggestName)||suggestName) : suggestName
     // Build a Stack node that wraps the current slot (source + the stack being extracted)
-    var newStack = mkStack()
+    var newStack = mkStack(info.kind)
     newStack.name = name
     // First input of the new Stack = current slot (keeps source + the full stack)
     var firstInp = mkStackInput()
