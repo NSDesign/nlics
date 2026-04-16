@@ -2357,23 +2357,33 @@ export default function App() {
     } else {
       newStack.maskStack = (info.slotObj.maskStack||[]).slice()
     }
-    // Update the original slot: clear inline stack, set ref to new Stack node
-    var updatedSlot = Object.assign({}, info.slotObj, {
-      effectStack:    info.kind==="effect" ? [] : (info.slotObj.effectStack||[]),
-      maskStack:      info.kind==="mask"   ? [] : (info.slotObj.maskStack||[]),
-      effectStackRef: info.kind==="effect" ? newStack.id : (info.slotObj.effectStackRef||null),
-      maskStackRef:   info.kind==="mask"   ? newStack.id : (info.slotObj.maskStackRef||null),
-    })
+    // Replace inline stack in the originating slot with a __stackref__ item
+    // pointing at the new Stack node — everything else in the stack is preserved
+    var stackRefItem = info.kind==="effect"
+      ? mkEfxStackRef(newStack.id)
+      : mkMaskStackRef(newStack.id)
+
     pushHistory({nodes:nodes})
     setNodes(function(p){
       var withStack = p.concat([newStack])
       return withStack.map(function(n){
         if(!info.owner||n.id!==info.owner.id)return n
         var updated = Object.assign({},n)
-        if(info.slot==="inputA")updated.inputA=updatedSlot
-        else if(info.slot==="inputB")updated.inputB=updatedSlot
-        else if(info.slot==="outEfx")updated.outEfx=newStack.effectStack&&[]||[]
-        else if(info.slot==="outMask")updated.outMask=newStack.maskStack&&[]||[]
+        if(info.slot==="inputA"){
+          updated.inputA = Object.assign({},n.inputA,{
+            effectStack: info.kind==="effect" ? [stackRefItem] : n.inputA.effectStack,
+            maskStack:   info.kind==="mask"   ? [stackRefItem] : n.inputA.maskStack,
+          })
+        } else if(info.slot==="inputB"){
+          updated.inputB = Object.assign({},n.inputB,{
+            effectStack: info.kind==="effect" ? [stackRefItem] : n.inputB.effectStack,
+            maskStack:   info.kind==="mask"   ? [stackRefItem] : n.inputB.maskStack,
+          })
+        } else if(info.slot==="outEfx"){
+          updated.outEfx = [stackRefItem]
+        } else if(info.slot==="outMask"){
+          updated.outMask = [stackRefItem]
+        }
         return updated
       })
     })
