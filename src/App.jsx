@@ -1652,46 +1652,49 @@ export default function App() {
 
   useEffect(function(){stRef.current={nodes:nodes,dispId:dispId}},[nodes,dispId])
 
-  // ── Persist settings to storage ──────────────────────────────────────────
-  // Load on mount
+  // ── Persist settings via localStorage ───────────────────────────────────
+  // Works on GitHub Pages, local dev, and any browser.
+  // Wrapped in try/catch — localStorage throws in private mode with full quota.
+  var STORAGE_KEY = 'nlics:ui-settings:v1'
+  // v1 suffix means a new app version can change the key to reset stale settings
+
+  // Load on mount — runs once, synchronously reads from localStorage
   useEffect(function(){
-    if (!window.storage) return
-    window.storage.get('nlics:ui-settings').then(function(result) {
-      if (!result) return
-      try {
-        var saved = JSON.parse(result.value)
-        // Merge with defaults so new keys added in future are present
-        var merged = Object.assign({}, DEFAULTS, saved)
-        setSettings({
-          viewMode:      merged.viewMode,
-          previewPinned: merged.previewPinned,
-          stickyHeaders: merged.stickyHeaders,
-          panelStyle:    merged.panelStyle,
-        })
-        if (merged.previewH) setPreviewH(merged.previewH)
-        if (merged.isVert   !== undefined) setIsVert(merged.isVert)
-        if (merged.flipped  !== undefined) setFlipped(merged.flipped)
-        if (merged.leftW)   setLeftW(merged.leftW)
-        if (merged.topH)    setTopH(merged.topH)
-      } catch(e) {}
-    }).catch(function(){})
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      var saved = JSON.parse(raw)
+      // Always merge with DEFAULTS so new keys survive app updates
+      var m = Object.assign({}, DEFAULTS, saved)
+      setSettings({
+        viewMode:      m.viewMode,
+        previewPinned: m.previewPinned,
+        stickyHeaders: m.stickyHeaders,
+        panelStyle:    m.panelStyle,
+      })
+      if (m.previewH !== undefined) setPreviewH(m.previewH)
+      if (m.isVert   !== undefined) setIsVert(m.isVert)
+      if (m.flipped  !== undefined) setFlipped(m.flipped)
+      if (m.leftW    !== undefined) setLeftW(m.leftW)
+      if (m.topH     !== undefined) setTopH(m.topH)
+    } catch(e) {}
   }, [])
 
   // Save whenever any persisted value changes
   useEffect(function(){
-    if (!window.storage) return
-    var payload = JSON.stringify({
-      viewMode:      settings.viewMode,
-      previewPinned: settings.previewPinned,
-      stickyHeaders: settings.stickyHeaders,
-      panelStyle:    settings.panelStyle,
-      previewH:      previewH,
-      isVert:        isVert,
-      flipped:       flipped,
-      leftW:         leftW,
-      topH:          topH,
-    })
-    window.storage.set('nlics:ui-settings', payload).catch(function(){})
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        viewMode:      settings.viewMode,
+        previewPinned: settings.previewPinned,
+        stickyHeaders: settings.stickyHeaders,
+        panelStyle:    settings.panelStyle,
+        previewH:      previewH,
+        isVert:        isVert,
+        flipped:       flipped,
+        leftW:         leftW,
+        topH:          topH,
+      }))
+    } catch(e) {}
   }, [settings, previewH, isVert, flipped, leftW, topH])
 
   useEffect(function(){
