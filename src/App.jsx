@@ -191,15 +191,15 @@ function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1
 function mkStack(stackType) {
   var stype = stackType||"effect"
   if(stype==="mask")
-    return { id:uid(), name:"Mask Stack "+(_uid-100), type:"stack", stackType:"mask", section:2, enabled:true, maskStack:[] }
-  return { id:uid(), name:"Effect Stack "+(_uid-100), type:"stack", stackType:"effect", section:2, enabled:true, effectStack:[] }
+    return { id:uid(), name:"Mask Stack "+(_uid-100), type:"stack", stackType:"mask", section:2, enabled:true, maskStack:[], previewRefId:null }
+  return { id:uid(), name:"Effect Stack "+(_uid-100), type:"stack", stackType:"effect", section:2, enabled:true, effectStack:[], previewRefId:null }
 }
 // Stack reference item — sits in an effect or mask stack array as a first-class item
 function mkEfxStackRef(stackRefId) {
-  return { id:uid(), type:"__stackref__", stackRefId:stackRefId, enabled:true }
+  return { id:uid(), type:"__stackref__", stackRefId:stackRefId, enabled:true, opacity:100, blendMode:"normal" }
 }
 function mkMaskStackRef(stackRefId) {
-  return { id:uid(), type:"__stackref__", stackRefId:stackRefId, enabled:true }
+  return { id:uid(), type:"__stackref__", stackRefId:stackRefId, enabled:true, opacity:100, blendMode:"multiply" }
 }
 
 // Promoted node — a named tap point on an intermediate chain state
@@ -493,12 +493,24 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
   var out=new Float32Array(w*h).fill(1),any=false
   for(var mi=0;mi<stack.length;mi++){
     var mk=stack[mi];if(mk.enabled===false)continue
-    // Stack reference — expand the referenced Mask Stack node inline
+    // Stack reference — apply referenced Mask Stack with opacity/blendMode control
     if(mk.type==="__stackref__"){
       var refMaskNode=cmap.get(mk.stackRefId)
-      if(refMaskNode&&refMaskNode.type==="stack"&&refMaskNode.stackType==="mask"&&refMaskNode.maskStack&&refMaskNode.maskStack.length>0){
+      if(refMaskNode&&refMaskNode.type==="stack"&&refMaskNode.stackType==="mask"&&(refMaskNode.maskStack||[]).length>0){
         var subMv=compMasks(refMaskNode.maskStack,cmap,cache,iC,w,h,new Set(vis))
-        if(subMv){any=true;for(var qi=0;qi<w*h;qi++)out[qi]*=subMv[qi]}
+        if(subMv){
+          any=true
+          var rf=(mk.opacity==null?100:mk.opacity)/100
+          var rbm=mk.blendMode||"multiply"
+          for(var qi=0;qi<w*h;qi++){
+            var mv2r=subMv[qi]*rf
+            if(rbm==="screen")out[qi]=1-(1-out[qi])*(1-mv2r)
+            else if(rbm==="add")out[qi]=Math.min(1,out[qi]+mv2r)
+            else if(rbm==="subtract")out[qi]=Math.max(0,out[qi]-mv2r)
+            else if(rbm==="normal")out[qi]=mv2r
+            else out[qi]*=mv2r
+          }
+        }
       }
       continue
     }
@@ -526,11 +538,17 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
   for(var ei=0;ei<stack.length;ei++){
     var efx=stack[ei]; if(!efx.enabled) continue
-    // Stack reference — expand referenced Effect Stack node inline at this position
+    // Stack reference — apply referenced Effect Stack with opacity/blendMode control
     if(efx.type==="__stackref__"){
       var refEn=cmap.get(efx.stackRefId)
-      if(refEn&&refEn.type==="stack"&&refEn.stackType==="effect"&&(refEn.effectStack||[]).length>0)
+      if(refEn&&refEn.type==="stack"&&refEn.stackType==="effect"&&(refEn.effectStack||[]).length>0){
+        var preImg=ctx.getImageData(0,0,w,h)
+        var preCopy=new Uint8ClampedArray(preImg.data)
         applyEfxStk(ctx,refEn.effectStack,cmap,cache,iC,w,h,new Set(vis))
+        var postImg=ctx.getImageData(0,0,w,h)
+        applyBack(preCopy,postImg.data,null,efx.opacity!=null?efx.opacity:100,efx.blendMode||"normal")
+        ctx.putImageData(new ImageData(preCopy,w,h),0,0)
+      }
       continue
     }
     if (efx.type==="transform") {
@@ -710,8 +728,18 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
 
   vis.add(id)
 
-  // ── Stack node — not directly renderable; used by ref in slots ──────────────
-  if(n.type==="stack"){vis.delete(id);return null}
+  // ── Stack node — renderable only when previewRefId is set ───────────────────
+  if(n.type==="stack"){
+    if(!n.previewRefId||vis.has(n.previewRefId)){vis.delete(id);return null}
+    var previewBase=compAny(n.previewRefId,cmap,cache,iC,w,h,new Set(vis))
+    if(!previewBase){vis.delete(id);return null}
+    var pcv=clCv(previewBase,w,h),pctx=pcv.getContext("2d")
+    if(n.stackType==="effect"&&(n.effectStack||[]).length>0)
+      applyEfxStk(pctx,n.effectStack,cmap,cache,iC,w,h,new Set(vis))
+    else if(n.stackType==="mask"&&(n.maskStack||[]).length>0)
+      maskToAlpha(pctx,n.maskStack,cmap,cache,iC,w,h,new Set(vis))
+    cache.set(id,pcv);vis.delete(id);return pcv
+  }
 
   // ── Blender compositor ───────────────────────────────────
   var cv2=mkCv(w,h),ctx2=cv2.getContext("2d")
@@ -1090,6 +1118,21 @@ function StackRefCard(props) {
           color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
           {armed?"confirm ×":"×"}
         </button>
+      </div>
+        {/* Opacity + blend mode row */}
+      <div style={{padding:"8px 12px",borderTop:"1px solid var(--bd)",display:"flex",gap:8,alignItems:"center"}}>
+        <select value={item.blendMode||"normal"}
+          onChange={function(e){props.onChange(Object.assign({},item,{blendMode:e.target.value}))}}
+          style={{flex:1,fontSize:10,padding:"3px 4px"}}>
+          {(isMask?MBMS:EBMS).map(function(m){return <option key={m}>{m}</option>})}
+        </select>
+        <input type="range" min={0} max={100} step={1}
+          value={item.opacity!=null?item.opacity:100}
+          onChange={function(e){props.onChange(Object.assign({},item,{opacity:+e.target.value}))}}
+          style={{flex:1}}/>
+        <span style={{fontSize:10,color:"var(--di)",minWidth:30,textAlign:"right",flexShrink:0}}>
+          {Math.round(item.opacity!=null?item.opacity:100)}%
+        </span>
       </div>
       {!refNode&&(
         <div style={{padding:"8px 12px",fontSize:10,color:"var(--dng)"}}>
@@ -1877,6 +1920,27 @@ function StackProps(props) {
           border:isEffect?"1px solid rgba(36,204,168,.25)":"1px solid rgba(176,96,240,.3)"}}>
           {isEffect ? "Effect Stack" : "Mask Stack"}
         </span>
+      </div>
+
+      {/* Preview source — applies the stack to this source for live preview only */}
+      <div className="card" style={{marginBottom:10}}>
+        <div className="card-hdr" style={{background:"rgba(180,180,80,.06)"}}>
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+            textTransform:"uppercase",letterSpacing:".1em",color:"#c8c040"}}>
+            Preview source
+          </span>
+          <span style={{fontSize:9,color:"var(--mu)"}}>for preview only · not composited</span>
+        </div>
+        <div className="card-body">
+          <NRef l="source" v={node.previewRefId||null} nodes={nodes} selfId={node.id}
+            fn={function(v){onChange(Object.assign({},node,{previewRefId:v||null}))}}/>
+          {node.previewRefId && (
+            <div style={{fontSize:9,color:"var(--mu)",marginTop:6,lineHeight:1.5}}>
+              Tap ◎ on this node to preview the {isEffect?"effects":"masks"} applied to the selected source.
+              This reference is ignored during compositing.
+            </div>
+          )}
+        </div>
       </div>
 
       {isEffect ? (
