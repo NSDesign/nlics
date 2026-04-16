@@ -82,6 +82,17 @@ button.icon-btn.sm{width:var(--tap-sm);height:var(--tap-sm);font-size:14px;}
 .hico.exit{color:var(--ac);border:1px solid rgba(36,204,168,.3);background:rgba(36,204,168,.07);}
 .stack-lbl{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em;padding:4px 0 8px;display:flex;align-items:center;gap:8px;}
 .stack-lbl::after{content:'';flex:1;height:1px;background:var(--bd);}
+/* Stack/Promoted type colours */
+.tstack{background:rgba(36,164,204,.13);color:#40c8e8;border:1px solid rgba(36,164,204,.26);}
+.tprom{background:rgba(220,180,40,.13);color:#e8c840;border:1px solid rgba(220,180,40,.26);}
+/* Stack input item */
+.stack-input{background:var(--bg);border:1px solid var(--bd);border-radius:8px;margin-bottom:8px;overflow:hidden;}
+.stack-input-hdr{display:flex;align-items:center;gap:4px;padding:0 8px 0 10px;min-height:44px;background:var(--sf);border-bottom:1px solid var(--bd);}
+/* Promote button */
+.promote-btn{background:rgba(220,180,40,.1);border:1px solid rgba(220,180,40,.3);color:#e8c840;font-size:9px;padding:2px 8px;border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;min-height:28px;}
+.promote-btn:hover{background:rgba(220,180,40,.22);color:#fff;}
+/* Promoted group in node list */
+.prom-group-hdr{display:flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(220,180,40,.06);border-top:1px solid rgba(220,180,40,.18);border-bottom:1px solid rgba(220,180,40,.18);}
 /* ── Settings sheet ── */
 .sheet-scrim{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:700;display:flex;flex-direction:column;justify-content:flex-end;}
 .sheet-scrim.top{justify-content:flex-start;}
@@ -174,6 +185,22 @@ function mkMask() { return { id:uid(), refId:null, channel:"luminosity", invert:
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[] } }
 function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"screen", amount:100, switched:false, outEfx:[], outMask:[] } }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:Object.assign({},CPROPS[t]) } }
+
+// Stack input — full slot + opacity + blend + enabled flag
+function mkStackInput() {
+  return { id:uid(), refId:null, effectStack:[], maskStack:[], opacity:100, blendMode:"normal", enabled:true }
+}
+// Stack compositor — N inputs composited top-to-bottom
+function mkStack() {
+  return { id:uid(), name:"Stack "+(_uid-100), type:"stack", section:2, enabled:true,
+    inputs:[mkStackInput(), mkStackInput()], outEfx:[], outMask:[] }
+}
+// Promoted node — a named tap point on an intermediate chain state
+// tapPath describes exactly where in which chain the tap lives
+function mkPromoted(name, tapPath) {
+  return { id:uid(), name:name||"Tap "+(_uid-100), type:"promoted", section:2, enabled:true,
+    tapPath:tapPath }  // tapPath:{nodeId,slot,stackType,afterId,withSub}
+}
 
 /* ─── COLOUR / NOISE MATH ────────────────────────────────── */
 function rhs(r,g,b) {
@@ -530,6 +557,7 @@ function maskToAlpha(ctx,stack,cmap,cache,iC,w,h,vis) {
 }
 function resolveSlot(slot,cmap,cache,iC,w,h,vis) {
   if(!slot||!slot.refId||vis.has(slot.refId))return null
+  if(slot.enabled===false)return null  // stack inputs can be disabled
   var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis));if(!base)return null
   var cv=clCv(base,w,h),ctx=cv.getContext("2d")
   if(slot.effectStack&&slot.effectStack.length>0)applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis))
@@ -546,11 +574,94 @@ function blendCv(ctx,srcCv,mode,amount,w,h) {
     ctx.putImageData(base,0,0)
   }else{ctx.save();ctx.globalAlpha=amount/100;ctx.globalCompositeOperation=BM[mode]||"source-over";ctx.drawImage(srcCv,0,0);ctx.restore()}
 }
+// Partially evaluate an effect stack up to and including a given effect id.
+// withSub: if true, also apply that effect's own maskStack (for promoted taps that include the masked result).
+function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
+  for(var ei=0;ei<stack.length;ei++){
+    var efx=stack[ei]; if(!efx.enabled)continue
+    if(efx.type==="transform"){applyTransform(ctx,efx.params,w,h)}
+    else {
+      var pre=ctx.getImageData(0,0,w,h), post=new Uint8ClampedArray(pre.data)
+      pxFn(post,w,h,efx.type,efx.params)
+      var useMask = withSub || efx.id!==afterId
+      var mv = useMask&&efx.maskStack&&efx.maskStack.length>0
+        ? compMasks(efx.maskStack,cmap,cache,iC,w,h,new Set(vis)) : null
+      applyBack(pre.data,post,mv,efx.opacity,efx.blendMode||"normal")
+      ctx.putImageData(pre,0,0)
+    }
+    if(efx.id===afterId)break
+  }
+}
+// Partially evaluate a mask stack up to and including a given mask id.
+// Returns the Float32Array of mask values at that point.
+function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
+  var out=new Float32Array(w*h).fill(1),any=false
+  for(var mi=0;mi<stack.length;mi++){
+    var mk=stack[mi];if(!mk.refId||vis.has(mk.refId))continue
+    var cv=compAny(mk.refId,cmap,cache,iC,w,h,new Set(vis));if(!cv)continue;any=true
+    var useSub = withSub || mk.id!==afterId
+    if(useSub&&mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,new Set(vis))}
+    var src=clCv(cv,w,h).getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
+    for(var ii=0;ii<w*h;ii++){
+      var pi=ii*4,v
+      if(mk.channel==="R")v=src[pi]/255
+      else if(mk.channel==="G")v=src[pi+1]/255
+      else if(mk.channel==="B")v=src[pi+2]/255
+      else if(mk.channel==="A")v=src[pi+3]/255
+      else v=(.299*src[pi]+.587*src[pi+1]+.114*src[pi+2])/255
+      var mv2=(mk.invert?1-v:v)*(mk.strength==null?1:mk.strength)*f
+      if(mk.blendMode==="screen")out[ii]=1-(1-out[ii])*(1-mv2)
+      else if(mk.blendMode==="add")out[ii]=Math.min(1,out[ii]+mv2)
+      else if(mk.blendMode==="subtract")out[ii]=Math.max(0,out[ii]-mv2)
+      else if(mk.blendMode==="normal")out[ii]=mv2
+      else out[ii]*=mv2
+    }
+    if(mk.id===afterId)break
+  }
+  return any?out:null
+}
+// Resolve a tap path for a promoted node — partially evaluates the chain
+// and returns the canvas state at the exact promoted point.
+function compPromoted(n,cmap,cache,iC,w,h,vis){
+  var tp=n.tapPath; if(!tp||!tp.nodeId||vis.has(tp.nodeId))return null
+  var srcNode=cmap.get(tp.nodeId); if(!srcNode||!srcNode.enabled)return null
+  // Get the slot to work from
+  var slot
+  if(tp.slot==="inputA")slot=srcNode.inputA
+  else if(tp.slot==="inputB")slot=srcNode.inputB
+  else if(tp.slot==="outEfx"||tp.slot==="outMask"){
+    // Start from the fully composited output of the source node, then partially apply out stack
+    var baseOut=compAny(tp.nodeId,cmap,cache,iC,w,h,new Set(vis))
+    if(!baseOut)return null
+    var cv=clCv(baseOut,w,h),ctx=cv.getContext("2d")
+    if(tp.slot==="outEfx"&&srcNode.outEfx&&srcNode.outEfx.length>0){
+      applyEfxStkUpTo(ctx,srcNode.outEfx,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
+    }else if(tp.slot==="outMask"&&srcNode.outMask&&srcNode.outMask.length>0){
+      var mv=compMasksUpTo(srcNode.outMask,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
+      if(mv){var id=ctx.getImageData(0,0,w,h);for(var i=0;i<w*h;i++)id.data[i*4+3]=Math.round(id.data[i*4+3]*mv[i]);ctx.putImageData(id,0,0)}
+    }
+    return cv
+  }
+  if(!slot||!slot.refId||vis.has(slot.refId))return null
+  // Resolve the base source for this slot
+  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis));if(!base)return null
+  var cv2=clCv(base,w,h),ctx2=cv2.getContext("2d")
+  if(tp.stackType==="effect"&&slot.effectStack&&slot.effectStack.length>0){
+    applyEfxStkUpTo(ctx2,slot.effectStack,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
+  }else if(tp.stackType==="mask"&&slot.maskStack&&slot.maskStack.length>0){
+    var mv2=compMasksUpTo(slot.maskStack,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
+    if(mv2){var id2=ctx2.getImageData(0,0,w,h);for(var j=0;j<w*h;j++)id2.data[j*4+3]=Math.round(id2.data[j*4+3]*mv2[j]);ctx2.putImageData(id2,0,0)}
+  }
+  return cv2
+}
+
 function compAny(id,cmap,cache,iC,w,h,vis) {
   if(!vis)vis=new Set()
   if(cache.has(id))return cache.get(id)
   if(vis.has(id))return null
   var n=cmap.get(id);if(!n||!n.enabled)return null
+
+  // ── Pixel Creators ───────────────────────────────────────
   if(n.section===1){
     var cv=mkCv(w,h),ctx=cv.getContext("2d")
     if(n.type==="solid")gSolid(ctx,n.props,w,h)
@@ -561,7 +672,39 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     else if(n.type==="image")gImg(ctx,n.props,iC,w,h)
     cache.set(id,cv);return cv
   }
+
+  // ── Promoted tap point ───────────────────────────────────
+  if(n.type==="promoted"){
+    var pv=new Set(vis);pv.add(id)
+    var pcv=compPromoted(n,cmap,cache,iC,w,h,pv)
+    if(pcv)cache.set(id,pcv)
+    return pcv
+  }
+
   vis.add(id)
+
+  // ── Stack compositor ─────────────────────────────────────
+  if(n.type==="stack"){
+    var scv=mkCv(w,h),sctx=scv.getContext("2d")
+    // Inputs composited top-to-bottom. Bottom input drawn first, each subsequent blended on top.
+    var inputs=(n.inputs||[]).slice().reverse() // reverse so top of list = top layer = drawn last
+    for(var si=inputs.length-1;si>=0;si--){
+      var inp=inputs[si]; if(!inp.enabled||!inp.refId)continue
+      var resolvedInp=resolveSlot(inp,cmap,cache,iC,w,h,new Set(vis))
+      if(resolvedInp){
+        if(sctx.getImageData(0,0,1,1).data[3]===0&&si===inputs.length-1){
+          sctx.drawImage(resolvedInp,0,0) // first valid input — draw direct
+        }else{
+          blendCv(sctx,resolvedInp,inp.blendMode||"normal",inp.opacity,w,h)
+        }
+      }
+    }
+    if(n.outEfx&&n.outEfx.length>0)applyEfxStk(sctx,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
+    if(n.outMask&&n.outMask.length>0)maskToAlpha(sctx,n.outMask,cmap,cache,iC,w,h,new Set(vis))
+    cache.set(id,scv);vis.delete(id);return scv
+  }
+
+  // ── Blender compositor ───────────────────────────────────
   var cv2=mkCv(w,h),ctx2=cv2.getContext("2d")
   var sA=n.switched?n.inputB:n.inputA,sB=n.switched?n.inputA:n.inputB
   var cA=resolveSlot(sA,cmap,cache,iC,w,h,new Set(vis)),cB=resolveSlot(sB,cmap,cache,iC,w,h,new Set(vis))
@@ -619,16 +762,27 @@ function Se(props) {
   )
 }
 function NRef(props) {
+  // mode: "all" (default) | "intermediate" (promoted only) | "source" (creators+blenders+stacks, no promoted)
+  var mode = props.mode || "all"
+  var creators = mode==="intermediate" ? [] : props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId})
+  var comps    = props.nodes.filter(function(n){
+    if(n.id===props.selfId)return false
+    if(n.section!==2)return false
+    if(mode==="intermediate")return n.type==="promoted"
+    if(mode==="source")return n.type!=="promoted"
+    return true
+  })
   return (
     <PR l={props.l}>
       <select value={props.v||""} onChange={function(e){props.fn(e.target.value||null)}} style={{flex:1}}>
         <option value="">— none —</option>
-        <optgroup label="Pixel Creators">
-          {props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId}).map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
-        </optgroup>
-        <optgroup label="Compositors">
-          {props.nodes.filter(function(n){return n.section===2&&n.id!==props.selfId}).map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
-        </optgroup>
+        {creators.length>0&&<optgroup label="Pixel Creators">
+          {creators.map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
+        </optgroup>}
+        {comps.length>0&&<optgroup label={mode==="intermediate"?"Promoted Taps":"Compositors"}>
+          {comps.map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
+        </optgroup>}
+        {creators.length===0&&comps.length===0&&<option disabled>no valid sources</option>}
       </select>
     </PR>
   )
@@ -857,7 +1011,10 @@ function MaskCard(props) {
           </button>
         )}
       </div>
-      <button className="icon-btn sm" style={{color:"var(--dng)",alignSelf:"flex-start"}} onClick={props.onDel}>×</button>
+      <div style={{display:"flex",flexDirection:"column",gap:4,alignSelf:"flex-start",flexShrink:0}}>
+        {props.onPromote&&<button className="promote-btn" style={{padding:"2px 6px",fontSize:9}} onClick={props.onPromote} title="Promote">↗</button>}
+        <button className="icon-btn sm" style={{color:"var(--dng)"}} onClick={props.onDel}>×</button>
+      </div>
     </div>
   )
 }
@@ -890,6 +1047,7 @@ function EfxCard(props) {
           {efx.enabled?"●":"○"}
         </button>
         <span style={{flex:1,fontSize:12,color:efx.enabled?"var(--tx)":"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}>{efx.type}</span>
+        {props.onPromote&&<button className="promote-btn" onClick={function(e){e.stopPropagation();props.onPromote()}} title="Promote to named tap point">↗</button>}
         <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
           {armed?"confirm x":"x"}
         </button>
@@ -1169,7 +1327,7 @@ function BlenderProps(props) {
 }
 
 /* ─── NODE ITEM ───────────────────────────────────────── */
-var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","blender":"#b82880"}
+var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","blender":"#b82880","stack":"#24acc4","promoted":"#d4b428"}
 function NodeItem(props) {
   var node=props.node
   var edSt=useState(false);    var ed=edSt[0],     setEd=edSt[1]
@@ -1200,7 +1358,7 @@ function NodeItem(props) {
             </span>
         }
       </div>
-      <span className={"ftag "+(node.section===1?"tgn":"tco")}>{node.type}</span>
+      <span className={"ftag "+(node.type==="stack"?"tstack":node.type==="promoted"?"tprom":node.section===1?"tgn":"tco")}>{node.type}</span>
       <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onTog(node.id)}} style={{color:node.enabled?"var(--ac)":"var(--mu)"}}>
         {node.enabled?"●":"○"}
       </button>
@@ -1225,7 +1383,7 @@ function AddMenu(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
   var s1=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
-  var items=props.sec===1?s1:[{t:"blender",l:"Blender"}]
+  var items=props.sec===1?s1:[{t:"blender",l:"Blender"},{t:"stack",l:"Stack"}]
   return (
     <div ref={ref} style={{position:"relative"}}>
       <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
@@ -1470,6 +1628,175 @@ function NodeDetailSheet(props) {
   )
 }
 
+/* ─── STACK INPUT CARD ─────────────────────────────────── */
+function StackInputCard(props) {
+  var inp = props.input
+  var tabSt = useState("source"); var tab=tabSt[0], setTab=tabSt[1]
+  var nEfx=(inp.effectStack||[]).length, nMask=(inp.maskStack||[]).length
+  var armSt=useState(false); var armed=armSt[0], setArmed=armSt[1]
+  var timerRef=useRef(null)
+  useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
+  function handleDel(){
+    if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
+    else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
+  }
+  var tabs=[
+    {id:"source",label:"Source"},
+    {id:"effects",label:"Effects"+(nEfx>0?" ("+nEfx+")":""),color:"ac"},
+    {id:"masks",  label:"Masks"+(nMask>0?" ("+nMask+")":""),color:"lv"},
+  ]
+  var srcName=(props.nodes.find(function(n){return n.id===inp.refId})||{name:"unset"}).name
+  return (
+    <div className="stack-input">
+      <div className="stack-input-hdr">
+        <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+          <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
+          <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
+        </div>
+        <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},inp,{enabled:!inp.enabled}))}}
+          style={{color:inp.enabled?"var(--ac)":"var(--mu)",fontSize:18}}>{inp.enabled?"●":"○"}</button>
+        <span style={{flex:1,fontSize:11,color:inp.refId?"var(--di)":"var(--mu)",fontFamily:"IBM Plex Mono,monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{srcName}</span>
+        <button onClick={handleDel} style={{minHeight:30,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?56:30}}>
+          {armed?"sure?":"×"}
+        </button>
+      </div>
+      <TabBar tabs={tabs} active={tab} onChange={setTab}/>
+      {tab==="source"&&(
+        <div className="card-body">
+          <NRef l="source" v={inp.refId} nodes={props.nodes} selfId={props.selfId}
+            fn={function(v){props.onChange(Object.assign({},inp,{refId:v}))}}/>
+          <Sl l="opacity" v={inp.opacity} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){props.onChange(Object.assign({},inp,{opacity:v}))}}/>
+          <Se l="blend" v={inp.blendMode||"normal"} opts={BMODES}
+            fn={function(v){props.onChange(Object.assign({},inp,{blendMode:v}))}}/>
+        </div>
+      )}
+      {tab==="effects"&&(
+        <div style={{padding:10}}>
+          <EfxStack stack={inp.effectStack||[]} nodes={props.nodes} selfId={props.selfId}
+            navPush={props.navPush}
+            onChange={function(es){props.onChange(Object.assign({},inp,{effectStack:es}))}}/>
+        </div>
+      )}
+      {tab==="masks"&&(
+        <div style={{padding:10}}>
+          <MaskStackPanel stack={inp.maskStack||[]} nodes={props.nodes} selfId={props.selfId}
+            navPush={props.navPush}
+            onChange={function(ms){props.onChange(Object.assign({},inp,{maskStack:ms}))}}/>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── STACK PROPS ──────────────────────────────────────── */
+function StackProps(props) {
+  var node=props.node, onChange=props.onChange, nodes=props.nodes
+  var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
+  function navPush(item){setNavStack(function(s){return s.concat([item])})}
+  function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
+
+  if(navStack.length>0){
+    var top=navStack[navStack.length-1]
+    var drillMask=top.getMask()
+    return (
+      <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
+        <div className="breadcrumb">
+          <button className="ghost" style={{fontSize:13,padding:"0 6px 0 0",minHeight:32}} onClick={navPop}>Back</button>
+          <span className="bc-item">Stack</span>
+          {navStack.map(function(n,i){return (
+            <span key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{color:"var(--mu)"}}>›</span>
+              <span className={"bc-item"+(i===navStack.length-1?" cur":"")}>{n.label}</span>
+            </span>
+          )})}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:10}}>
+          {drillMask&&(
+            <EfxStack stack={drillMask.effectStack||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              onChange={function(es){top.setMask(Object.assign({},drillMask,{effectStack:es}))}}/>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  function updInp(idx,nw){var inp=node.inputs.map(function(x,i){return i===idx?nw:x});onChange(Object.assign({},node,{inputs:inp}))}
+  function delInp(idx){if(node.inputs.length<=1)return;var inp=node.inputs.filter(function(_,i){return i!==idx});onChange(Object.assign({},node,{inputs:inp}))}
+  function addInp(){onChange(Object.assign({},node,{inputs:node.inputs.concat([mkStackInput()])}))}
+  function moveInp(idx,dir){
+    var ni=Math.max(0,Math.min(node.inputs.length-1,idx+dir));if(ni===idx)return
+    var a=node.inputs.slice(),tmp=a[idx];a[idx]=a[ni];a[ni]=tmp
+    onChange(Object.assign({},node,{inputs:a}))
+  }
+
+  var nOutEfx=(node.outEfx||[]).length, nOutMask=(node.outMask||[]).length
+  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  var outTabs=[
+    {id:"effects",label:"Effects"+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
+    {id:"masks",  label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
+  ]
+
+  return (
+    <div style={{padding:10,overflowY:"auto"}}>
+      <div style={{marginBottom:8}}>
+        <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Inputs — top to bottom</div>
+        {node.inputs.map(function(inp,i){
+          return (
+            <StackInputCard key={inp.id} input={inp} nodes={nodes} selfId={node.id}
+              isFirst={i===0} isLast={i===node.inputs.length-1}
+              navPush={navPush}
+              onMove={function(dir){moveInp(i,dir)}}
+              onChange={function(nw){updInp(i,nw)}}
+              onDel={function(){delInp(i)}}/>
+          )
+        })}
+        <button className="ac" style={{width:"100%",marginTop:4}} onClick={addInp}>+ add input</button>
+      </div>
+      <div className="card">
+        <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
+        </div>
+        <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
+        {outTab==="effects"&&(
+          <div style={{padding:10}}>
+            <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}/>
+          </div>
+        )}
+        {outTab==="masks"&&(
+          <div style={{padding:10}}>
+            <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}/>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ─── PROMOTED PROPS ───────────────────────────────────── */
+function PromotedProps(props) {
+  var node=props.node
+  var tp=node.tapPath||{}
+  var srcNode=props.nodes.find(function(n){return n.id===tp.nodeId})
+  return (
+    <div style={{padding:12}}>
+      <div className="card" style={{marginBottom:10}}>
+        <div className="card-hdr"><span style={{fontSize:11,color:"#e8c840",fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em"}}>Promoted Tap</span></div>
+        <div className="card-body" style={{fontSize:11,lineHeight:1.8}}>
+          <div><span style={{color:"var(--mu)"}}>Source: </span><span style={{color:"var(--tx)"}}>{srcNode?srcNode.name:"unknown"}</span></div>
+          <div><span style={{color:"var(--mu)"}}>Slot: </span><span style={{color:"var(--tx)"}}>{tp.slot||"—"}</span></div>
+          <div><span style={{color:"var(--mu)"}}>Stack type: </span><span style={{color:"var(--tx)"}}>{tp.stackType||"—"}</span></div>
+          <div><span style={{color:"var(--mu)"}}>After item: </span><span style={{color:"var(--tx)"}}>{tp.afterId||"—"}</span></div>
+          <div><span style={{color:"var(--mu)"}}>Includes sub-stack: </span><span style={{color:"var(--tx)"}}>{tp.withSub?"yes":"no"}</span></div>
+        </div>
+      </div>
+      <div style={{fontSize:10,color:"var(--mu)",textAlign:"center",padding:"4px 0"}}>Read-only tap on intermediate pipeline state. Delete this node to remove the tap (check no references point to it first).</div>
+    </div>
+  )
+}
+
 /* ─── SECTION (stickyHeader + sheet panel style) ─── */
 function Section(props) {
   var items = props.nodes.filter(function(n){ return n.section===props.sec })
@@ -1496,7 +1823,8 @@ function Section(props) {
       {!props.collapsed && (
         <div style={innerStyle}>
           {items.length===0 && <div className="empty">no items — tap + Add</div>}
-          {items.map(function(node){
+          {/* Regular (non-promoted) items */}
+          {items.filter(function(n){return n.type!=="promoted"}).map(function(node){
             var isSel = props.selId===node.id
             var isDsp = props.dispId===node.id
             return (
@@ -1510,13 +1838,44 @@ function Section(props) {
                   <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
                     {props.sec===1
                       ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
-                      : <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes}/>
+                      : node.type==="blender"
+                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes}/>
+                        : node.type==="stack"
+                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} onPromote={props.onPromote}/>
+                          : null
                     }
                   </div>
                 )}
               </div>
             )
           })}
+          {/* Promoted taps — grouped */}
+          {props.sec===2 && items.filter(function(n){return n.type==="promoted"}).length>0 && (
+            <div>
+              <div className="prom-group-hdr">
+                <span style={{fontSize:9,color:"#e8c840",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"IBM Plex Mono,monospace"}}>Promoted taps</span>
+                <span style={{fontSize:9,color:"var(--mu)",marginLeft:6}}>{items.filter(function(n){return n.type==="promoted"}).length}</span>
+              </div>
+              {items.filter(function(n){return n.type==="promoted"}).map(function(node){
+                var isSel = props.selId===node.id
+                var isDsp = props.dispId===node.id
+                return (
+                  <div key={node.id}>
+                    <NodeItem node={node} isSel={isSel} isDsp={isDsp}
+                      onSel={function(id){ props.onSel(id===props.selId?null:id) }}
+                      onDsp={props.onDsp} onDel={props.onDel}
+                      onRen={function(name){ props.onRen(node.id,name) }}
+                      onTog={props.onTog}/>
+                    {isSel && props.panelStyle!=="sheet" && (
+                      <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
+                        <PromotedProps node={node} nodes={props.nodes}/>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1731,7 +2090,7 @@ export default function App() {
     img.onerror=function(){iC.current.set(url,{complete:false,naturalWidth:0})}
     img.src=url; iC.current.set(url,img)
   }
-  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
+  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="stack"?mkStack():mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
   function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id)setDispId(null)}
   function upd(u){
     setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})
@@ -1789,9 +2148,18 @@ export default function App() {
       setSheetNode(null)
     }
   }
+  function handlePromote(tapPath) {
+    var suggestName = "Tap " + (tapPath.stackType||"") + " " + (tapPath.afterId||"").slice(0,4)
+    var name = window.prompt ? (window.prompt("Name this tap point:", suggestName)||suggestName) : suggestName
+    var pNode = mkPromoted(name, tapPath)
+    pNode.section = 2
+    pushHistory({nodes:nodes})
+    setNodes(function(p){ return p.concat([pNode]) })
+  }
+
   var sp={nodes:nodes,selId:selId,dispId:dispId,
     onSel:selWithSheet,onDsp:dsp,onDel:del,onAdd:add,onUpd:upd,onLoad:loadUrl,onRen:ren,onTog:tog,
-    panelStyle:settings.panelStyle}
+    panelStyle:settings.panelStyle,onPromote:handlePromote}
 
   var leftBoxStyle = Object.assign(
     {display:rightFS?"none":"flex",flexDirection:"column",background:"var(--pn)"},
