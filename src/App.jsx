@@ -163,6 +163,10 @@ function StyleInjector() {
 
 /* ─── CONSTANTS ─────────────────────────────────────────── */
 var BMODES = ["normal","add","subtract","multiply","screen","overlay","soft-light","hard-light","difference","exclusion","darken","lighten","color-burn","color-dodge","divide"]
+// Blend modes whose RGB output is identical regardless of input order.
+// With uniform alpha in both inputs, swapping them produces the same pixels.
+// Used to show a hint when the user toggles 'A over B' with such a mode.
+var COMMUTATIVE_MODES = {add:1,multiply:1,screen:1,difference:1,exclusion:1,darken:1,lighten:1}
 var EBMS   = ["normal","multiply","screen","overlay","add","subtract","darken","lighten"]
 var MBMS   = ["multiply","screen","add","subtract","normal"]
 var MCH    = ["luminosity","R","G","B","A"]
@@ -2074,6 +2078,11 @@ function BlenderProps(props) {
             {node.switched?"B over A":"A over B"}
           </button>
         </PR>
+        {COMMUTATIVE_MODES[node.mode] && (
+          <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",lineHeight:1.5,fontStyle:"italic"}}>
+            order rarely affects result in {node.mode} mode
+          </div>
+        )}
       </div>
     )
     if(headless) return body
