@@ -39,6 +39,21 @@ button.icon-btn.sm{width:var(--tap-sm);height:var(--tap-sm);font-size:14px;}
 .nrow.dsp::after{content:'';position:absolute;right:0;top:0;bottom:0;width:3px;background:var(--lv);border-radius:2px 0 0 2px;}
 .card{background:var(--el);border:1px solid var(--bd);border-radius:var(--card-r);overflow:hidden;margin-bottom:var(--card-gap);}
 .card-hdr{display:flex;align-items:center;gap:4px;padding:0 8px 0 10px;min-height:var(--tap);background:var(--sf);border-bottom:1px solid var(--bd);}
+.bp-chevron{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:none;background:none;color:var(--mu);cursor:pointer;font-size:12px;transition:transform .15s ease,color .15s ease;}
+.bp-chevron:hover{color:var(--tx);}
+.bp-chevron.open{transform:rotate(90deg);color:var(--tx);}
+.bp-toolbar{display:flex;align-items:center;gap:4px;padding:6px 10px 10px;justify-content:flex-end;}
+.bp-toggle{display:inline-flex;border:1px solid var(--bd);border-radius:6px;overflow:hidden;height:28px;}
+.bp-toggle button{background:none;border:none;color:var(--mu);padding:0 10px;font-size:10px;font-family:'IBM Plex Mono',monospace;cursor:pointer;height:100%;letter-spacing:.04em;}
+.bp-toggle button.active{background:var(--sl);color:var(--ac);}
+.bp-toggle button+button{border-left:1px solid var(--bd);}
+.bp-tabs{display:flex;gap:4px;padding:6px 10px 4px;flex-wrap:wrap;}
+.bp-tab{flex:1 1 0;min-width:0;background:var(--sf);border:1px solid var(--bd);color:var(--mu);padding:8px 6px;font-size:10px;font-family:'IBM Plex Mono',monospace;border-radius:6px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;min-height:36px;}
+.bp-tab.on{background:var(--sl);color:var(--tx);border-color:var(--ac);}
+.bp-tab.on.lv{border-color:var(--lv);color:var(--lv);}
+.bp-tab.on.co{border-color:var(--co);color:var(--co);}
+.bp-tab.on.di{border-color:var(--di);color:var(--di);}
+
 .card-body{padding:10px 12px;}
 .tabs{display:flex;gap:2px;padding:6px 8px;background:var(--bg);border-bottom:1px solid var(--bd);}
 .tab{flex:1;height:32px;border-radius:6px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;background:none;border:none;color:var(--mu);cursor:pointer;transition:all .12s;}
@@ -1984,14 +1999,47 @@ function BlenderProps(props) {
     {id:"effects",label:"Effects"+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
     {id:"masks",  label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
   ]
-  return (
-    <div style={{padding:10,overflowY:"auto"}}>
+  // Layout mode: "accordion" (all cards, collapsible) or "tabs" (multi-select)
+  var BP_LAYOUT_KEY = "nlics:bp-layout:v1"
+  var layoutSt=useState(function(){
+    try{var v=localStorage.getItem(BP_LAYOUT_KEY);return v||"accordion"}catch(e){return "accordion"}
+  })
+  var layout=layoutSt[0], setLayoutRaw=layoutSt[1]
+  function setLayout(v){setLayoutRaw(v);try{localStorage.setItem(BP_LAYOUT_KEY,v)}catch(e){}}
+  // Per-blender collapse state (accordion) / active-tab set (tabs) — lives on node._ui
+  var ui = node._ui || {}
+  function setUi(patch){
+    onChange(Object.assign({},node,{_ui:Object.assign({},ui,patch)}))
+  }
+  // Collapse state for each section (default: all expanded)
+  var collapsed = ui.collapsed || {}
+  function toggleCollapse(key){
+    var nc=Object.assign({},collapsed); nc[key]=!nc[key]
+    setUi({collapsed:nc})
+  }
+  // Multi-select tabs (default: all on so the layout switch doesn't hide everything)
+  var activeTabs = ui.bpTabs || {inputA:true, blend:true, inputB:true, output:true}
+  function toggleTab(key){
+    var na=Object.assign({},activeTabs)
+    na[key]=!na[key]
+    // Ensure at least one tab remains active
+    if(!na.inputA&&!na.blend&&!na.inputB&&!na.output)na[key]=true
+    setUi({bpTabs:na})
+  }
+
+  // Section renderers — closures over the various pieces of state
+  function renderInputA(){
+    return (
       <SlotPanel label="Input A" slot={node.inputA} accent="var(--ac)"
         nodes={nodes} selfId={node.id} navPush={navPush}
         slotKey="inputA" owner={node}
         onNavigate={props.onNavigate}
         onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
+    )
+  }
+  function renderBlend(){
+    return (
       <div className="card" style={{marginBottom:10}}>
         <div className="card-hdr">
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--di)"}}>Blend</span>
@@ -2006,12 +2054,20 @@ function BlenderProps(props) {
           </PR>
         </div>
       </div>
+    )
+  }
+  function renderInputB(){
+    return (
       <SlotPanel label="Input B" slot={node.inputB} accent="var(--co)"
         nodes={nodes} selfId={node.id} navPush={navPush}
         slotKey="inputB" owner={node}
         onNavigate={props.onNavigate}
         onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
+    )
+  }
+  function renderOutput(){
+    return (
       <div className="card">
         <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
@@ -2036,6 +2092,68 @@ function BlenderProps(props) {
           </div>
         )}
       </div>
+    )
+  }
+
+  // Accordion wrapper: shows a collapsible header above each card
+  function Acc(sKey, label, accent, body){
+    var isCollapsed = !!collapsed[sKey]
+    return (
+      <div style={{marginBottom:10}} key={sKey}>
+        <button onClick={function(){toggleCollapse(sKey)}}
+          style={{width:"100%",display:"flex",alignItems:"center",gap:8,
+            padding:"8px 10px",background:"var(--sf)",border:"1px solid var(--bd)",
+            borderRadius:isCollapsed?6:"6px 6px 0 0",borderBottom:isCollapsed?"1px solid var(--bd)":"none",
+            color:accent||"var(--tx)",cursor:"pointer",minHeight:36,
+            fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+            textTransform:"uppercase",letterSpacing:".1em",textAlign:"left"}}>
+          <span className={"bp-chevron"+(isCollapsed?"":" open")} style={{color:accent||"var(--mu)"}}>›</span>
+          <span style={{flex:1}}>{label}</span>
+        </button>
+        {!isCollapsed && (
+          <div style={{borderRadius:"0 0 6px 6px",overflow:"hidden"}}>{body}</div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{padding:0,overflowY:"auto"}}>
+      {/* Layout toolbar */}
+      <div className="bp-toolbar">
+        <div className="bp-toggle" role="tablist" aria-label="Blender panel layout">
+          <button className={layout==="accordion"?"active":""}
+            onClick={function(){setLayout("accordion")}}
+            title="Accordion — collapsible sections">▤ list</button>
+          <button className={layout==="tabs"?"active":""}
+            onClick={function(){setLayout("tabs")}}
+            title="Tabs — multi-select">⊟ tabs</button>
+        </div>
+      </div>
+
+      {layout==="tabs" ? (
+        <div>
+          <div className="bp-tabs">
+            <button className={"bp-tab"+(activeTabs.inputA?" on":"")} onClick={function(){toggleTab("inputA")}}>Input A</button>
+            <button className={"bp-tab"+(activeTabs.blend?" on di":"")} onClick={function(){toggleTab("blend")}}>Blend</button>
+            <button className={"bp-tab"+(activeTabs.inputB?" on co":"")} onClick={function(){toggleTab("inputB")}}>Input B</button>
+            <button className={"bp-tab"+(activeTabs.output?" on lv":"")} onClick={function(){toggleTab("output")}}>Output</button>
+          </div>
+          <div style={{padding:"4px 10px 10px"}}>
+            {activeTabs.inputA && <div style={{marginBottom:10}}>{renderInputA()}</div>}
+            {activeTabs.blend  && renderBlend()}
+            {activeTabs.inputB && <div style={{marginBottom:10}}>{renderInputB()}</div>}
+            {activeTabs.output && renderOutput()}
+          </div>
+        </div>
+      ) : (
+        <div style={{padding:"0 10px 10px"}}>
+          {Acc("inputA","Input A","var(--ac)",renderInputA())}
+          {Acc("blend","Blend","var(--di)",renderBlend())}
+          {Acc("inputB","Input B","var(--co)",renderInputB())}
+          {Acc("output","Output","var(--lv)",renderOutput())}
+        </div>
+      )}
     </div>
   )
 }
