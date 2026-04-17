@@ -1551,6 +1551,15 @@ function ColourMapEditor(props) {
           {p.reverse?"reversed":"reverse"}
         </button>
       </div>
+      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:9,color:"var(--mu)",alignSelf:"center",marginRight:4}}>presets</span>
+        <button className="ghost" style={{fontSize:10,padding:"4px 8px"}} title="2-stop duotone: edit shadow + highlight colours"
+          onClick={function(){setStops([{pos:0,color:"#0a0a2a",alpha:100},{pos:1,color:"#f5e642",alpha:100}])}}>duotone</button>
+        <button className="ghost" style={{fontSize:10,padding:"4px 8px"}} title="Classic B&W tonal map"
+          onClick={function(){setStops([{pos:0,color:"#000000",alpha:100},{pos:1,color:"#ffffff",alpha:100}])}}>B&W</button>
+        <button className="ghost" style={{fontSize:10,padding:"4px 8px"}} title="Heat map: black → red → yellow → white"
+          onClick={function(){setStops([{pos:0,color:"#000000",alpha:100},{pos:.33,color:"#cc2200",alpha:100},{pos:.66,color:"#ffaa00",alpha:100},{pos:1,color:"#ffffff",alpha:100}])}}>heat</button>
+      </div>
       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
         <span style={{fontSize:9,color:"var(--mu)",alignSelf:"center",marginRight:4}}>distribute</span>
         <button className="ghost" style={{fontSize:10,padding:"4px 10px"}} onClick={function(){distribute("even")}}>even</button>
@@ -1987,7 +1996,7 @@ function EfxCard(props) {
 /* ─── ADD EFFECT MENU ─────────────────────────────────── */
 var EFX_GROUPS=[
   {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
-  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map","duotone"]},
+  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
   {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect"]},
   {label:"Transform",items:["transform"]},
 ]
