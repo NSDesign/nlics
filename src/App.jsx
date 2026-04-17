@@ -1242,33 +1242,137 @@ function Se(props) {
     </PR>
   )
 }
+/* ─── NODE REFERENCE PICKER (thumbnail) ─────────────────── */
+// Thumb size for the picker grid items
+var THUMB_PX = 48
+// Render a single thumbnail onto a canvas element — called once per item on open
+function renderThumb(canvas, nodeId, nodes, iC) {
+  if(!canvas||!nodeId) return
+  var ctx=canvas.getContext("2d"); ctx.clearRect(0,0,THUMB_PX,THUMB_PX)
+  var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
+  try {
+    var result=compAny(nodeId,cmap,new Map(),iC||new Map(),THUMB_PX,THUMB_PX,new Set())
+    if(result) ctx.drawImage(result,0,0,THUMB_PX,THUMB_PX)
+    else { ctx.fillStyle="var(--sf)"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX) }
+  } catch(_) { ctx.fillStyle="var(--sf)"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX) }
+}
+// Single thumb item in the picker
+function ThumbItem(props) {
+  var cvRef=useRef(null)
+  useEffect(function(){
+    if(cvRef.current&&props.iC) renderThumb(cvRef.current,props.nodeId,props.nodes,props.iC.current||props.iC)
+  },[props.nodeId])
+  return (
+    <div onClick={props.onClick}
+      style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
+        padding:"6px 4px",borderRadius:6,
+        background:props.active?"var(--sl)":"none",
+        border:props.active?"1px solid var(--ac)":"1px solid transparent",
+        minWidth:THUMB_PX+16}}>
+      <div style={{width:THUMB_PX,height:THUMB_PX,borderRadius:4,overflow:"hidden",
+        flexShrink:0,background:"var(--bg)",
+        boxShadow:props.active?"0 0 0 1px var(--ac)":"0 0 0 1px var(--bd)"}}>
+        <canvas ref={cvRef} width={THUMB_PX} height={THUMB_PX} style={{display:"block"}}/>
+      </div>
+      <span style={{fontSize:8,color:props.active?"var(--ac)":"var(--mu)",textAlign:"center",
+        fontFamily:"'IBM Plex Mono',monospace",maxWidth:THUMB_PX+8,
+        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2}}>
+        {props.label}
+      </span>
+    </div>
+  )
+}
 function NRef(props) {
-  // mode: "all" (default) | "intermediate" (promoted only) | "source" (creators+blenders+stacks, no promoted)
   var mode = props.mode || "all"
+  var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
+  var anchorRef=useRef(null)
+  var menuRef=useRef(null)
+  var pos=usePopoverPosition(anchorRef, open, "above")
+  useEffect(function(){
+    if(!open) return
+    function h(e){
+      if(anchorRef.current&&anchorRef.current.contains(e.target)) return
+      if(menuRef.current&&menuRef.current.contains(e.target)) return
+      setOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[open])
   var creators = mode==="intermediate" ? [] : props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId})
-  var comps    = props.nodes.filter(function(n){
-    if(n.id===props.selfId)return false
-    if(n.section!==2)return false
-    if(mode==="intermediate")return n.type==="promoted"
-    if(mode==="source")return n.type!=="promoted"
-    // "effect-source": only effect-type Stack nodes (for linking an effect stack)
-    if(mode==="effect-source")return n.type==="stack"&&n.stackType==="effect"
-    // "mask-source": only mask-type Stack nodes (for linking a mask stack)
-    if(mode==="mask-source")return n.type==="stack"&&n.stackType==="mask"
+  var comps = props.nodes.filter(function(n){
+    if(n.id===props.selfId) return false
+    if(n.section!==2) return false
+    if(mode==="intermediate") return n.type==="promoted"
+    if(mode==="source") return n.type!=="promoted"
+    if(mode==="effect-source") return n.type==="stack"&&n.stackType==="effect"
+    if(mode==="mask-source") return n.type==="stack"&&n.stackType==="mask"
     return true
   })
+  var allItems = creators.concat(comps)
+  var selectedNode = allItems.find(function(n){return n.id===props.v})
+  var btnLabel = selectedNode ? selectedNode.name : "— none —"
+  var btnStyle={flex:1,textAlign:"left",fontSize:11,padding:"0 10px",
+    fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",
+    whiteSpace:"nowrap",color:selectedNode?"var(--tx)":"var(--mu)"}
+
+  function pick(id){ props.fn(id||null); setOpen(false) }
+
+  var menuContent = (
+    <div style={{padding:8,maxHeight:"50vh",overflowY:"auto",userSelect:"none"}}>
+      {/* None option */}
+      <div onClick={function(){pick(null)}}
+        style={{padding:"6px 10px",fontSize:11,color:"var(--mu)",cursor:"pointer",
+          borderRadius:5,marginBottom:6,border:"1px solid "+(props.v==null?"var(--bd)":"transparent"),
+          background:props.v==null?"var(--sl)":"none"}}>— none —</div>
+      {creators.length>0&&(
+        <div>
+          <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
+            letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
+            Pixel Creators
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {creators.map(function(n){
+              return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
+                label={n.name} active={props.v===n.id} onClick={function(){pick(n.id)}}/>
+            })}
+          </div>
+        </div>
+      )}
+      {comps.length>0&&(
+        <div style={{marginTop:creators.length>0?10:0}}>
+          <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
+            letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
+            {mode==="intermediate"?"Promoted Taps":"Compositors"}
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {comps.map(function(n){
+              return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
+                label={n.name} active={props.v===n.id} onClick={function(){pick(n.id)}}/>
+            })}
+          </div>
+        </div>
+      )}
+      {allItems.length===0&&(
+        <div style={{fontSize:11,color:"var(--mu)",padding:"4px 10px"}}>no valid sources</div>
+      )}
+    </div>
+  )
   return (
     <PR l={props.l}>
-      <select value={props.v||""} onChange={function(e){props.fn(e.target.value||null)}} style={{flex:1}}>
-        <option value="">— none —</option>
-        {creators.length>0&&<optgroup label="Pixel Creators">
-          {creators.map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
-        </optgroup>}
-        {comps.length>0&&<optgroup label={mode==="intermediate"?"Promoted Taps":"Compositors"}>
-          {comps.map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
-        </optgroup>}
-        {creators.length===0&&comps.length===0&&<option disabled>no valid sources</option>}
-      </select>
+      <button ref={anchorRef} onClick={function(){setOpen(!open)}}
+        style={Object.assign({},btnStyle,{minHeight:"var(--tap-sm)",background:"var(--el)",
+          border:"1px solid var(--bd)",borderRadius:6})}>
+        {btnLabel}
+      </button>
+      {open&&pos&&createPortal(
+        <div ref={menuRef} style={Object.assign({},pos,{
+          position:"fixed",zIndex:9000,background:"var(--pn)",
+          border:"1px solid var(--bd)",borderRadius:10,
+          boxShadow:"0 -8px 32px rgba(0,0,0,.7)"})}>
+          {menuContent}
+        </div>,
+        document.body
+      )}
     </PR>
   )
 }
@@ -1863,15 +1967,7 @@ function MaskCard(props) {
             ⚠ no source — mask has no effect until a source is selected
           </div>
         )}
-        <select value={mk.refId||""} onChange={function(e){props.onChange(Object.assign({},mk,{refId:e.target.value||null}))}} style={{width:"100%",marginBottom:8}}>
-          <option value="">— select source —</option>
-          <optgroup label="Pixel Creators">
-            {props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId}).map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
-          </optgroup>
-          <optgroup label="Compositors">
-            {props.nodes.filter(function(n){return n.section===2&&n.id!==props.selfId}).map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
-          </optgroup>
-        </select>
+        <NRef l="source" v={mk.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC} mode="source" fn={function(v){props.onChange(Object.assign({},mk,{refId:v}))}}/>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
           <select value={mk.channel} onChange={function(e){props.onChange(Object.assign({},mk,{channel:e.target.value}))}} style={{width:90,flex:"none"}}>
             {MCH.map(function(c){return <option key={c}>{c}</option>})}
@@ -2044,7 +2140,7 @@ function EfxCard(props) {
           {nMasks===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no masks on this effect</div>}
           {(efx.maskStack||[]).map(function(mk,mi){
             return (
-              <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId}
+              <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC} iC={props.iC}
                 onChange={function(nw){
                   var ms=(efx.maskStack||[]).map(function(x,xi){return xi===mi?nw:x})
                   props.onChange(Object.assign({},efx,{maskStack:ms}))
@@ -2358,7 +2454,7 @@ function SlotPanel(props) {
       <TabBar tabs={tabs} active={tab} onChange={setTab}/>
       {tab==="source" && (
         <div className="card-body">
-          <NRef l="source" v={slot.refId} nodes={nodes} selfId={selfId} fn={function(v){onChange(Object.assign({},slot,{refId:v}))}}/>
+          <NRef l="source" v={slot.refId} nodes={nodes} selfId={selfId} iC={props.iC} fn={function(v){onChange(Object.assign({},slot,{refId:v}))}}/>
         </div>
       )}
       {tab==="effects" && (
@@ -2498,7 +2594,7 @@ function BlenderProps(props) {
     return (
       <SlotPanel label="Input A" slot={node.inputA} accent="var(--ac)"
         nodes={nodes} selfId={node.id} navPush={navPush}
-        slotKey="inputA" owner={node}
+        slotKey="inputA" owner={node} iC={props.iC}
         headless={headless}
         onNavigate={props.onNavigate}
         onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
@@ -2536,7 +2632,7 @@ function BlenderProps(props) {
     return (
       <SlotPanel label="Input B" slot={node.inputB} accent="var(--co)"
         nodes={nodes} selfId={node.id} navPush={navPush}
-        slotKey="inputB" owner={node}
+        slotKey="inputB" owner={node} iC={props.iC}
         headless={headless}
         onNavigate={props.onNavigate}
         onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
@@ -3102,7 +3198,7 @@ function StackProps(props) {
           <span style={{fontSize:9,color:"var(--mu)"}}>for preview only · not composited</span>
         </div>
         <div className="card-body">
-          <NRef l="source" v={node.previewRefId||null} nodes={nodes} selfId={node.id}
+          <NRef l="source" v={node.previewRefId||null} nodes={nodes} selfId={node.id} iC={props.iC}
             fn={function(v){onChange(Object.assign({},node,{previewRefId:v||null}))}}/>
           {node.previewRefId && (
             <div style={{fontSize:9,color:"var(--mu)",marginTop:6,lineHeight:1.5}}>
@@ -3581,7 +3677,8 @@ function App() {
 
   var sp={nodes:nodes,selId:selId,dispId:dispId,
     onSel:selWithSheet,onDsp:dsp,onDel:del,onAdd:add,onUpd:upd,onLoad:loadUrl,onRen:ren,onTog:tog,
-    panelStyle:settings.panelStyle,onPromote:handlePromote,onExtract:handleExtract,onNavigate:handleNavigate}
+    panelStyle:settings.panelStyle,onPromote:handlePromote,onExtract:handleExtract,onNavigate:handleNavigate,
+    iC:iC}
 
   var leftBoxStyle = Object.assign(
     {display:rightFS?"none":"flex",flexDirection:"column",background:"var(--pn)"},
