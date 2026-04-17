@@ -1339,14 +1339,10 @@ function EfxStack(props) {
             </div>
           )}
         </div>
-        {/* extract — 1 part */}
+        {/* extract — 1 part, only when available */}
         {props.onExtract&&props.stack.length>0&&(
           <button className="promote-btn" style={{flex:1,minWidth:0,fontSize:10}}
             onClick={props.onExtract} title="Extract to Effect Stack node">↗</button>
-        )}
-        {/* placeholder to keep grid when extract not shown */}
-        {!(props.onExtract&&props.stack.length>0)&&(
-          <div style={{flex:1}}/>
         )}
       </div>
     </div>
@@ -1430,14 +1426,10 @@ function MaskStackPanel(props) {
             </div>
           )}
         </div>
-        {/* extract — 1 part */}
+        {/* extract — 1 part, only when available */}
         {props.onExtract&&props.stack.length>0&&(
           <button className="promote-btn" style={{flex:1,minWidth:0,fontSize:10}}
             onClick={props.onExtract} title="Extract to Mask Stack node">↗</button>
-        )}
-        {/* placeholder to keep grid when extract not shown */}
-        {!(props.onExtract&&props.stack.length>0)&&(
-          <div style={{flex:1}}/>
         )}
       </div>
     </div>
@@ -1469,14 +1461,14 @@ function SlotPanel(props) {
         <div style={{padding:10}}>
           <EfxStack stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}}
-            onExtract={props.onExtract ? function(){props.onExtract("effect")} : null}/>
+            onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"effect",owner:props.owner})} : null}/>
         </div>
       )}
       {tab==="masks" && (
         <div style={{padding:10}}>
           <MaskStackPanel stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}}
-            onExtract={props.onExtract ? function(){props.onExtract("mask")} : null}/>
+            onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"mask",owner:props.owner})} : null}/>
         </div>
       )}
     </div>
@@ -1533,8 +1525,9 @@ function BlenderProps(props) {
     <div style={{padding:10,overflowY:"auto"}}>
       <SlotPanel label="Input A" slot={node.inputA} accent="var(--ac)"
         nodes={nodes} selfId={node.id} navPush={navPush}
+        slotKey="inputA" owner={node}
         onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
-        onExtract={props.onExtract ? function(kind){props.onExtract({slot:"inputA",slotObj:node.inputA,kind:kind,owner:node,setSlot:function(s){onChange(Object.assign({},node,{inputA:s}))}})} : null}/>
+        onExtract={props.onExtract ? props.onExtract : null}/>
       <div className="card" style={{marginBottom:10}}>
         <div className="card-hdr">
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--di)"}}>Blend</span>
@@ -1551,8 +1544,9 @@ function BlenderProps(props) {
       </div>
       <SlotPanel label="Input B" slot={node.inputB} accent="var(--co)"
         nodes={nodes} selfId={node.id} navPush={navPush}
+        slotKey="inputB" owner={node}
         onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
-        onExtract={props.onExtract ? function(kind){props.onExtract({slot:"inputB",slotObj:node.inputB,kind:kind,owner:node,setSlot:function(s){onChange(Object.assign({},node,{inputB:s}))}})} : null}/>
+        onExtract={props.onExtract ? props.onExtract : null}/>
       <div className="card">
         <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
