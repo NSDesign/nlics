@@ -1260,8 +1260,15 @@ function renderThumb(canvas, nodeId, nodes, iC) {
 function ThumbItem(props) {
   var cvRef=useRef(null)
   useEffect(function(){
-    if(cvRef.current&&props.iC) renderThumb(cvRef.current,props.nodeId,props.nodes,props.iC.current||props.iC)
-  },[props.nodeId])
+    if(!cvRef.current||!props.iC) return
+    // Defer render to next idle period so opening the picker stays snappy.
+    // Index staggers thumbnails so they paint sequentially rather than all at once.
+    var delay = (props.index||0) * 18
+    var t = setTimeout(function(){
+      renderThumb(cvRef.current, props.nodeId, props.nodes, props.iC.current||props.iC)
+    }, delay)
+    return function(){ clearTimeout(t) }
+  },[props.nodeId, props.index])
   return (
     <div onClick={props.onClick}
       style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
@@ -1331,9 +1338,9 @@ function NRef(props) {
             Pixel Creators
           </div>
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-            {creators.map(function(n){
+            {creators.map(function(n,ci){
               return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
-                label={n.name} active={props.v===n.id} onClick={function(){pick(n.id)}}/>
+                label={n.name} active={props.v===n.id} index={ci} onClick={function(){pick(n.id)}}/>
             })}
           </div>
         </div>
@@ -1345,9 +1352,9 @@ function NRef(props) {
             {mode==="intermediate"?"Promoted Taps":"Compositors"}
           </div>
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-            {comps.map(function(n){
+            {comps.map(function(n,ci){
               return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
-                label={n.name} active={props.v===n.id} onClick={function(){pick(n.id)}}/>
+                label={n.name} active={props.v===n.id} index={creators.length+ci} onClick={function(){pick(n.id)}}/>
             })}
           </div>
         </div>
