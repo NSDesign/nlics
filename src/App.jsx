@@ -955,23 +955,26 @@ function PatP(props) {
 }
 function ImgP(props) {
   var p=props.p, up=props.up, onLoad=props.onLoad
-  var uSt=useState(p.url||""); var u=uSt[0], setU=uSt[1]
-  var fileRef=useRef(null), camRef=useRef(null)
-  function loadBlob(file){if(!file)return;var b=URL.createObjectURL(file);setU(b);up(Object.assign({},p,{url:b}));onLoad(b)}
-  function goUrl(){up(Object.assign({},p,{url:u}));onLoad(u)}
+  var fileRef=useRef(null)
+  function loadBlob(file){
+    if(!file)return
+    var b=URL.createObjectURL(file)
+    up(Object.assign({},p,{url:b}))
+    onLoad(b)
+  }
   return (
     <div>
-      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={function(e){loadBlob(e.target.files&&e.target.files[0]);e.target.value=""}}/>
-      <input ref={camRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={function(e){loadBlob(e.target.files&&e.target.files[0]);e.target.value=""}}/>
-      <div style={{display:"flex",gap:8,marginBottom:10}}>
-        <button className="ac" style={{flex:1}} onClick={function(){if(fileRef.current)fileRef.current.click()}}>Device</button>
-        <button className="ac" style={{flex:1}} onClick={function(){if(camRef.current)camRef.current.click()}}>Camera</button>
-      </div>
-      {p.url&&p.url.startsWith("blob:")&&<div style={{fontSize:10,color:"var(--ac)",marginBottom:8,textAlign:"center"}}>local file loaded</div>}
-      <PR l="URL">
-        <input type="text" value={u.startsWith("blob:")?"":u} placeholder="https://..." onChange={function(e){setU(e.target.value)}} onKeyDown={function(e){if(e.key==="Enter")goUrl()}} style={{flex:1}}/>
-      </PR>
-      <PR ns><button className="ac" style={{width:"100%",marginTop:4}} onClick={goUrl}>Load URL</button></PR>
+      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}}
+        onChange={function(e){loadBlob(e.target.files&&e.target.files[0]);e.target.value=""}}/>
+      <button className="ac" style={{width:"100%",marginBottom:10,minHeight:44}}
+        onClick={function(){if(fileRef.current)fileRef.current.click()}}>
+        + Load image from device
+      </button>
+      {p.url&&(
+        <div style={{fontSize:10,color:"var(--ac)",marginBottom:10,textAlign:"center"}}>
+          {p.url.startsWith("blob:")?"image loaded ✓":p.url.length>40?p.url.slice(0,40)+"…":p.url}
+        </div>
+      )}
       <Se l="fit" v={p.fit} opts={["contain","cover","fill"]} fn={function(v){up(Object.assign({},p,{fit:v}))}}/>
       <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
@@ -2304,11 +2307,17 @@ export default function App() {
   },[flipped,isVert])
 
   function loadUrl(url){
-    if(!url||iC.current.has(url))return
-    var img=new Image(); img.crossOrigin="anonymous"
+    if(!url)return
+    // Don't skip if already in cache but not yet loaded (blob URLs land here immediately)
+    var existing=iC.current.get(url)
+    if(existing&&existing.complete&&existing.naturalWidth)return  // already fully loaded
+    var img=new Image()
+    // blob: URLs are same-origin — crossOrigin header causes CORS failure on blobs
+    if(!url.startsWith("blob:"))img.crossOrigin="anonymous"
     img.onload=function(){iC.current.set(url,img);var st=stRef.current;renderPipeline(cvRef.current,st.dispId,st.nodes,iC.current)}
     img.onerror=function(){iC.current.set(url,{complete:false,naturalWidth:0})}
-    img.src=url; iC.current.set(url,img)
+    iC.current.set(url,img)
+    img.src=url
   }
   function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
   function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id)setDispId(null)}
