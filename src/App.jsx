@@ -2140,7 +2140,7 @@ function EfxCard(props) {
           {nMasks===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no masks on this effect</div>}
           {(efx.maskStack||[]).map(function(mk,mi){
             return (
-              <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC} iC={props.iC}
+              <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
                 onChange={function(nw){
                   var ms=(efx.maskStack||[]).map(function(x,xi){return xi===mi?nw:x})
                   props.onChange(Object.assign({},efx,{maskStack:ms}))
@@ -3101,11 +3101,11 @@ function NodeDetailSheet(props) {
           {props.sec===1
             ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad}/>
             : props.node.type==="stack"
-              ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes}
+              ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
                   onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
               : props.node.type==="promoted"
                 ? <PromotedProps node={props.node} nodes={props.nodes}/>
-                : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes}
+                : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
                     onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
           }
         </div>
@@ -3297,9 +3297,9 @@ function Section(props) {
                     {props.sec===1
                       ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
                       : node.type==="blender"
-                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} onExtract={props.onExtract} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                         : node.type==="stack"
-                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                           : null
                     }
                   </div>
@@ -3735,7 +3735,7 @@ function App() {
         node={sheetNode?sheetNode.node:null}
         sec={sheetNode?sheetNode.sec:null}
         onClose={function(){setSheetNode(null);setSelId(null)}}
-        onUpdate={upd} onLoad={loadUrl} nodes={nodes}
+        onUpdate={upd} onLoad={loadUrl} nodes={nodes} iC={iC}
         dispId={dispId} onDsp={dsp}
         onPromote={handlePromote} onExtract={handleExtract} onNavigate={handleNavigate}/>
 
