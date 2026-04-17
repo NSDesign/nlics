@@ -2080,7 +2080,7 @@ function BlenderProps(props) {
         </PR>
         {COMMUTATIVE_MODES[node.mode] && (
           <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",lineHeight:1.5,fontStyle:"italic"}}>
-            order rarely affects result in {node.mode} mode
+            order has no effect in {node.mode} mode
           </div>
         )}
       </div>
