@@ -43,8 +43,9 @@ button.icon-btn.sm{width:var(--tap-sm);height:var(--tap-sm);font-size:14px;}
 .bp-chevron:hover{color:var(--tx);}
 .bp-chevron.open{transform:rotate(90deg);color:var(--tx);}
 .bp-toolbar{display:flex;align-items:center;gap:4px;padding:6px 10px 10px;justify-content:flex-end;}
-.bp-toggle{display:inline-flex;border:1px solid var(--bd);border-radius:6px;overflow:hidden;height:28px;}
-.bp-toggle button{background:none;border:none;color:var(--mu);padding:0 10px;font-size:10px;font-family:'IBM Plex Mono',monospace;cursor:pointer;height:100%;letter-spacing:.04em;}
+.bp-toggle{display:inline-flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden;height:40px;}
+.bp-toggle button{background:none;border:none;color:var(--mu);padding:0 14px;cursor:pointer;height:100%;display:inline-flex;align-items:center;justify-content:center;}
+.bp-toggle button svg{display:block;}
 .bp-toggle button.active{background:var(--sl);color:var(--ac);}
 .bp-toggle button+button{border-left:1px solid var(--bd);}
 .bp-tabs{display:flex;gap:4px;padding:6px 10px 4px;flex-wrap:wrap;}
@@ -1896,11 +1897,8 @@ function SlotPanel(props) {
     {id:"effects",label:"Effects"+(nEfx>0?" ("+nEfx+")":""),color:"ac"},
     {id:"masks",  label:"Masks"+(nMask>0?" ("+nMask+")":""),color:"lv"},
   ]
-  return (
-    <div className="card">
-      <div className="card-hdr" style={{background:props.accent==="var(--ac)"?"rgba(36,204,168,.06)":"rgba(208,72,152,.06)"}}>
-        <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:props.accent}}>{props.label}</span>
-      </div>
+  var inner = (
+    <>
       <TabBar tabs={tabs} active={tab} onChange={setTab}/>
       {tab==="source" && (
         <div className="card-body">
@@ -1927,6 +1925,15 @@ function SlotPanel(props) {
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"mask",owner:props.owner})} : null}/>
         </div>
       )}
+    </>
+  )
+  if(props.headless) return inner
+  return (
+    <div className="card">
+      <div className="card-hdr" style={{background:props.accent==="var(--ac)"?"rgba(36,204,168,.06)":"rgba(208,72,152,.06)"}}>
+        <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:props.accent}}>{props.label}</span>
+      </div>
+      {inner}
     </div>
   )
 }
@@ -2027,51 +2034,55 @@ function BlenderProps(props) {
     setUi({bpTabs:na})
   }
 
-  // Section renderers — closures over the various pieces of state
-  function renderInputA(){
+  // Section renderers — closures over state. `headless` flag omits the
+  // section's own title header when the Acc wrapper provides one.
+  function renderInputA(headless){
     return (
       <SlotPanel label="Input A" slot={node.inputA} accent="var(--ac)"
         nodes={nodes} selfId={node.id} navPush={navPush}
         slotKey="inputA" owner={node}
+        headless={headless}
         onNavigate={props.onNavigate}
         onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
     )
   }
-  function renderBlend(){
+  function renderBlend(headless){
+    var body = (
+      <div className="card-body">
+        <Se l="mode" v={node.mode} opts={BMODES} fn={function(v){onChange(Object.assign({},node,{mode:v}))}}/>
+        <Sl l="amount" v={node.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){onChange(Object.assign({},node,{amount:v}))}}/>
+        <PR l="switch">
+          <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}} className={node.switched?"ac":""} style={{minHeight:36,padding:"0 14px"}}>
+            {node.switched?"B to A (switched)":"A to B (normal)"}
+          </button>
+        </PR>
+      </div>
+    )
+    if(headless) return body
     return (
       <div className="card" style={{marginBottom:10}}>
         <div className="card-hdr">
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--di)"}}>Blend</span>
         </div>
-        <div className="card-body">
-          <Se l="mode" v={node.mode} opts={BMODES} fn={function(v){onChange(Object.assign({},node,{mode:v}))}}/>
-          <Sl l="amount" v={node.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){onChange(Object.assign({},node,{amount:v}))}}/>
-          <PR l="switch">
-            <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}} className={node.switched?"ac":""} style={{minHeight:36,padding:"0 14px"}}>
-              {node.switched?"B to A (switched)":"A to B (normal)"}
-            </button>
-          </PR>
-        </div>
+        {body}
       </div>
     )
   }
-  function renderInputB(){
+  function renderInputB(headless){
     return (
       <SlotPanel label="Input B" slot={node.inputB} accent="var(--co)"
         nodes={nodes} selfId={node.id} navPush={navPush}
         slotKey="inputB" owner={node}
+        headless={headless}
         onNavigate={props.onNavigate}
         onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
     )
   }
-  function renderOutput(){
-    return (
-      <div className="card">
-        <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
-          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
-        </div>
+  function renderOutput(headless){
+    var body = (
+      <>
         <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
         {outTab==="effects" && (
           <div style={{padding:10}}>
@@ -2091,28 +2102,38 @@ function BlenderProps(props) {
               onExtract={props.onExtract ? function(){props.onExtract({slot:"outMask",slotObj:{maskStack:node.outMask||[]},kind:"mask",owner:node})} : null}/>
           </div>
         )}
+      </>
+    )
+    if(headless) return body
+    return (
+      <div className="card">
+        <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
+        </div>
+        {body}
       </div>
     )
   }
 
-  // Accordion wrapper: shows a collapsible header above each card
-  function Acc(sKey, label, accent, body){
+  // Accordion wrapper: header is the section title with chevron, body flows
+  // directly beneath as part of the same rounded box (no duplicated title,
+  // no double borders). Matches card radius exactly.
+  function Acc(sKey, label, accent, headerBg, renderFn){
     var isCollapsed = !!collapsed[sKey]
     return (
-      <div style={{marginBottom:10}} key={sKey}>
+      <div key={sKey} className="card" style={{marginBottom:10}}>
         <button onClick={function(){toggleCollapse(sKey)}}
           style={{width:"100%",display:"flex",alignItems:"center",gap:8,
-            padding:"8px 10px",background:"var(--sf)",border:"1px solid var(--bd)",
-            borderRadius:isCollapsed?6:"6px 6px 0 0",borderBottom:isCollapsed?"1px solid var(--bd)":"none",
-            color:accent||"var(--tx)",cursor:"pointer",minHeight:36,
+            padding:"0 10px",background:headerBg||"var(--sf)",border:"none",
+            borderBottom:isCollapsed?"none":"1px solid var(--bd)",
+            color:accent||"var(--tx)",cursor:"pointer",minHeight:"var(--tap)",
             fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
-            textTransform:"uppercase",letterSpacing:".1em",textAlign:"left"}}>
+            textTransform:"uppercase",letterSpacing:".1em",textAlign:"left",
+            borderRadius:isCollapsed?8:"8px 8px 0 0"}}>
           <span className={"bp-chevron"+(isCollapsed?"":" open")} style={{color:accent||"var(--mu)"}}>›</span>
           <span style={{flex:1}}>{label}</span>
         </button>
-        {!isCollapsed && (
-          <div style={{borderRadius:"0 0 6px 6px",overflow:"hidden"}}>{body}</div>
-        )}
+        {!isCollapsed && renderFn(true)}
       </div>
     )
   }
@@ -2124,10 +2145,24 @@ function BlenderProps(props) {
         <div className="bp-toggle" role="tablist" aria-label="Blender panel layout">
           <button className={layout==="accordion"?"active":""}
             onClick={function(){setLayout("accordion")}}
-            title="Accordion — collapsible sections">▤ list</button>
+            title="Accordion — stacked collapsible sections">
+            {/* rows icon — horizontal stripes */}
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <rect x="3" y="4"  width="14" height="3" rx="1"/>
+              <rect x="3" y="9"  width="14" height="3" rx="1"/>
+              <rect x="3" y="14" width="14" height="3" rx="1"/>
+            </svg>
+          </button>
           <button className={layout==="tabs"?"active":""}
             onClick={function(){setLayout("tabs")}}
-            title="Tabs — multi-select">⊟ tabs</button>
+            title="Tabs — multi-select columns">
+            {/* columns icon — vertical stripes */}
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <rect x="3"  y="3" width="3" height="14" rx="1"/>
+              <rect x="9"  y="3" width="3" height="14" rx="1"/>
+              <rect x="15" y="3" width="3" height="14" rx="1"/>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -2140,18 +2175,18 @@ function BlenderProps(props) {
             <button className={"bp-tab"+(activeTabs.output?" on lv":"")} onClick={function(){toggleTab("output")}}>Output</button>
           </div>
           <div style={{padding:"4px 10px 10px"}}>
-            {activeTabs.inputA && <div style={{marginBottom:10}}>{renderInputA()}</div>}
-            {activeTabs.blend  && renderBlend()}
-            {activeTabs.inputB && <div style={{marginBottom:10}}>{renderInputB()}</div>}
-            {activeTabs.output && renderOutput()}
+            {activeTabs.inputA && <div style={{marginBottom:10}}>{renderInputA(false)}</div>}
+            {activeTabs.blend  && renderBlend(false)}
+            {activeTabs.inputB && <div style={{marginBottom:10}}>{renderInputB(false)}</div>}
+            {activeTabs.output && renderOutput(false)}
           </div>
         </div>
       ) : (
         <div style={{padding:"0 10px 10px"}}>
-          {Acc("inputA","Input A","var(--ac)",renderInputA())}
-          {Acc("blend","Blend","var(--di)",renderBlend())}
-          {Acc("inputB","Input B","var(--co)",renderInputB())}
-          {Acc("output","Output","var(--lv)",renderOutput())}
+          {Acc("inputA","Input A","var(--ac)","rgba(36,204,168,.06)",renderInputA)}
+          {Acc("blend", "Blend",  "var(--di)",null,                  renderBlend)}
+          {Acc("inputB","Input B","var(--co)","rgba(208,72,152,.06)",renderInputB)}
+          {Acc("output","Output", "var(--lv)","rgba(176,96,240,.06)",renderOutput)}
         </div>
       )}
     </div>
