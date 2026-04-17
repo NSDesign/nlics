@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 
 
 /* ─── CSS ─────────────────────────────────────────────────── */
@@ -67,12 +68,12 @@ button.icon-btn.sm{width:var(--tap-sm);height:var(--tap-sm);font-size:14px;}
 .ftag{font-size:9px;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;flex-shrink:0;}
 .tgn{background:rgba(40,216,120,.13);color:#38e07c;border:1px solid rgba(40,216,120,.26);}
 .tco{background:rgba(208,72,152,.13);color:#e060b0;border:1px solid rgba(208,72,152,.26);}
-.drop-menu{position:absolute;top:100%;left:0;z-index:300;margin-top:4px;background:#111128;border:1px solid var(--bd);border-radius:8px;min-width:180px;box-shadow:0 10px 32px rgba(0,0,0,.8);overflow:hidden;}
+.drop-menu{position:fixed;z-index:9000;background:#111128;border:1px solid var(--bd);border-radius:8px;min-width:180px;box-shadow:0 10px 32px rgba(0,0,0,.8);overflow:hidden;max-height:60vh;overflow-y:auto;}
 .drop-item{padding:12px 16px;cursor:pointer;font-size:12px;color:var(--tx);border-bottom:1px solid #161630;transition:background .08s;font-family:'IBM Plex Mono',monospace;}
 .drop-item:last-child{border-bottom:none;}
 .drop-item:hover,.drop-item:active{background:var(--sl);color:var(--ac);}
 .drop-grp{padding:8px 16px 4px;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em;pointer-events:none;}
-.eff-menu{position:absolute;bottom:100%;left:0;right:0;z-index:400;margin-bottom:4px;background:#111128;border:1px solid var(--bd);border-radius:8px;box-shadow:0 -8px 28px rgba(0,0,0,.75);overflow:hidden;max-height:320px;overflow-y:auto;}
+.eff-menu{position:fixed;z-index:9000;background:#111128;border:1px solid var(--bd);border-radius:8px;box-shadow:0 -8px 28px rgba(0,0,0,.75);overflow:hidden;max-height:60vh;overflow-y:auto;}
 .ninput{background:none;border:none;border-bottom:2px solid var(--ac);color:var(--tx);font-family:'IBM Plex Mono',monospace;font-size:13px;outline:none;width:100%;padding:2px 0;}
 .empty{padding:14px;color:var(--mu);font-size:11px;text-align:center;font-family:'IBM Plex Mono',monospace;}
 .undo-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1a1a3a;border:1px solid var(--ac);color:var(--ac);padding:8px 18px;border-radius:6px;font-size:10px;font-family:'IBM Plex Mono',monospace;pointer-events:none;z-index:500;opacity:0;transition:opacity .2s;white-space:nowrap;}
@@ -1319,20 +1320,57 @@ var EFX_GROUPS=[
   {label:"Pixel",    items:["blur","invert","threshold"]},
   {label:"Transform",items:["transform"]},
 ]
+// Hook: compute a fixed-position rect for a popover relative to an anchor ref.
+// placement: "above" or "below" — menu opens above or below the anchor, whichever fits.
+// Returns a style object suitable for inline style.
+function usePopoverPosition(anchorRef, open, placement) {
+  var posSt=useState(null); var pos=posSt[0], setPos=posSt[1]
+  useEffect(function(){
+    if(!open||!anchorRef.current){setPos(null);return}
+    function recalc(){
+      var el=anchorRef.current; if(!el)return
+      var r=el.getBoundingClientRect()
+      var vh=window.innerHeight, vw=window.innerWidth
+      var prefAbove = placement==="above"
+      var spaceBelow=vh-r.bottom, spaceAbove=r.top
+      var above = prefAbove ? (spaceAbove>=180 || spaceAbove>spaceBelow) : (spaceBelow<180 && spaceAbove>spaceBelow)
+      var width=Math.max(r.width, 180)
+      var left=Math.min(r.left, vw-width-8)
+      left=Math.max(8,left)
+      if(above) setPos({left:left, bottom:(vh-r.top+4), width:width, maxHeight:(spaceAbove-12)+"px"})
+      else      setPos({left:left, top:(r.bottom+4), width:width, maxHeight:(spaceBelow-12)+"px"})
+    }
+    recalc()
+    window.addEventListener("resize",recalc)
+    window.addEventListener("scroll",recalc,true)
+    return function(){
+      window.removeEventListener("resize",recalc)
+      window.removeEventListener("scroll",recalc,true)
+    }
+  },[open])
+  return pos
+}
+
 function AddEfxMenu(props) {
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
-  var ref=useRef(null)
+  var anchorRef=useRef(null)
+  var menuRef=useRef(null)
+  var pos=usePopoverPosition(anchorRef, open, "above")
   useEffect(function(){
     if(!open)return
-    function h(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false)}
+    function h(e){
+      if(anchorRef.current&&anchorRef.current.contains(e.target))return
+      if(menuRef.current&&menuRef.current.contains(e.target))return
+      setOpen(false)
+    }
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
   return (
-    <div ref={ref} style={{position:"relative",flex:2,minWidth:0}}>
+    <div ref={anchorRef} style={{position:"relative",flex:2,minWidth:0}}>
       <button className="ac" style={{width:"100%",height:"100%"}} onClick={function(){setOpen(!open)}}>+ effect</button>
-      {open && (
-        <div className="eff-menu">
+      {open&&pos&&createPortal(
+        <div ref={menuRef} className="eff-menu" style={pos}>
           {EFX_GROUPS.map(function(grp){
             return (
               <div key={grp.label}>
@@ -1345,7 +1383,8 @@ function AddEfxMenu(props) {
               </div>
             )
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -1355,9 +1394,15 @@ function AddEfxMenu(props) {
 function EfxStack(props) {
   var lkSt=useState(false); var lkOpen=lkSt[0], setLkOpen=lkSt[1]
   var lkRef=useRef(null)
+  var lkMenuRef=useRef(null)
+  var lkPos=usePopoverPosition(lkRef, lkOpen, "above")
   useEffect(function(){
     if(!lkOpen)return
-    function h(e){if(lkRef.current&&!lkRef.current.contains(e.target))setLkOpen(false)}
+    function h(e){
+      if(lkRef.current&&lkRef.current.contains(e.target))return
+      if(lkMenuRef.current&&lkMenuRef.current.contains(e.target))return
+      setLkOpen(false)
+    }
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[lkOpen])
@@ -1422,8 +1467,8 @@ function EfxStack(props) {
         <div ref={lkRef} style={{position:"relative",flex:2,minWidth:0}}>
           <button className="ac" style={{width:"100%",height:"100%",fontSize:11}}
             onClick={function(){setLkOpen(!lkOpen)}}>+ stack</button>
-          {lkOpen&&(
-            <div className="eff-menu" style={{left:0,right:0}}>
+          {lkOpen&&lkPos&&createPortal(
+            <div ref={lkMenuRef} className="eff-menu" style={lkPos}>
               {efxStacks.length===0
                 ? <div className="drop-item" style={{color:"var(--mu)",cursor:"default"}}>no effect stacks yet</div>
                 : efxStacks.map(function(n){
@@ -1434,7 +1479,8 @@ function EfxStack(props) {
                     )
                   })
               }
-            </div>
+            </div>,
+            document.body
           )}
         </div>
         {/* extract — 1 part, only when available */}
@@ -1451,9 +1497,15 @@ function EfxStack(props) {
 function MaskStackPanel(props) {
   var lkSt=useState(false); var lkOpen=lkSt[0], setLkOpen=lkSt[1]
   var lkRef=useRef(null)
+  var lkMenuRef=useRef(null)
+  var lkPos=usePopoverPosition(lkRef, lkOpen, "above")
   useEffect(function(){
     if(!lkOpen)return
-    function h(e){if(lkRef.current&&!lkRef.current.contains(e.target))setLkOpen(false)}
+    function h(e){
+      if(lkRef.current&&lkRef.current.contains(e.target))return
+      if(lkMenuRef.current&&lkMenuRef.current.contains(e.target))return
+      setLkOpen(false)
+    }
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[lkOpen])
@@ -1511,8 +1563,8 @@ function MaskStackPanel(props) {
         <div ref={lkRef} style={{position:"relative",flex:2,minWidth:0}}>
           <button className="lv" style={{width:"100%",height:"100%",fontSize:11}}
             onClick={function(){setLkOpen(!lkOpen)}}>+ stack</button>
-          {lkOpen&&(
-            <div className="eff-menu" style={{left:0,right:0}}>
+          {lkOpen&&lkPos&&createPortal(
+            <div ref={lkMenuRef} className="eff-menu" style={lkPos}>
               {mskStacks.length===0
                 ? <div className="drop-item" style={{color:"var(--mu)",cursor:"default"}}>no mask stacks yet</div>
                 : mskStacks.map(function(n){
@@ -1523,7 +1575,8 @@ function MaskStackPanel(props) {
                     )
                   })
               }
-            </div>
+            </div>,
+            document.body
           )}
         </div>
         {/* extract — 1 part, only when available */}
@@ -1754,22 +1807,29 @@ function NodeItem(props) {
 /* ─── ADD MENU ────────────────────────────────────────── */
 function AddMenu(props) {
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
-  var ref=useRef(null)
+  var anchorRef=useRef(null)
+  var menuRef=useRef(null)
+  var pos=usePopoverPosition(anchorRef, open, "below")
   useEffect(function(){
     if(!open)return
-    function h(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false)}
+    function h(e){
+      if(anchorRef.current&&anchorRef.current.contains(e.target))return
+      if(menuRef.current&&menuRef.current.contains(e.target))return
+      setOpen(false)
+    }
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
   var s1=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
   var items=props.sec===1?s1:[{t:"blender",l:"Blender"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
   return (
-    <div ref={ref} style={{position:"relative"}}>
+    <div ref={anchorRef} style={{position:"relative"}}>
       <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
-      {open && (
-        <div className="drop-menu">
+      {open&&pos&&createPortal(
+        <div ref={menuRef} className="drop-menu" style={pos}>
           {items.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
