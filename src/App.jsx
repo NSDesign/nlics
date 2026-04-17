@@ -452,6 +452,69 @@ function drawPH(ctx,w,h,msg) {
   ctx.font="10px IBM Plex Mono,monospace";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(msg,w/2,h/2)
 }
 
+/* ─── PATH HELPERS — for drill-down navigation ──────────────────────── */
+// Path model: {slotKey, steps}
+//   slotKey: where to start in the node, e.g. "inputA.effectStack", "outMask",
+//            "effectStack" (for Stack node), "maskStack" (for Stack node).
+//   steps: array of {kind:"effect"|"mask", id:string}. Walk steps from the
+//            slot's array to reach a target item. Between steps, the child
+//            array alternates: an effect step descends into effect.maskStack,
+//            a mask step descends into mask.effectStack.
+function getRootArr(node, slotKey) {
+  if (!node || !slotKey) return []
+  if (slotKey === "outEfx") return node.outEfx || []
+  if (slotKey === "outMask") return node.outMask || []
+  if (slotKey === "effectStack") return node.effectStack || []
+  if (slotKey === "maskStack") return node.maskStack || []
+  var parts = slotKey.split(".")
+  var slot = node[parts[0]] || {}
+  return slot[parts[1]] || []
+}
+function setRootArr(node, slotKey, newArr) {
+  if (slotKey === "outEfx") return Object.assign({}, node, {outEfx: newArr})
+  if (slotKey === "outMask") return Object.assign({}, node, {outMask: newArr})
+  if (slotKey === "effectStack") return Object.assign({}, node, {effectStack: newArr})
+  if (slotKey === "maskStack") return Object.assign({}, node, {maskStack: newArr})
+  var parts = slotKey.split(".")
+  var slotObj = Object.assign({}, node[parts[0]])
+  slotObj[parts[1]] = newArr
+  var upd = {}
+  upd[parts[0]] = slotObj
+  return Object.assign({}, node, upd)
+}
+function walkPath(arr, steps) {
+  var item = null
+  for (var i = 0; i < steps.length; i++) {
+    var step = steps[i]
+    item = (arr||[]).find(function(x){return x.id===step.id})
+    if (!item) return null
+    if (step.kind === "effect") arr = item.maskStack || []
+    else arr = item.effectStack || []
+  }
+  return item
+}
+function walkReplace(arr, steps, idx, updateFn) {
+  if (idx >= steps.length) return arr
+  return (arr||[]).map(function(item) {
+    if (item.id !== steps[idx].id) return item
+    if (idx === steps.length - 1) return updateFn(item)
+    var childKey = steps[idx].kind === "effect" ? "maskStack" : "effectStack"
+    var newChild = walkReplace(item[childKey] || [], steps, idx + 1, updateFn)
+    var upd = {}; upd[childKey] = newChild
+    return Object.assign({}, item, upd)
+  })
+}
+function updatePath(node, slotKey, steps, updateFn) {
+  var rootArr = getRootArr(node, slotKey)
+  var newArr = walkReplace(rootArr, steps, 0, updateFn)
+  return setRootArr(node, slotKey, newArr)
+}
+// Resolve path → target item (leaf). Returns null if path is stale.
+function resolvePath(node, slotKey, steps) {
+  if (!steps || steps.length === 0) return null
+  return walkPath(getRootArr(node, slotKey), steps)
+}
+
 /* ─── RENDERING ENGINE ───────────────────────────────────── */
 var BM = {"normal":"source-over","add":"lighter","multiply":"multiply","screen":"screen","overlay":"overlay","soft-light":"soft-light","hard-light":"hard-light","difference":"difference","exclusion":"exclusion","darken":"darken","lighten":"lighten","color-burn":"color-burn","color-dodge":"color-dodge","hue":"hue","saturation":"saturation","color":"color","luminosity":"luminosity"}
 function mkCv(w,h){var c=document.createElement("canvas");c.width=w;c.height=h;return c}
@@ -729,8 +792,11 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
 
   // ── Stack node — renderable only when previewRefId is set ───────────────────
   if(n.type==="stack"){
-    if(!n.previewRefId||vis.has(n.previewRefId)){vis.delete(id);return null}
-    var spVis=new Set(vis);spVis.add(n.previewRefId)
+    if(!n.previewRefId){vis.delete(id);return null}
+    // Use a fresh isolated vis for the preview — only the stack node itself
+    // is marked in-progress. This prevents false-positive bail when the
+    // preview source appears elsewhere in the outer vis chain.
+    var spVis=new Set([id])
     var previewBase=compAny(n.previewRefId,cmap,cache,iC,w,h,spVis)
     if(!previewBase){vis.delete(id);return null}
     var pcv=clCv(previewBase,w,h),pctx=pcv.getContext("2d")
@@ -1325,16 +1391,17 @@ function EfxStack(props) {
             onDel={function(){del(efx.id)}}
             onMove={function(dir){move(i,dir)}}
             onDrillMask={function(mi){
-              if(props.navPush) props.navPush({
+              if(!props.navPush||!props.basePath)return
+              var curEfx=props.stack.find(function(e){return e.id===efx.id})||efx
+              var targetMask=(curEfx.maskStack||[])[mi]
+              if(!targetMask)return
+              props.navPush({
                 label:efx.type+" / mask "+(mi+1),
-                getMask:function(){
-                  var cur=props.stack.find(function(e){return e.id===efx.id})
-                  return cur?(cur.maskStack||[])[mi]:null
-                },
-                setMask:function(newMask){
-                  var ms=(efx.maskStack||[]).map(function(x,xi){return xi===mi?newMask:x})
-                  upd(efx.id,Object.assign({},efx,{maskStack:ms}))
-                }
+                slotKey:props.basePath.slotKey,
+                steps:(props.basePath.steps||[]).concat([
+                  {kind:"effect",id:efx.id},
+                  {kind:"mask",id:targetMask.id},
+                ])
               })
             }}
           />
@@ -1417,10 +1484,11 @@ function MaskStackPanel(props) {
             onChange={function(nw){upd(mk.id,nw)}}
             onDel={function(){del(mk.id)}}
             onEditEffects={function(){
-              if(props.navPush) props.navPush({
+              if(!props.navPush||!props.basePath)return
+              props.navPush({
                 label:"mask "+(mi+1)+" / effects",
-                getMask:function(){return props.stack.find(function(m){return m.id===mk.id})},
-                setMask:function(nm){upd(mk.id,nm)}
+                slotKey:props.basePath.slotKey,
+                steps:(props.basePath.steps||[]).concat([{kind:"mask",id:mk.id}])
               })
             }}
           />
@@ -1482,14 +1550,18 @@ function SlotPanel(props) {
       )}
       {tab==="effects" && (
         <div style={{padding:10}}>
-          <EfxStack stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
+          <EfxStack key={(slot.effectStack||[]).map(function(e){return e.id}).join(",")}
+            stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
+            basePath={{slotKey:(props.slotKey||"")+".effectStack", steps:[]}}
             onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}}
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"effect",owner:props.owner})} : null}/>
         </div>
       )}
       {tab==="masks" && (
         <div style={{padding:10}}>
-          <MaskStackPanel stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
+          <MaskStackPanel key={(slot.maskStack||[]).map(function(e){return e.id}).join(",")}
+            stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
+            basePath={{slotKey:(props.slotKey||"")+".maskStack", steps:[]}}
             onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}}
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"mask",owner:props.owner})} : null}/>
         </div>
@@ -1509,31 +1581,52 @@ function BlenderProps(props) {
 
   if(navStack.length>0){
     var top=navStack[navStack.length-1]
-    var drillMask=top.getMask()
+    // Resolve target mask from CURRENT node state — not a stale closure
+    var drillMask=resolvePath(node,top.slotKey,top.steps)
+    // Stale path (target was deleted)? Pop back to root cleanly.
+    if(!drillMask){
+      setTimeout(function(){setNavStack([])},0)
+      return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target no longer exists — returning…</div>
+    }
+    // Clickable breadcrumb — truncate navStack to jump to any level
+    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx+1)})}
     return (
       <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
         <div className="breadcrumb">
           <button className="ghost" style={{fontSize:13,padding:"0 6px 0 0",minHeight:32}} onClick={navPop}>
             Back
           </button>
-          <span className="bc-item">Blender</span>
-          {navStack.map(function(n,i){return (
-            <span key={i} style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{color:"var(--mu)"}}>›</span>
-              <span className={"bc-item"+(i===navStack.length-1?" cur":"")}>{n.label}</span>
-            </span>
-          )})}
+          <span className="bc-item" onClick={function(){setNavStack([])}}
+            style={{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>Blender</span>
+          {navStack.map(function(n,i){
+            var isCur=i===navStack.length-1
+            return (
+              <span key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{color:"var(--mu)"}}>›</span>
+                <span className={"bc-item"+(isCur?" cur":"")}
+                  onClick={isCur?null:function(){jumpTo(i)}}
+                  style={isCur?null:{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>
+                  {n.label}
+                </span>
+              </span>
+            )
+          })}
         </div>
         <div style={{flex:1,overflowY:"auto",padding:10}}>
           <div className="stack-lbl">effects on mask</div>
-          {drillMask && (
-            <EfxStack
-              stack={drillMask.effectStack||[]}
-              nodes={nodes} selfId={node.id}
-              navPush={navPush}
-              onChange={function(es){top.setMask(Object.assign({},drillMask,{effectStack:es}))}}
-            />
-          )}
+          <EfxStack
+            key={(drillMask.effectStack||[]).map(function(e){return e.id}).join(",")}
+            stack={drillMask.effectStack||[]}
+            nodes={nodes} selfId={node.id}
+            navPush={navPush}
+            basePath={{slotKey:top.slotKey,steps:top.steps}}
+            onChange={function(es){
+              var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
+                return Object.assign({},mask,{effectStack:es})
+              })
+              onChange(newNode)
+            }}
+          />
         </div>
       </div>
     )
@@ -1578,6 +1671,7 @@ function BlenderProps(props) {
         {outTab==="effects" && (
           <div style={{padding:10}}>
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              basePath={{slotKey:"outEfx", steps:[]}}
               onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}
               onExtract={props.onExtract ? function(){props.onExtract({slot:"outEfx",slotObj:{effectStack:node.outEfx||[]},kind:"effect",owner:node})} : null}/>
           </div>
@@ -1585,6 +1679,7 @@ function BlenderProps(props) {
         {outTab==="masks" && (
           <div style={{padding:10}}>
             <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              basePath={{slotKey:"outMask", steps:[]}}
               onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}
               onExtract={props.onExtract ? function(){props.onExtract({slot:"outMask",slotObj:{maskStack:node.outMask||[]},kind:"mask",owner:node})} : null}/>
           </div>
@@ -1914,28 +2009,47 @@ function StackProps(props) {
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
   function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
 
-  // Drill-down for mask → effect editing
+  // Drill-down for mask → effect editing (path-based, no stale closures)
   if(navStack.length>0){
     var top=navStack[navStack.length-1]
-    var drillMask=top.getMask()
+    var drillMask=resolvePath(node,top.slotKey,top.steps)
+    if(!drillMask){
+      setTimeout(function(){setNavStack([])},0)
+      return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target no longer exists — returning…</div>
+    }
+    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx+1)})}
     return (
       <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
         <div className="breadcrumb">
           <button className="ghost" style={{fontSize:13,padding:"0 6px 0 0",minHeight:32}} onClick={navPop}>Back</button>
-          <span className="bc-item">{node.name}</span>
-          {navStack.map(function(n,i){return(
-            <span key={i} style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{color:"var(--mu)"}}>›</span>
-              <span className={"bc-item"+(i===navStack.length-1?" cur":"")}>{n.label}</span>
-            </span>
-          )})}
+          <span className="bc-item" onClick={function(){setNavStack([])}}
+            style={{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>{node.name}</span>
+          {navStack.map(function(n,i){
+            var isCur=i===navStack.length-1
+            return (
+              <span key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{color:"var(--mu)"}}>›</span>
+                <span className={"bc-item"+(isCur?" cur":"")}
+                  onClick={isCur?null:function(){jumpTo(i)}}
+                  style={isCur?null:{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>
+                  {n.label}
+                </span>
+              </span>
+            )
+          })}
         </div>
         <div style={{flex:1,overflowY:"auto",padding:10}}>
-          {drillMask&&(
-            <EfxStack stack={drillMask.effectStack||[]} nodes={nodes} selfId={node.id}
-              navPush={navPush}
-              onChange={function(es){top.setMask(Object.assign({},drillMask,{effectStack:es}))}}/>
-          )}
+          <EfxStack
+            key={(drillMask.effectStack||[]).map(function(e){return e.id}).join(",")}
+            stack={drillMask.effectStack||[]} nodes={nodes} selfId={node.id}
+            navPush={navPush}
+            basePath={{slotKey:top.slotKey,steps:top.steps}}
+            onChange={function(es){
+              var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
+                return Object.assign({},mask,{effectStack:es})
+              })
+              onChange(newNode)
+            }}/>
         </div>
       </div>
     )
@@ -1983,6 +2097,7 @@ function StackProps(props) {
           nodes={nodes}
           selfId={node.id}
           navPush={navPush}
+          basePath={{slotKey:"effectStack",steps:[]}}
           onChange={function(es){onChange(Object.assign({},node,{effectStack:es}))}}
         />
       ) : (
@@ -1991,6 +2106,7 @@ function StackProps(props) {
           nodes={nodes}
           selfId={node.id}
           navPush={navPush}
+          basePath={{slotKey:"maskStack",steps:[]}}
           onChange={function(ms){onChange(Object.assign({},node,{maskStack:ms}))}}
         />
       )}
@@ -2389,7 +2505,6 @@ export default function App() {
     // info: {slot, slotObj, kind:"effect"|"mask", owner}
     var suggestName = (info.owner ? info.owner.name+" " : "") + (info.kind==="effect"?"Effect":"Mask")+" Stack"
     var name = window.prompt ? (window.prompt("Name this new Stack:", suggestName)||suggestName) : suggestName
-    // Create a Stack node containing the inline stack being extracted
     var newStack = mkStack(info.kind)
     newStack.name = name
     if(info.kind==="effect"){
@@ -2397,35 +2512,37 @@ export default function App() {
     } else {
       newStack.maskStack = (info.slotObj.maskStack||[]).slice()
     }
-    // Replace inline stack in the originating slot with a __stackref__ item
-    // pointing at the new Stack node — everything else in the stack is preserved
-    var stackRefItem = info.kind==="effect"
-      ? mkEfxStackRef(newStack.id)
-      : mkMaskStackRef(newStack.id)
+    var stackRefItem = info.kind==="effect" ? mkEfxStackRef(newStack.id) : mkMaskStackRef(newStack.id)
+
+    // Build the updated owner node from info.owner (current at call time)
+    function applySlotUpdate(n) {
+      if(!info.owner||n.id!==info.owner.id)return n
+      var updated = Object.assign({},n)
+      if(info.slot==="inputA"){
+        updated.inputA = Object.assign({},n.inputA,{
+          effectStack: info.kind==="effect" ? [stackRefItem] : n.inputA.effectStack,
+          maskStack:   info.kind==="mask"   ? [stackRefItem] : n.inputA.maskStack,
+        })
+      } else if(info.slot==="inputB"){
+        updated.inputB = Object.assign({},n.inputB,{
+          effectStack: info.kind==="effect" ? [stackRefItem] : n.inputB.effectStack,
+          maskStack:   info.kind==="mask"   ? [stackRefItem] : n.inputB.maskStack,
+        })
+      } else if(info.slot==="outEfx"){
+        updated.outEfx = [stackRefItem]
+      } else if(info.slot==="outMask"){
+        updated.outMask = [stackRefItem]
+      }
+      return updated
+    }
+    var updatedOwner = applySlotUpdate(info.owner)
 
     pushHistory({nodes:nodes})
-    setNodes(function(p){
-      var withStack = p.concat([newStack])
-      return withStack.map(function(n){
-        if(!info.owner||n.id!==info.owner.id)return n
-        var updated = Object.assign({},n)
-        if(info.slot==="inputA"){
-          updated.inputA = Object.assign({},n.inputA,{
-            effectStack: info.kind==="effect" ? [stackRefItem] : n.inputA.effectStack,
-            maskStack:   info.kind==="mask"   ? [stackRefItem] : n.inputA.maskStack,
-          })
-        } else if(info.slot==="inputB"){
-          updated.inputB = Object.assign({},n.inputB,{
-            effectStack: info.kind==="effect" ? [stackRefItem] : n.inputB.effectStack,
-            maskStack:   info.kind==="mask"   ? [stackRefItem] : n.inputB.maskStack,
-          })
-        } else if(info.slot==="outEfx"){
-          updated.outEfx = [stackRefItem]
-        } else if(info.slot==="outMask"){
-          updated.outMask = [stackRefItem]
-        }
-        return updated
-      })
+    setNodes(function(p){ return p.concat([newStack]).map(applySlotUpdate) })
+    // Keep sheetNode in sync so sheet panel mode sees the change immediately
+    setSheetNode(function(sn){
+      return sn&&info.owner&&sn.node.id===info.owner.id
+        ? {node:updatedOwner, sec:info.owner.section} : sn
     })
   }
 
