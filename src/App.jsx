@@ -496,8 +496,10 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
     // Stack reference — apply referenced Mask Stack with opacity/blendMode control
     if(mk.type==="__stackref__"){
       var refMaskNode=cmap.get(mk.stackRefId)
-      if(refMaskNode&&refMaskNode.type==="stack"&&refMaskNode.stackType==="mask"&&(refMaskNode.maskStack||[]).length>0){
-        var subMv=compMasks(refMaskNode.maskStack,cmap,cache,iC,w,h,new Set(vis))
+      if(refMaskNode&&refMaskNode.type==="stack"&&refMaskNode.stackType==="mask"&&
+         (refMaskNode.maskStack||[]).length>0&&!vis.has(refMaskNode.id)){
+        var visMsk=new Set(vis); visMsk.add(refMaskNode.id)
+        var subMv=compMasks(refMaskNode.maskStack,cmap,cache,iC,w,h,visMsk)
         if(subMv){
           any=true
           var rf=(mk.opacity==null?100:mk.opacity)/100
@@ -515,8 +517,9 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
       continue
     }
     if(!mk.refId||vis.has(mk.refId))continue
+    var visMk=new Set(vis); visMk.add(mk.refId)
     var cv=compAny(mk.refId,cmap,cache,iC,w,h,new Set(vis));if(!cv)continue;any=true
-    if(mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,new Set(vis))}
+    if(mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,visMk)}
     var src=clCv(cv,w,h).getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
     for(var ii=0;ii<w*h;ii++){
       var pi=ii*4,v
@@ -541,10 +544,13 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
     // Stack reference — apply referenced Effect Stack with opacity/blendMode control
     if(efx.type==="__stackref__"){
       var refEn=cmap.get(efx.stackRefId)
-      if(refEn&&refEn.type==="stack"&&refEn.stackType==="effect"&&(refEn.effectStack||[]).length>0){
+      // Guard against circular stackrefs
+      if(refEn&&refEn.type==="stack"&&refEn.stackType==="effect"&&
+         (refEn.effectStack||[]).length>0&&!vis.has(refEn.id)){
+        var visEfx=new Set(vis); visEfx.add(refEn.id)
         var preImg=ctx.getImageData(0,0,w,h)
         var preCopy=new Uint8ClampedArray(preImg.data)
-        applyEfxStk(ctx,refEn.effectStack,cmap,cache,iC,w,h,new Set(vis))
+        applyEfxStk(ctx,refEn.effectStack,cmap,cache,iC,w,h,visEfx)
         var postImg=ctx.getImageData(0,0,w,h)
         applyBack(preCopy,postImg.data,null,efx.opacity!=null?efx.opacity:100,efx.blendMode||"normal")
         ctx.putImageData(new ImageData(preCopy,w,h),0,0)
@@ -734,10 +740,27 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     var previewBase=compAny(n.previewRefId,cmap,cache,iC,w,h,new Set(vis))
     if(!previewBase){vis.delete(id);return null}
     var pcv=clCv(previewBase,w,h),pctx=pcv.getContext("2d")
-    if(n.stackType==="effect"&&(n.effectStack||[]).length>0)
+    if(n.stackType==="effect"&&(n.effectStack||[]).length>0){
+      // Effect stack: apply effects to the preview source normally
       applyEfxStk(pctx,n.effectStack,cmap,cache,iC,w,h,new Set(vis))
-    else if(n.stackType==="mask"&&(n.maskStack||[]).length>0)
-      maskToAlpha(pctx,n.maskStack,cmap,cache,iC,w,h,new Set(vis))
+    } else if(n.stackType==="mask"&&(n.maskStack||[]).length>0){
+      // Mask stack: render as pure grayscale (white=fully unmasked, black=fully masked)
+      // This matches how all professional compositing tools display masks/mattes
+      var mv=compMasks(n.maskStack,cmap,cache,iC,w,h,new Set(vis))
+      var gid=pctx.createImageData(w,h)
+      if(mv){
+        for(var gi=0;gi<w*h;gi++){
+          var gv=Math.round(mv[gi]*255)
+          gid.data[gi*4]=gv; gid.data[gi*4+1]=gv; gid.data[gi*4+2]=gv; gid.data[gi*4+3]=255
+        }
+      }else{
+        // No masks computed — show white (fully unmasked)
+        for(var gi2=0;gi2<w*h;gi2++){
+          gid.data[gi2*4]=255;gid.data[gi2*4+1]=255;gid.data[gi2*4+2]=255;gid.data[gi2*4+3]=255
+        }
+      }
+      pctx.putImageData(gid,0,0)
+    }
     cache.set(id,pcv);vis.delete(id);return pcv
   }
 
@@ -1083,6 +1106,11 @@ function StackRefCard(props) {
   var item = props.item
   var refNode = props.nodes.find(function(n){ return n.id===item.stackRefId })
   var armSt=useState(false); var armed=armSt[0], setArmed=armSt[1]
+  // stackType derived from refNode if present, else from item.stackType hint
+  var stype = (refNode && refNode.stackType) || props.stackType || "effect"
+  var matchingStacks = (props.nodes||[]).filter(function(n){
+    return n.type==="stack" && n.stackType===stype
+  })
   var timerRef=useRef(null)
   useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
   function handleDel(){
@@ -1107,11 +1135,14 @@ function StackRefCard(props) {
           color:accent,border:"1px solid "+accent,flexShrink:0,marginRight:4}}>
           {isMask?"mask":"effect"} stack
         </span>
-        <span style={{flex:1,fontSize:12,color:item.enabled?accent:"var(--mu)",
-          fontFamily:"'IBM Plex Mono',monospace",fontWeight:500,overflow:"hidden",
-          textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-          {refNode ? refNode.name : "(missing stack)"}
-        </span>
+        <select value={item.stackRefId||""}
+          onChange={function(e){props.onChange(Object.assign({},item,{stackRefId:e.target.value||null}))}}
+          style={{flex:1,fontSize:11,padding:"3px 4px",
+            background:"none",border:"none",color:item.enabled?accent:"var(--mu)",
+            fontFamily:"'IBM Plex Mono',monospace",cursor:"pointer"}}>
+          <option value="">— select stack —</option>
+          {matchingStacks.map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
+        </select>
         <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",
           fontSize:armed?10:14,background:armed?"rgba(224,48,96,.2)":"none",
           border:armed?"1px solid var(--dng)":"none",
@@ -1289,7 +1320,7 @@ function EfxStack(props) {
       {props.stack.length===0 && <div className="empty">no effects</div>}
       {props.stack.map(function(efx,i){
         if(efx.type==="__stackref__") return (
-          <StackRefCard key={efx.id} item={efx} nodes={props.nodes||[]}
+          <StackRefCard key={efx.id} item={efx} nodes={props.nodes||[]} stackType="effect"
             isFirst={i===0} isLast={i===props.stack.length-1}
             onChange={function(nw){upd(efx.id,nw)}}
             onDel={function(){del(efx.id)}}
@@ -1381,7 +1412,7 @@ function MaskStackPanel(props) {
       {props.stack.length===0 && <div className="empty">no masks</div>}
       {props.stack.map(function(mk,mi){
         if(mk.type==="__stackref__") return (
-          <StackRefCard key={mk.id} item={mk} nodes={props.nodes||[]}
+          <StackRefCard key={mk.id} item={mk} nodes={props.nodes||[]} stackType="mask"
             isFirst={mi===0} isLast={mi===props.stack.length-1}
             onChange={function(nw){upd(mk.id,nw)}}
             onDel={function(){del(mk.id)}}
