@@ -1193,10 +1193,17 @@ function StackRefCard(props) {
           style={{color:item.enabled?accent:"var(--mu)",fontSize:18}}>
           {item.enabled?"●":"○"}
         </button>
-        <span style={{fontSize:9,padding:"1px 6px",borderRadius:4,background:accentBg,
-          color:accent,border:"1px solid "+accent,flexShrink:0,marginRight:4}}>
-          {isMask?"mask":"effect"} stack
-        </span>
+        <button onClick={function(){
+          if(props.onNavigate&&item.stackRefId)props.onNavigate(item.stackRefId)
+        }} disabled={!refNode||!props.onNavigate}
+          title={refNode?"Open "+refNode.name:""}
+          style={{fontSize:9,padding:"2px 7px",borderRadius:4,background:accentBg,
+            color:accent,border:"1px solid "+accent,flexShrink:0,marginRight:4,
+            cursor:refNode&&props.onNavigate?"pointer":"default",
+            fontFamily:"'IBM Plex Mono',monospace",textTransform:"none",letterSpacing:0,
+            minHeight:0,lineHeight:1.4}}>
+          {isMask?"mask":"effect"} stack ↗
+        </button>
         <select value={item.stackRefId||""}
           onChange={function(e){props.onChange(Object.assign({},item,{stackRefId:e.target.value||null}))}}
           style={{flex:1,fontSize:11,padding:"3px 4px",
@@ -1382,7 +1389,8 @@ function EfxStack(props) {
             isFirst={i===0} isLast={i===props.stack.length-1}
             onChange={function(nw){upd(efx.id,nw)}}
             onDel={function(){del(efx.id)}}
-            onMove={function(dir){move(i,dir)}}/>
+            onMove={function(dir){move(i,dir)}}
+            onNavigate={props.onNavigate}/>
         )
         return (
           <EfxCard key={efx.id} efx={efx} nodes={props.nodes} selfId={props.selfId}
@@ -1475,7 +1483,8 @@ function MaskStackPanel(props) {
             isFirst={mi===0} isLast={mi===props.stack.length-1}
             onChange={function(nw){upd(mk.id,nw)}}
             onDel={function(){del(mk.id)}}
-            onMove={function(dir){move(mi,dir)}}/>
+            onMove={function(dir){move(mi,dir)}}
+            onNavigate={props.onNavigate}/>
         )
         return (
           <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId}
@@ -1553,6 +1562,7 @@ function SlotPanel(props) {
           <EfxStack key={(slot.effectStack||[]).map(function(e){return e.id}).join(",")}
             stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             basePath={{slotKey:(props.slotKey||"")+".effectStack", steps:[]}}
+            onNavigate={props.onNavigate}
             onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}}
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"effect",owner:props.owner})} : null}/>
         </div>
@@ -1562,6 +1572,7 @@ function SlotPanel(props) {
           <MaskStackPanel key={(slot.maskStack||[]).map(function(e){return e.id}).join(",")}
             stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             basePath={{slotKey:(props.slotKey||"")+".maskStack", steps:[]}}
+            onNavigate={props.onNavigate}
             onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}}
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"mask",owner:props.owner})} : null}/>
         </div>
@@ -1620,6 +1631,7 @@ function BlenderProps(props) {
             nodes={nodes} selfId={node.id}
             navPush={navPush}
             basePath={{slotKey:top.slotKey,steps:top.steps}}
+            onNavigate={props.onNavigate}
             onChange={function(es){
               var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
                 return Object.assign({},mask,{effectStack:es})
@@ -1642,6 +1654,7 @@ function BlenderProps(props) {
       <SlotPanel label="Input A" slot={node.inputA} accent="var(--ac)"
         nodes={nodes} selfId={node.id} navPush={navPush}
         slotKey="inputA" owner={node}
+        onNavigate={props.onNavigate}
         onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
       <div className="card" style={{marginBottom:10}}>
@@ -1661,6 +1674,7 @@ function BlenderProps(props) {
       <SlotPanel label="Input B" slot={node.inputB} accent="var(--co)"
         nodes={nodes} selfId={node.id} navPush={navPush}
         slotKey="inputB" owner={node}
+        onNavigate={props.onNavigate}
         onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
       <div className="card">
@@ -1672,6 +1686,7 @@ function BlenderProps(props) {
           <div style={{padding:10}}>
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
               basePath={{slotKey:"outEfx", steps:[]}}
+              onNavigate={props.onNavigate}
               onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}
               onExtract={props.onExtract ? function(){props.onExtract({slot:"outEfx",slotObj:{effectStack:node.outEfx||[]},kind:"effect",owner:node})} : null}/>
           </div>
@@ -1680,6 +1695,7 @@ function BlenderProps(props) {
           <div style={{padding:10}}>
             <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush}
               basePath={{slotKey:"outMask", steps:[]}}
+              onNavigate={props.onNavigate}
               onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}
               onExtract={props.onExtract ? function(){props.onExtract({slot:"outMask",slotObj:{maskStack:node.outMask||[]},kind:"mask",owner:node})} : null}/>
           </div>
@@ -1985,11 +2001,11 @@ function NodeDetailSheet(props) {
             ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad}/>
             : props.node.type==="stack"
               ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes}
-                  onPromote={props.onPromote} onExtract={props.onExtract}/>
+                  onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
               : props.node.type==="promoted"
                 ? <PromotedProps node={props.node} nodes={props.nodes}/>
                 : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes}
-                    onPromote={props.onPromote} onExtract={props.onExtract}/>
+                    onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
           }
         </div>
       </div>
@@ -2044,6 +2060,7 @@ function StackProps(props) {
             stack={drillMask.effectStack||[]} nodes={nodes} selfId={node.id}
             navPush={navPush}
             basePath={{slotKey:top.slotKey,steps:top.steps}}
+            onNavigate={props.onNavigate}
             onChange={function(es){
               var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
                 return Object.assign({},mask,{effectStack:es})
@@ -2098,6 +2115,7 @@ function StackProps(props) {
           selfId={node.id}
           navPush={navPush}
           basePath={{slotKey:"effectStack",steps:[]}}
+          onNavigate={props.onNavigate}
           onChange={function(es){onChange(Object.assign({},node,{effectStack:es}))}}
         />
       ) : (
@@ -2107,6 +2125,7 @@ function StackProps(props) {
           selfId={node.id}
           navPush={navPush}
           basePath={{slotKey:"maskStack",steps:[]}}
+          onNavigate={props.onNavigate}
           onChange={function(ms){onChange(Object.assign({},node,{maskStack:ms}))}}
         />
       )}
@@ -2178,9 +2197,9 @@ function Section(props) {
                     {props.sec===1
                       ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
                       : node.type==="blender"
-                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} onExtract={props.onExtract} onPromote={props.onPromote}/>
+                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} onExtract={props.onExtract} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                         : node.type==="stack"
-                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} onPromote={props.onPromote}/>
+                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                           : null
                     }
                   </div>
@@ -2546,9 +2565,19 @@ export default function App() {
     })
   }
 
+  function handleNavigate(id) {
+    var node = nodes.find(function(n){return n.id===id})
+    if (!node) return
+    setSelId(id)
+    if (settings.panelStyle === "sheet") setSheetNode({node: node, sec: node.section})
+    // Make sure the section containing the node is expanded
+    if (node.section === 1) setS1Col(false)
+    else setS2Col(false)
+  }
+
   var sp={nodes:nodes,selId:selId,dispId:dispId,
     onSel:selWithSheet,onDsp:dsp,onDel:del,onAdd:add,onUpd:upd,onLoad:loadUrl,onRen:ren,onTog:tog,
-    panelStyle:settings.panelStyle,onPromote:handlePromote,onExtract:handleExtract}
+    panelStyle:settings.panelStyle,onPromote:handlePromote,onExtract:handleExtract,onNavigate:handleNavigate}
 
   var leftBoxStyle = Object.assign(
     {display:rightFS?"none":"flex",flexDirection:"column",background:"var(--pn)"},
@@ -2606,7 +2635,7 @@ export default function App() {
         sec={sheetNode?sheetNode.sec:null}
         onClose={function(){setSheetNode(null);setSelId(null)}}
         onUpdate={upd} onLoad={loadUrl} nodes={nodes}
-        onPromote={handlePromote} onExtract={handleExtract}/>
+        onPromote={handlePromote} onExtract={handleExtract} onNavigate={handleNavigate}/>
 
       {anyFS && (
         <button className="fs-escape" onClick={function(){setLeftFS(false);setRightFS(false)}}>
