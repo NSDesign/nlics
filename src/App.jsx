@@ -252,9 +252,8 @@ function mkEfx(t) {
   if(t==="curves")    params={inBlack:0,inWhite:255,outBlack:0,outWhite:255,sCurve:0}
   if(t==="transform") params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
   if(t==="colour-map") params={
-    stops:[{pos:0,color:"#000000"},{pos:1,color:"#ffffff"}],
-    reverse:false,
-    amount:100
+    stops:[{pos:0,color:"#000000",alpha:100},{pos:1,color:"#ffffff",alpha:100}],
+    reverse:false
   }
   return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[] }
 }
@@ -400,38 +399,42 @@ function pxFn(d,w,h,t,p) {
     }
     for(i=0;i<d.length;i+=4){d[i]=clut[d[i]];d[i+1]=clut[d[i+1]];d[i+2]=clut[d[i+2]]}
   } else if (t==="colour-map") {
-    // Map luminosity [0..1] through a sorted list of colour stops, producing
-    // a 256-entry RGB lookup. Each pixel's luminosity indexes the lookup.
+    // Map luminosity [0..255] through a sorted list of colour+alpha stops,
+    // producing 256-entry R/G/B/A lookup tables. Each pixel's luminosity
+    // indexes the LUTs. The mapped alpha scales the source pixel's alpha,
+    // letting parts of the gradient be "see-through" to the original.
+    // Layer opacity (on the Layer tab) handles the whole-effect mix.
     var stops=(p.stops||[]).slice().sort(function(a,b){return a.pos-b.pos})
-    if(stops.length<2){stops=[{pos:0,color:"#000000"},{pos:1,color:"#ffffff"}]}
-    if(p.reverse){stops=stops.slice().reverse().map(function(s){return {pos:1-s.pos,color:s.color}})}
+    if(stops.length<2){stops=[{pos:0,color:"#000000",alpha:100},{pos:1,color:"#ffffff",alpha:100}]}
+    if(p.reverse){stops=stops.slice().reverse().map(function(s){return Object.assign({},s,{pos:1-s.pos})})}
     function parseHex(h){
       var s=(h||"#000000").replace("#","")
       if(s.length===3)s=s.split("").map(function(c){return c+c}).join("")
       return [parseInt(s.slice(0,2),16)||0,parseInt(s.slice(2,4),16)||0,parseInt(s.slice(4,6),16)||0]
     }
     var rgbs=stops.map(function(s){return parseHex(s.color)})
-    var lutR=new Uint8Array(256), lutG=new Uint8Array(256), lutB=new Uint8Array(256)
+    var alphas=stops.map(function(s){return s.alpha==null?100:s.alpha})
+    var lutR=new Uint8Array(256), lutG=new Uint8Array(256), lutB=new Uint8Array(256), lutA=new Uint8Array(256)
     for(var cli=0;cli<256;cli++){
-      var t01=cli/255
-      // find surrounding stops
-      var si=0
+      var t01=cli/255, si=0
       while(si<stops.length-1 && t01>stops[si+1].pos) si++
       var s0=stops[si], s1=stops[Math.min(si+1,stops.length-1)]
       var range=s1.pos-s0.pos
       var local=range>0?(t01-s0.pos)/range:0
       local=Math.max(0,Math.min(1,local))
       var c0=rgbs[si], c1=rgbs[Math.min(si+1,stops.length-1)]
+      var a0=alphas[si], a1=alphas[Math.min(si+1,stops.length-1)]
       lutR[cli]=Math.round(c0[0]+(c1[0]-c0[0])*local)
       lutG[cli]=Math.round(c0[1]+(c1[1]-c0[1])*local)
       lutB[cli]=Math.round(c0[2]+(c1[2]-c0[2])*local)
+      lutA[cli]=Math.round(a0+(a1-a0)*local)
     }
-    var mix=(p.amount==null?100:p.amount)/100
     for(i=0;i<d.length;i+=4){
       var lum=Math.round(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])
-      d[i]  =Math.round(d[i]  *(1-mix)+lutR[lum]*mix)
-      d[i+1]=Math.round(d[i+1]*(1-mix)+lutG[lum]*mix)
-      d[i+2]=Math.round(d[i+2]*(1-mix)+lutB[lum]*mix)
+      d[i]  =lutR[lum]
+      d[i+1]=lutG[lum]
+      d[i+2]=lutB[lum]
+      d[i+3]=Math.round(d[i+3]*lutA[lum]/100)
     }
   }
   // NOTE: "transform" is handled specially in applyEfxStk (needs full canvas context, not just ImageData)
@@ -1240,23 +1243,23 @@ function ColourMapEditor(props) {
   function setStops(ns){up({stops:ns})}
   function updStop(i,nw){var ns=stops.map(function(s,si){return si===i?Object.assign({},s,nw):s});setStops(ns)}
   function addStop(){
-    // Insert new stop at midpoint between two adjacent stops that are farthest apart
-    var maxGap=0,insertAt=.5,afterColor="#808080"
+    var maxGap=0,insertAt=.5,afterColor="#808080",afterAlpha=100
     for(var i=0;i<stops.length-1;i++){
       var gap=stops[i+1].pos-stops[i].pos
       if(gap>maxGap){maxGap=gap;insertAt=stops[i].pos+gap/2
-        // interpolate colour
         var c1=stops[i].color,c2=stops[i+1].color
-        function ph(h){var s=h.replace("#","");return [parseInt(s.slice(0,2),16)||0,parseInt(s.slice(2,4),16)||0,parseInt(s.slice(4,6),16)||0]}
+        function ph(h){var s=(h||"#000000").replace("#","");return [parseInt(s.slice(0,2),16)||0,parseInt(s.slice(2,4),16)||0,parseInt(s.slice(4,6),16)||0]}
         var r1=ph(c1),r2=ph(c2)
         var ri=Math.round((r1[0]+r2[0])/2),gi=Math.round((r1[1]+r2[1])/2),bi=Math.round((r1[2]+r2[2])/2)
         afterColor="#"+[ri,gi,bi].map(function(v){return v.toString(16).padStart(2,"0")}).join("")
+        var a1=stops[i].alpha==null?100:stops[i].alpha, a2=stops[i+1].alpha==null?100:stops[i+1].alpha
+        afterAlpha=Math.round((a1+a2)/2)
       }
     }
-    setStops(stops.concat([{pos:insertAt,color:afterColor}]))
+    setStops(stops.concat([{pos:insertAt,color:afterColor,alpha:afterAlpha}]))
   }
   function delStop(i){
-    if(stops.length<=2)return // keep at least 2
+    if(stops.length<=2)return
     setStops(stops.filter(function(_,si){return si!==i}))
   }
   function distribute(mode){
@@ -1272,32 +1275,58 @@ function ColourMapEditor(props) {
     })
     setStops(ns)
   }
-  // Build CSS gradient preview
-  var grad=(p.reverse?stops.slice().reverse().map(function(s){return {pos:1-s.pos,color:s.color}}):stops)
-    .map(function(s){return s.color+" "+(s.pos*100).toFixed(1)+"%"}).join(",")
+  // Convert a hex + alpha (0..100) into an rgba() CSS string
+  function rgbaStr(hex, alpha){
+    var s=(hex||"#000000").replace("#","")
+    if(s.length===3)s=s.split("").map(function(c){return c+c}).join("")
+    var r=parseInt(s.slice(0,2),16)||0, g=parseInt(s.slice(2,4),16)||0, b=parseInt(s.slice(4,6),16)||0
+    var a=(alpha==null?100:alpha)/100
+    return "rgba("+r+","+g+","+b+","+a.toFixed(3)+")"
+  }
+  // CSS gradient — includes alpha, rendered on a checkered pattern for visibility
+  var grad=(p.reverse?stops.slice().reverse().map(function(s){return Object.assign({},s,{pos:1-s.pos})}):stops)
+    .map(function(s){return rgbaStr(s.color,s.alpha)+" "+(s.pos*100).toFixed(1)+"%"}).join(",")
+  // Checkerboard background so transparency is visible
+  var checker="repeating-conic-gradient(#242440 0deg 90deg, #181830 90deg 180deg) 0 0 / 12px 12px"
   return (
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
       {/* Gradient preview strip */}
       <div style={{height:32,borderRadius:6,border:"1px solid var(--bd)",
-        background:"linear-gradient(to right,"+grad+")"}}/>
+        background:"linear-gradient(to right,"+grad+"),"+checker}}/>
       {/* Stops list */}
-      <div style={{display:"flex",flexDirection:"column",gap:4}}>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
         <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em"}}>stops</div>
         {stops.map(function(s,i){
+          var alphaVal=s.alpha==null?100:s.alpha
           return (
-            <div key={i} style={{display:"flex",gap:6,alignItems:"center",padding:"4px 0"}}>
-              <input type="color" value={s.color}
-                onChange={function(e){updStop(i,{color:e.target.value})}}
-                style={{width:32,height:28,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
-              <input type="range" min={0} max={1} step={0.001} value={s.pos}
-                onChange={function(e){updStop(i,{pos:parseFloat(e.target.value)})}}
-                style={{flex:1}}/>
-              <span style={{fontSize:10,color:"var(--di)",minWidth:38,textAlign:"right"}}>
-                {(s.pos*100).toFixed(1)}%
-              </span>
-              <button onClick={function(){delStop(i)}} disabled={stops.length<=2}
-                style={{minHeight:28,padding:"0 8px",fontSize:12,color:stops.length<=2?"var(--mu)":"var(--dng)",
-                background:"none",border:"none",cursor:stops.length<=2?"default":"pointer"}}>×</button>
+            <div key={i} style={{display:"flex",flexDirection:"column",gap:4,padding:"6px 8px",
+              background:"rgba(20,20,44,.4)",border:"1px solid var(--bd)",borderRadius:6}}>
+              {/* Row 1: colour swatch, position, delete */}
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input type="color" value={s.color}
+                  onChange={function(e){updStop(i,{color:e.target.value})}}
+                  style={{width:32,height:28,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
+                <span style={{fontSize:9,color:"var(--mu)",minWidth:22}}>pos</span>
+                <input type="range" min={0} max={1} step={0.001} value={s.pos}
+                  onChange={function(e){updStop(i,{pos:parseFloat(e.target.value)})}}
+                  style={{flex:1}}/>
+                <span style={{fontSize:10,color:"var(--di)",minWidth:42,textAlign:"right"}}>
+                  {(s.pos*100).toFixed(1)}%
+                </span>
+                <button onClick={function(){delStop(i)}} disabled={stops.length<=2}
+                  style={{minHeight:28,padding:"0 8px",fontSize:12,color:stops.length<=2?"var(--mu)":"var(--dng)",
+                  background:"none",border:"none",cursor:stops.length<=2?"default":"pointer"}}>×</button>
+              </div>
+              {/* Row 2: alpha */}
+              <div style={{display:"flex",gap:6,alignItems:"center",paddingLeft:38}}>
+                <span style={{fontSize:9,color:"var(--mu)",minWidth:22}}>α</span>
+                <input type="range" min={0} max={100} step={1} value={alphaVal}
+                  onChange={function(e){updStop(i,{alpha:parseInt(e.target.value)})}}
+                  style={{flex:1}}/>
+                <span style={{fontSize:10,color:"var(--di)",minWidth:42,textAlign:"right"}}>
+                  {alphaVal}%
+                </span>
+              </div>
             </div>
           )
         })}
@@ -1317,9 +1346,6 @@ function ColourMapEditor(props) {
         <button className="ghost" style={{fontSize:10,padding:"4px 10px"}} onClick={function(){distribute("expo")}}>expo</button>
         <button className="ghost" style={{fontSize:10,padding:"4px 10px"}} onClick={function(){distribute("log")}}>log</button>
       </div>
-      <Sl l="mix" v={p.amount!=null?p.amount:100} mn={0} mx={100} st={1}
-        fmt={function(v){return Math.round(v)+"%"}}
-        fn={function(v){up({amount:v})}}/>
     </div>
   )
 }
