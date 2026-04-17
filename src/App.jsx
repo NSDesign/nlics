@@ -518,7 +518,7 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
     }
     if(!mk.refId||vis.has(mk.refId))continue
     var visMk=new Set(vis); visMk.add(mk.refId)
-    var cv=compAny(mk.refId,cmap,cache,iC,w,h,new Set(vis));if(!cv)continue;any=true
+    var cv=compAny(mk.refId,cmap,cache,iC,w,h,visMk);if(!cv)continue;any=true
     if(mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,visMk)}
     var src=clCv(cv,w,h).getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
     for(var ii=0;ii<w*h;ii++){
@@ -560,21 +560,14 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
     if (efx.type==="transform") {
       // Transform is a full canvas operation — snap pre state, apply matrix, blend back via mask if present
       if (efx.maskStack && efx.maskStack.length>0) {
-        // Masked transform: render transform onto snap, blend by mask, write back
+        // Masked transform: capture pre, apply transform, blend back using mask
         var preSnap = ctx.getImageData(0,0,w,h)
         applyTransform(ctx, efx.params, w, h)
         var postData = ctx.getImageData(0,0,w,h)
         var mv = compMasks(efx.maskStack, cmap, cache, iC, w, h, new Set(vis))
-        if (mv) {
-          applyBack(preSnap.data, postData.data, mv, efx.opacity, efx.blendMode||"normal")
-        }
-        ctx.putImageData(mv ? postData : ctx.getImageData(0,0,w,h), 0, 0)
-        if (!mv) {
-          // No valid masks — just put pre back with opacity blend
-          var plain=new Uint8ClampedArray(preSnap.data)
-          applyBack(plain, postData.data, null, efx.opacity, efx.blendMode||"normal")
-          ctx.putImageData(new ImageData(plain,w,h),0,0)
-        }
+        // applyBack writes the blend into preSnap.data — put preSnap (not postData)
+        applyBack(preSnap.data, postData.data, mv, efx.opacity, efx.blendMode||"normal")
+        ctx.putImageData(preSnap, 0, 0)
       } else {
         // No mask — apply transform directly, respecting opacity
         var preT = ctx.getImageData(0,0,w,h)
@@ -737,16 +730,16 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   // ── Stack node — renderable only when previewRefId is set ───────────────────
   if(n.type==="stack"){
     if(!n.previewRefId||vis.has(n.previewRefId)){vis.delete(id);return null}
-    var previewBase=compAny(n.previewRefId,cmap,cache,iC,w,h,new Set(vis))
+    var spVis=new Set(vis);spVis.add(n.previewRefId)
+    var previewBase=compAny(n.previewRefId,cmap,cache,iC,w,h,spVis)
     if(!previewBase){vis.delete(id);return null}
     var pcv=clCv(previewBase,w,h),pctx=pcv.getContext("2d")
     if(n.stackType==="effect"&&(n.effectStack||[]).length>0){
-      // Effect stack: apply effects to the preview source normally
-      applyEfxStk(pctx,n.effectStack,cmap,cache,iC,w,h,new Set(vis))
+      applyEfxStk(pctx,n.effectStack,cmap,cache,iC,w,h,spVis)
     } else if(n.stackType==="mask"&&(n.maskStack||[]).length>0){
       // Mask stack: render as pure grayscale (white=fully unmasked, black=fully masked)
       // This matches how all professional compositing tools display masks/mattes
-      var mv=compMasks(n.maskStack,cmap,cache,iC,w,h,new Set(vis))
+      var mv=compMasks(n.maskStack,cmap,cache,iC,w,h,spVis)
       var gid=pctx.createImageData(w,h)
       if(mv){
         for(var gi=0;gi<w*h;gi++){
@@ -1165,11 +1158,7 @@ function StackRefCard(props) {
           {Math.round(item.opacity!=null?item.opacity:100)}%
         </span>
       </div>
-      {!refNode&&(
-        <div style={{padding:"8px 12px",fontSize:10,color:"var(--dng)"}}>
-          Referenced stack node not found — it may have been deleted.
-        </div>
-      )}
+
     </div>
   )
 }
