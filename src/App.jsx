@@ -972,10 +972,29 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
 }
 function renderPipeline(canvas,dispId,nodes,iC) {
   if(!canvas||!dispId)return
-  var ctx=canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height)
-  var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
-  var result=compAny(dispId,cmap,new Map(),iC,canvas.width,canvas.height,new Set())
-  if(result)ctx.drawImage(result,0,0)
+  try {
+    var ctx=canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height)
+    var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
+    var result=compAny(dispId,cmap,new Map(),iC,canvas.width,canvas.height,new Set())
+    if(result)ctx.drawImage(result,0,0)
+  } catch(err) {
+    // Render pipeline failed — draw a soft error overlay so the UI stays interactive
+    try {
+      var ectx=canvas.getContext("2d")
+      ectx.clearRect(0,0,canvas.width,canvas.height)
+      ectx.fillStyle="#2a1020"
+      ectx.fillRect(0,0,canvas.width,canvas.height)
+      ectx.fillStyle="#e03060"
+      ectx.font="14px 'IBM Plex Mono', monospace"
+      ectx.textAlign="center"
+      ectx.fillText("render error", canvas.width/2, canvas.height/2-10)
+      ectx.fillStyle="#e0a0b0"
+      ectx.font="10px 'IBM Plex Mono', monospace"
+      var msg=String(err&&err.message||err).slice(0,60)
+      ectx.fillText(msg, canvas.width/2, canvas.height/2+10)
+    } catch(_){}
+    if(typeof console!=="undefined"&&console.error)console.error("NLICS render:",err)
+  }
 }
 
 
@@ -1433,7 +1452,12 @@ function InlineRename(props) {
 }
 
 function MaskCard(props) {
-  var mk=props.mask
+  // Defensive copy — backfill any missing fields so range inputs stay controlled
+  // and blend-mode select has a valid value. Does NOT mutate the original.
+  var mk=Object.assign({
+    refId:null, channel:"luminosity", invert:false, strength:1, opacity:100,
+    blendMode:"multiply", effectStack:[], enabled:true, name:""
+  }, props.mask||{})
   var armSt=useState(false); var armed=armSt[0],setArmed=armSt[1]
   var timerRef=useRef(null)
   useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
@@ -2868,7 +2892,7 @@ function UnifiedLayout(props) {
 }
 
 /* ─── APP ROOT ──────────────────────────────────────────── */
-export default function App() {
+function App() {
   var init = initState()
   var s1 = useState(init.nodes);  var nodes=s1[0],   setNodes=s1[1]
   var s2 = useState(init.dispId); var dispId=s2[0],  setDispId=s2[1]
@@ -3255,4 +3279,44 @@ export default function App() {
       <div className={"undo-toast"+(toastOn?" show":"")}>↩ undo restored</div>
     </div>
   )
+}
+
+
+/* ─── ERROR BOUNDARY ────────────────────────────────────── */
+class ErrorBoundary extends Component {
+  constructor(p){ super(p); this.state = { err: null, info: null } }
+  static getDerivedStateFromError(err){ return { err: err } }
+  componentDidCatch(err, info){
+    this.setState({ err: err, info: info })
+    if(typeof console!=="undefined"&&console.error)console.error("NLICS boundary:", err, info)
+  }
+  render(){
+    if(this.state.err){
+      return (
+        <div style={{minHeight:"100vh",padding:20,background:"#05050d",color:"#e0a0b0",
+          fontFamily:"'IBM Plex Mono',monospace",fontSize:12,lineHeight:1.5}}>
+          <div style={{fontSize:16,color:"#e03060",marginBottom:10,fontWeight:700}}>NLICS crashed</div>
+          <div style={{marginBottom:10,color:"#c8d0e8"}}>
+            {String(this.state.err&&this.state.err.message||this.state.err)}
+          </div>
+          {this.state.info&&this.state.info.componentStack&&(
+            <pre style={{fontSize:10,color:"#8090c0",whiteSpace:"pre-wrap",
+              background:"#0d0d22",padding:10,borderRadius:6,maxHeight:"40vh",overflow:"auto"}}>
+              {this.state.info.componentStack}
+            </pre>
+          )}
+          <button onClick={function(){location.reload()}}
+            style={{marginTop:16,padding:"10px 20px",background:"#24cca8",border:"none",
+            borderRadius:6,color:"#040412",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
+            Reload
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+export default function AppWithBoundary(){
+  return <ErrorBoundary><App/></ErrorBoundary>
 }
