@@ -1989,8 +1989,17 @@ function SlotPanel(props) {
 function BlenderProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
-  // Must be declared before any early return to satisfy Rules of Hooks
+  // All hooks must be declared before any early return to satisfy Rules of Hooks
   var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  // Layout mode state — MUST be declared here, not below the conditional early
+  // return. Previous placement caused React error #300 (changing hook count)
+  // whenever the drill-down was entered/exited.
+  var BP_LAYOUT_KEY = "nlics:bp-layout:v1"
+  var layoutSt=useState(function(){
+    try{var v=localStorage.getItem(BP_LAYOUT_KEY);return v||"accordion"}catch(e){return "accordion"}
+  })
+  var layout=layoutSt[0], setLayoutRaw=layoutSt[1]
+  function setLayout(v){setLayoutRaw(v);try{localStorage.setItem(BP_LAYOUT_KEY,v)}catch(e){}}
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
   function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
 
@@ -2053,13 +2062,6 @@ function BlenderProps(props) {
     {id:"effects",label:"Effects"+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
     {id:"masks",  label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
   ]
-  // Layout mode: "accordion" (all cards, collapsible) or "tabs" (multi-select)
-  var BP_LAYOUT_KEY = "nlics:bp-layout:v1"
-  var layoutSt=useState(function(){
-    try{var v=localStorage.getItem(BP_LAYOUT_KEY);return v||"accordion"}catch(e){return "accordion"}
-  })
-  var layout=layoutSt[0], setLayoutRaw=layoutSt[1]
-  function setLayout(v){setLayoutRaw(v);try{localStorage.setItem(BP_LAYOUT_KEY,v)}catch(e){}}
   // Per-blender collapse state (accordion) / active-tab set (tabs) — lives on node._ui
   var ui = node._ui || {}
   function setUi(patch){
