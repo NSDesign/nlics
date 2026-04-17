@@ -178,6 +178,7 @@ var ECFG   = {
   threshold:  ["value",0,255,1,128],
   "hue-shift":["angle",0,360,1,45],
   saturation: ["amount",0,300,1,150],
+  vibrance:   ["amount",-100,100,1,0],
   exposure:   ["stops",-3,3,.1,1],
   levels:     ["gamma",0.1,4,.05,1],
   posterize:  ["levels",2,16,1,4]
@@ -255,7 +256,7 @@ function mkEfx(t) {
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[] } }
-function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"screen", amount:100, switched:false, outEfx:[], outMask:[] } }
+function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"normal", amount:100, switched:false, outEfx:[], outMask:[] } }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
 
 // Stack node — named reusable container for an effect or mask stack.
@@ -361,6 +362,17 @@ function pxFn(d,w,h,t,p) {
     for(i=0;i<d.length;i+=4){hsl=rhs(d[i],d[i+1],d[i+2]);rgb=shr((hsl[0]+p.angle+360)%360,hsl[1],hsl[2]);d[i]=rgb[0];d[i+1]=rgb[1];d[i+2]=rgb[2]}
   } else if (t==="saturation") {
     f=p.amount/100; for(i=0;i<d.length;i+=4){hsl=rhs(d[i],d[i+1],d[i+2]);rgb=shr(hsl[0],Math.min(1,Math.max(0,hsl[1]*f)),hsl[2]);d[i]=rgb[0];d[i+1]=rgb[1];d[i+2]=rgb[2]}
+  } else if (t==="vibrance") {
+    // amount -100..100, 0 = no change. Boost lifts low-saturation more than high.
+    var vAmt=(p.amount||0)/100
+    for(i=0;i<d.length;i+=4){
+      hsl=rhs(d[i],d[i+1],d[i+2])
+      var sat=hsl[1], ns
+      if(vAmt>=0){ns=sat+(1-sat)*sat*vAmt*2}
+      else       {ns=sat*(1+vAmt)}
+      ns=Math.max(0,Math.min(1,ns))
+      rgb=shr(hsl[0],ns,hsl[2]);d[i]=rgb[0];d[i+1]=rgb[1];d[i+2]=rgb[2]
+    }
   } else if (t==="exposure") {
     f=Math.pow(2,p.stops); for(i=0;i<d.length;i+=4){d[i]=Math.min(255,d[i]*f);d[i+1]=Math.min(255,d[i+1]*f);d[i+2]=Math.min(255,d[i+2]*f)}
   } else if (t==="levels") {
@@ -1318,7 +1330,7 @@ function EfxPrimary(props) {
   if(efx.type==="threshold")  return <Sl l="level" v={p.value} mn={0} mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
   if(efx.type==="hue-shift")  return <Sl l="angle" v={p.angle} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
   if(efx.type==="saturation") return <Sl l="amount" v={p.amount} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({amount:v})}}/>
-  if(efx.type==="vibrance")   return <Sl l="amount" v={p.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({amount:v})}}/>
+  if(efx.type==="vibrance")   return <Sl l="amount" v={p.amount==null?0:p.amount} mn={-100} mx={100} st={1} fmt={function(v){return (v>0?"+":"")+Math.round(v)}} fn={function(v){up({amount:v})}}/>
   if(efx.type==="posterize")  return <Sl l="levels" v={p.levels} mn={2} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({levels:v})}}/>
   if(efx.type==="exposure")   return <Sl l="stops" v={p.stops} mn={-3} mx={3} st={.1} fmt={function(v){return v.toFixed(1)+"EV"}} fn={function(v){up({stops:v})}}/>
   if(efx.type==="levels")     return <Sl l="gamma" v={p.gamma!=null?p.gamma:1} mn={.1} mx={4} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up({gamma:v})}}/>
@@ -2057,9 +2069,9 @@ function BlenderProps(props) {
       <div className="card-body">
         <Se l="mode" v={node.mode} opts={BMODES} fn={function(v){onChange(Object.assign({},node,{mode:v}))}}/>
         <Sl l="amount" v={node.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){onChange(Object.assign({},node,{amount:v}))}}/>
-        <PR l="switch">
+        <PR l="layer">
           <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}} className={node.switched?"ac":""} style={{minHeight:36,padding:"0 14px"}}>
-            {node.switched?"B to A (switched)":"A to B (normal)"}
+            {node.switched?"B over A":"A over B"}
           </button>
         </PR>
       </div>
