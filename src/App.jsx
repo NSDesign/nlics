@@ -729,6 +729,11 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
       else out[ii]*=mv2
     }
   }
+  if(typeof console!=="undefined"&&console.debug){
+    if(!any)console.debug("[compMasks] no valid masks (all refIds null or unresolved)", stack.length,"items")
+    else{var mn=1,mx=0;for(var di=0;di<out.length;di++){if(out[di]<mn)mn=out[di];if(out[di]>mx)mx=out[di]}
+      console.debug("[compMasks] result range min="+mn.toFixed(3)+" max="+mx.toFixed(3))}
+  }
   return any?out:null
 }
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
@@ -1480,6 +1485,12 @@ function MaskCard(props) {
             onChange={function(nw){props.onChange(Object.assign({},mk,{name:nw}))}}
             labelStyle={{fontSize:11,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace"}}/>
         </div>
+        {!mk.refId && (
+          <div style={{fontSize:9,color:"#e0a060",background:"rgba(224,160,96,.1)",border:"1px solid rgba(224,160,96,.25)",
+            borderRadius:4,padding:"4px 8px",marginBottom:6}}>
+            ⚠ no source — mask has no effect until a source is selected
+          </div>
+        )}
         <select value={mk.refId||""} onChange={function(e){props.onChange(Object.assign({},mk,{refId:e.target.value||null}))}} style={{width:"100%",marginBottom:8}}>
           <option value="">— select source —</option>
           <optgroup label="Pixel Creators">
@@ -1504,11 +1515,13 @@ function MaskCard(props) {
           <input type="range" min={0} max={100} step={1} value={mk.opacity} onChange={function(e){props.onChange(Object.assign({},mk,{opacity:+e.target.value}))}} style={{flex:1}}/>
           <span style={{fontSize:10,color:"var(--di)",minWidth:32,textAlign:"right"}}>{Math.round(mk.opacity)}%</span>
         </div>
-        {props.onEditEffects && (
-          <button className="ac" style={{width:"100%"}} onClick={props.onEditEffects}>
-            Edit mask effects ({(mk.effectStack||[]).length}) →
-          </button>
-        )}
+        <div style={{display:"flex",gap:4,marginTop:4}}>
+          {props.onEditEffects && (
+            <button className="ac" style={{flex:1}} onClick={props.onEditEffects}>
+              effects ({(mk.effectStack||[]).length}) →
+            </button>
+          )}
+        </div>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:4,alignSelf:"flex-start",flexShrink:0}}>
         {props.onPromote&&<button className="promote-btn" style={{padding:"2px 6px",fontSize:9}} onClick={props.onPromote} title="Promote">↗</button>}
