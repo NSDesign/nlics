@@ -256,7 +256,15 @@ function mkEfx(t) {
     stops:[{pos:0,color:"#000000",alpha:100},{pos:1,color:"#ffffff",alpha:100}],
     reverse:false
   }
-  if(t==="dir-blur") params={angle:0, distance:20, spread:"both"}
+  if(t==="dir-blur")     params={angle:0, distance:20, spread:"both"}
+  if(t==="sharpen")      params={amount:100}
+  if(t==="vignette")     params={strength:80, radius:.65, softness:.45, color:"#000000"}
+  if(t==="chromatic-ab") params={distance:6, angle:45, mode:"rgb"}
+  if(t==="glow")         params={radius:12, strength:60, threshold:120}
+  if(t==="emboss")       params={angle:135, strength:100, flat:128}
+  if(t==="edge-detect")  params={strength:100, invert:false}
+  if(t==="pixelate")     params={size:8}
+  if(t==="duotone")      params={shadow:"#0a0a2a", highlight:"#f5e642"}
   return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[] }
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
@@ -464,6 +472,158 @@ function pxFn(d,w,h,t,p) {
         rs+=orig[ni]; gs+=orig[ni+1]; bs+=orig[ni+2]; as+=orig[ni+3]; cnt++
       }
       d[i]=rs/cnt; d[i+1]=gs/cnt; d[i+2]=bs/cnt; d[i+3]=as/cnt
+    }
+  } else if (t==="sharpen") {
+    // Unsharp mask: sharpen = original + amount*(original - blurred)
+    var shAmt=(p.amount==null?100:p.amount)/100
+    var shR=2, shTmp=new Uint8ClampedArray(d)
+    // box blur on shTmp
+    var shLine=new Uint8ClampedArray(d.length)
+    var shX,shY,shDx,shDy,shNx,shNy,shRs,shGs,shBs,shN
+    for(shY=0;shY<h;shY++) for(shX=0;shX<w;shX++){
+      shRs=shGs=shBs=shN=0
+      for(shDx=-shR;shDx<=shR;shDx++){shNx=shX+shDx;if(shNx<0||shNx>=w)continue;var shI=(shY*w+shNx)*4;shRs+=shTmp[shI];shGs+=shTmp[shI+1];shBs+=shTmp[shI+2];shN++}
+      var shO=(shY*w+shX)*4;shLine[shO]=shRs/shN;shLine[shO+1]=shGs/shN;shLine[shO+2]=shBs/shN;shLine[shO+3]=shTmp[shO+3]
+    }
+    var shLine2=new Uint8ClampedArray(d.length)
+    for(shY=0;shY<h;shY++) for(shX=0;shX<w;shX++){
+      shRs=shGs=shBs=shN=0
+      for(shDy=-shR;shDy<=shR;shDy++){shNy=shY+shDy;if(shNy<0||shNy>=h)continue;var shI=(shNy*w+shX)*4;shRs+=shLine[shI];shGs+=shLine[shI+1];shBs+=shLine[shI+2];shN++}
+      var shO=(shY*w+shX)*4;shLine2[shO]=shRs/shN;shLine2[shO+1]=shGs/shN;shLine2[shO+2]=shBs/shN;shLine2[shO+3]=shLine[shO+3]
+    }
+    for(i=0;i<d.length;i+=4){
+      d[i]  =Math.min(255,Math.max(0,Math.round(shTmp[i]  +shAmt*(shTmp[i]  -shLine2[i]))))
+      d[i+1]=Math.min(255,Math.max(0,Math.round(shTmp[i+1]+shAmt*(shTmp[i+1]-shLine2[i+1]))))
+      d[i+2]=Math.min(255,Math.max(0,Math.round(shTmp[i+2]+shAmt*(shTmp[i+2]-shLine2[i+2]))))
+    }
+  } else if (t==="vignette") {
+    var vStr=(p.strength==null?80:p.strength)/100
+    var vRad=p.radius==null?.65:p.radius
+    var vSoft=p.softness==null?.45:p.softness
+    var vCol=p.color||"#000000"
+    var vHex=vCol.replace("#","")
+    if(vHex.length===3)vHex=vHex.split("").map(function(cc){return cc+cc}).join("")
+    var vR=parseInt(vHex.slice(0,2),16)/255,vG=parseInt(vHex.slice(2,4),16)/255,vB=parseInt(vHex.slice(4,6),16)/255
+    var cx=w/2,cy=h/2,maxD=Math.sqrt(cx*cx+cy*cy)
+    for(i=0;i<d.length;i+=4){
+      var vPx=(i/4)%w, vPy=Math.floor((i/4)/w)
+      var vDist=Math.sqrt((vPx-cx)*(vPx-cx)+(vPy-cy)*(vPy-cy))/(maxD*vRad)
+      var vM=Math.max(0,Math.min(1,(vDist-1+vSoft)/vSoft))*vStr
+      d[i]  =Math.round(d[i]  *(1-vM)+vR*255*vM)
+      d[i+1]=Math.round(d[i+1]*(1-vM)+vG*255*vM)
+      d[i+2]=Math.round(d[i+2]*(1-vM)+vB*255*vM)
+    }
+  } else if (t==="chromatic-ab") {
+    // Split RGB channels and offset them by distance along angle
+    var caD=p.distance==null?6:p.distance
+    var caAng=((p.angle||45)*Math.PI/180)
+    var caDx=Math.round(Math.cos(caAng)*caD), caDy=Math.round(Math.sin(caAng)*caD)
+    var caOrig=new Uint8ClampedArray(d)
+    function caSample(px,py,ch){
+      if(px<0||px>=w||py<0||py>=h)return 0
+      return caOrig[(py*w+px)*4+ch]
+    }
+    for(i=0;i<d.length;i+=4){
+      var caPx=(i/4)%w, caPy=Math.floor((i/4)/w)
+      d[i]  =caSample(caPx+caDx, caPy+caDy, 0)  // R shifted forward
+      // G stays in place
+      d[i+2]=caSample(caPx-caDx, caPy-caDy, 2)  // B shifted backward
+    }
+  } else if (t==="glow") {
+    // Bloom: extract pixels above threshold, blur heavily, screen over original
+    var glR=Math.max(1,Math.round(p.radius||12))
+    var glStr=(p.strength==null?60:p.strength)/100
+    var glThr=p.threshold==null?120:p.threshold
+    var glOrig=new Uint8ClampedArray(d)
+    // Extract bright areas
+    var glBright=new Uint8ClampedArray(d.length)
+    for(i=0;i<d.length;i+=4){
+      var glLum=.299*d[i]+.587*d[i+1]+.114*d[i+2]
+      var glM=Math.max(0,(glLum-glThr)/(255-glThr))
+      glBright[i]=d[i]*glM; glBright[i+1]=d[i+1]*glM; glBright[i+2]=d[i+2]*glM; glBright[i+3]=255
+    }
+    // Box blur bright layer (2 passes for speed)
+    function glBlur(src,r){
+      var tmp=new Uint8ClampedArray(src.length)
+      var gx,gy,gd,gn,gs,pi
+      for(gy=0;gy<h;gy++) for(gx=0;gx<w;gx++){
+        var rs=0,gs2=0,bs=0,n=0
+        for(gd=-r;gd<=r;gd++){var nx=gx+gd;if(nx<0||nx>=w)continue;pi=(gy*w+nx)*4;rs+=src[pi];gs2+=src[pi+1];bs+=src[pi+2];n++}
+        pi=(gy*w+gx)*4;tmp[pi]=rs/n;tmp[pi+1]=gs2/n;tmp[pi+2]=bs/n;tmp[pi+3]=255
+      }
+      var out=new Uint8ClampedArray(tmp.length)
+      for(gy=0;gy<h;gy++) for(gx=0;gx<w;gx++){
+        var rs=0,gs2=0,bs=0,n=0
+        for(gd=-r;gd<=r;gd++){var ny=gy+gd;if(ny<0||ny>=h)continue;pi=(ny*w+gx)*4;rs+=tmp[pi];gs2+=tmp[pi+1];bs+=tmp[pi+2];n++}
+        pi=(gy*w+gx)*4;out[pi]=rs/n;out[pi+1]=gs2/n;out[pi+2]=bs/n;out[pi+3]=255
+      }
+      return out
+    }
+    var glBlurred=glBlur(glBright,glR)
+    // Screen blend at strength
+    for(i=0;i<d.length;i+=4){
+      var glB=glBlurred[i]*glStr, glG=glBlurred[i+1]*glStr, glBl=glBlurred[i+2]*glStr
+      d[i]  =Math.min(255,Math.round(255-(255-d[i])*(255-glB)/255))
+      d[i+1]=Math.min(255,Math.round(255-(255-d[i+1])*(255-glG)/255))
+      d[i+2]=Math.min(255,Math.round(255-(255-d[i+2])*(255-glBl)/255))
+    }
+  } else if (t==="emboss") {
+    var emAng=((p.angle==null?135:p.angle)*Math.PI/180)
+    var emStr=(p.strength==null?100:p.strength)/100
+    var emFlat=p.flat==null?128:p.flat
+    var emKx=Math.cos(emAng), emKy=Math.sin(emAng)
+    var emOrig=new Uint8ClampedArray(d)
+    function emLum(px,py){
+      if(px<0||px>=w||py<0||py>=h){var ii2=(Math.max(0,Math.min(h-1,py))*w+Math.max(0,Math.min(w-1,px)))*4;return(.299*emOrig[ii2]+.587*emOrig[ii2+1]+.114*emOrig[ii2+2])/255}
+      var ii2=(py*w+px)*4;return(.299*emOrig[ii2]+.587*emOrig[ii2+1]+.114*emOrig[ii2+2])/255
+    }
+    for(i=0;i<d.length;i+=4){
+      var emPx=(i/4)%w, emPy=Math.floor((i/4)/w)
+      var emGx=emLum(emPx+1,emPy)-emLum(emPx-1,emPy)
+      var emGy=emLum(emPx,emPy+1)-emLum(emPx,emPy-1)
+      var emV=Math.round(emFlat+(emGx*emKx+emGy*emKy)*128*emStr)
+      emV=Math.min(255,Math.max(0,emV))
+      d[i]=emV; d[i+1]=emV; d[i+2]=emV
+    }
+  } else if (t==="edge-detect") {
+    var edStr=(p.strength==null?100:p.strength)/100
+    var edInv=!!p.invert
+    var edOrig=new Uint8ClampedArray(d)
+    function edLum2(px,py){
+      if(px<0||px>=w||py<0||py>=h)return 0
+      var ii2=(py*w+px)*4;return(.299*edOrig[ii2]+.587*edOrig[ii2+1]+.114*edOrig[ii2+2])/255
+    }
+    for(i=0;i<d.length;i+=4){
+      var edPx=(i/4)%w, edPy=Math.floor((i/4)/w)
+      var edGx=-edLum2(edPx-1,edPy-1)-2*edLum2(edPx-1,edPy)-edLum2(edPx-1,edPy+1)
+                +edLum2(edPx+1,edPy-1)+2*edLum2(edPx+1,edPy)+edLum2(edPx+1,edPy+1)
+      var edGy=-edLum2(edPx-1,edPy-1)-2*edLum2(edPx,edPy-1)-edLum2(edPx+1,edPy-1)
+                +edLum2(edPx-1,edPy+1)+2*edLum2(edPx,edPy+1)+edLum2(edPx+1,edPy+1)
+      var edM=Math.min(1,Math.sqrt(edGx*edGx+edGy*edGy)*edStr)
+      var edV=Math.round((edInv?1-edM:edM)*255)
+      d[i]=edV; d[i+1]=edV; d[i+2]=edV
+    }
+  } else if (t==="pixelate") {
+    var pxSz=Math.max(2,Math.round(p.size||8))
+    var pxOrig=new Uint8ClampedArray(d)
+    for(i=0;i<d.length;i+=4){
+      var pxX=(i/4)%w, pxY=Math.floor((i/4)/w)
+      var pxBx=Math.floor(pxX/pxSz)*pxSz, pxBy=Math.floor(pxY/pxSz)*pxSz
+      // sample centre of block
+      var pxCx=Math.min(w-1,pxBx+Math.floor(pxSz/2)), pxCy=Math.min(h-1,pxBy+Math.floor(pxSz/2))
+      var pxSrc=(pxCy*w+pxCx)*4
+      d[i]=pxOrig[pxSrc]; d[i+1]=pxOrig[pxSrc+1]; d[i+2]=pxOrig[pxSrc+2]
+    }
+  } else if (t==="duotone") {
+    // Map shadows → p.shadow colour, highlights → p.highlight colour via luminosity
+    var dtSh=p.shadow||"#000000", dtHi=p.highlight||"#ffffff"
+    function dtHex(h2){var s2=h2.replace("#","");if(s2.length===3)s2=s2.split("").map(function(c){return c+c}).join("");return[parseInt(s2.slice(0,2),16)||0,parseInt(s2.slice(2,4),16)||0,parseInt(s2.slice(4,6),16)||0]}
+    var shC=dtHex(dtSh), hiC=dtHex(dtHi)
+    for(i=0;i<d.length;i+=4){
+      var dtL=(.299*d[i]+.587*d[i+1]+.114*d[i+2])/255
+      d[i]  =Math.round(shC[0]+(hiC[0]-shC[0])*dtL)
+      d[i+1]=Math.round(shC[1]+(hiC[1]-shC[1])*dtL)
+      d[i+2]=Math.round(shC[2]+(hiC[2]-shC[2])*dtL)
     }
   }
   // NOTE: "transform" is handled specially in applyEfxStk (needs full canvas context, not just ImageData)
@@ -1425,6 +1585,86 @@ function EfxPrimary(props) {
     </div>
   )
   if(efx.type==="colour-map") return <ColourMapEditor efx={efx} p={p} up={up}/>
+  if(efx.type==="sharpen") return (
+    <Sl l="amount" v={p.amount==null?100:p.amount} mn={0} mx={500} st={1}
+      fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({amount:v})}}/>
+  )
+  if(efx.type==="vignette") return (
+    <div>
+      <Sl l="strength" v={p.strength==null?80:p.strength} mn={0} mx={100} st={1}
+        fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({strength:v})}}/>
+      <Sl l="radius" v={p.radius==null?.65:p.radius} mn={0} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({radius:v})}}/>
+      <Sl l="softness" v={p.softness==null?.45:p.softness} mn={0.01} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({softness:v})}}/>
+      <PR l="colour">
+        <input type="color" value={p.color||"#000000"}
+          onChange={function(e){up({color:e.target.value})}}
+          style={{width:44,height:32,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
+        <span style={{fontSize:10,color:"var(--mu)",marginLeft:6}}>{p.color||"#000000"}</span>
+      </PR>
+    </div>
+  )
+  if(efx.type==="chromatic-ab") return (
+    <div>
+      <Sl l="distance" v={p.distance==null?6:p.distance} mn={0} mx={40} st={.5}
+        fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up({distance:v})}}/>
+      <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1}
+        fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
+    </div>
+  )
+  if(efx.type==="glow") return (
+    <div>
+      <Sl l="radius" v={p.radius==null?12:p.radius} mn={1} mx={60} st={1}
+        fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({radius:v})}}/>
+      <Sl l="strength" v={p.strength==null?60:p.strength} mn={0} mx={100} st={1}
+        fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({strength:v})}}/>
+      <Sl l="threshold" v={p.threshold==null?120:p.threshold} mn={0} mx={255} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up({threshold:v})}}/>
+    </div>
+  )
+  if(efx.type==="emboss") return (
+    <div>
+      <Sl l="angle" v={p.angle==null?135:p.angle} mn={0} mx={360} st={1}
+        fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
+      <Sl l="strength" v={p.strength==null?100:p.strength} mn={0} mx={400} st={1}
+        fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({strength:v})}}/>
+      <Sl l="midpoint" v={p.flat==null?128:p.flat} mn={0} mx={255} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up({flat:v})}}/>
+    </div>
+  )
+  if(efx.type==="edge-detect") return (
+    <div>
+      <Sl l="strength" v={p.strength==null?100:p.strength} mn={0} mx={400} st={1}
+        fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({strength:v})}}/>
+      <PR l="invert">
+        <button className={p.invert?"ac":"ghost"} style={{minHeight:32,padding:"0 14px"}}
+          onClick={function(){up({invert:!p.invert})}}>
+          {p.invert?"on":"off"}
+        </button>
+      </PR>
+    </div>
+  )
+  if(efx.type==="pixelate") return (
+    <Sl l="block size" v={p.size==null?8:p.size} mn={2} mx={64} st={1}
+      fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({size:v})}}/>
+  )
+  if(efx.type==="duotone") return (
+    <div>
+      <PR l="shadows">
+        <input type="color" value={p.shadow||"#0a0a2a"}
+          onChange={function(e){up({shadow:e.target.value})}}
+          style={{width:44,height:32,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
+        <span style={{fontSize:10,color:"var(--mu)",marginLeft:6}}>{p.shadow||"#0a0a2a"}</span>
+      </PR>
+      <PR l="highlights">
+        <input type="color" value={p.highlight||"#f5e642"}
+          onChange={function(e){up({highlight:e.target.value})}}
+          style={{width:44,height:32,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
+        <span style={{fontSize:10,color:"var(--mu)",marginLeft:6}}>{p.highlight||"#f5e642"}</span>
+      </PR>
+    </div>
+  )
   if(efx.type==="dir-blur") return (
     <div>
       <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1}
@@ -1747,8 +1987,8 @@ function EfxCard(props) {
 /* ─── ADD EFFECT MENU ─────────────────────────────────── */
 var EFX_GROUPS=[
   {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
-  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
-  {label:"Pixel",    items:["blur","dir-blur","invert","threshold"]},
+  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map","duotone"]},
+  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect"]},
   {label:"Transform",items:["transform"]},
 ]
 // Hook: compute a fixed-position rect for a popover relative to an anchor ref.
