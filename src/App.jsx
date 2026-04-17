@@ -195,9 +195,9 @@ var ETYPES = Object.keys(ECFG)
 var CPROPS = {
   solid:    { color:"#2244cc", alpha:1 },
   shape:    { shapeType:"ellipse", x:.5, y:.5, sz:.6, rot:0, fill:"#ffffff", stroke:"#000000", strokeW:0, pts:5, innerR:.45, sides:5, ringR:.62, alpha:1 },
-  gradient: { gType:"radial", c1:"#ff2277", c2:"#000022", s1:0, s2:1, angle:90, cx:.5, cy:.5, r:.7, sa:0, alpha:1 },
+  gradient: { gType:"radial", stops:[{pos:0,color:"#ff2277",alpha:1},{pos:1,color:"#000022",alpha:1}], angle:90, cx:.5, cy:.5, r:.7, sa:0, alpha:1 },
   noise:    { nType:"perlin", c1:"#ffffff", c2:"#000000", scale:.04, oct:4, seed:1, alpha:1 },
-  pattern:  { pType:"checkerboard", c1:"#ffffff", c2:"#000000", scale:.1, sw:.1, angle:0, dr:.03, ds:.1, alpha:1 },
+  pattern:  { pType:"checkerboard", c1:"#ffffff", a1:1, c2:"#000000", a2:1, scale:.1, sw:.1, angle:0, dr:.03, ds:.1, alpha:1 },
   image:    { url:"", fit:"contain", alpha:1 }
 }
 // Creator defaults override via localStorage.
@@ -686,16 +686,31 @@ function gShape(ctx,p,w,h) {
   if(strokeW>0){ctx.strokeStyle=stroke;ctx.lineWidth=strokeW;ctx.stroke()}
   ctx.restore()
 }
+function gradStops(p) {
+  // Migrate old c1/s1/c2/s2 format to stops array, or return existing stops.
+  // stops: [{pos:0-1, color:"#rrggbb", alpha:0-1}]
+  if(p.stops&&p.stops.length>=2) return p.stops
+  var c1=p.c1||"#f03",c2=p.c2||"#00f"
+  return [{pos:p.s1||0,color:c1,alpha:p.a1==null?1:p.a1},{pos:p.s2||1,color:c2,alpha:p.a2==null?1:p.a2}]
+}
+function gradRgba(color,alpha) {
+  var s=(color||"#000000").replace("#","")
+  if(s.length===3)s=s.split("").map(function(c){return c+c}).join("")
+  var r=parseInt(s.slice(0,2),16)||0,g=parseInt(s.slice(2,4),16)||0,b=parseInt(s.slice(4,6),16)||0
+  return "rgba("+r+","+g+","+b+","+(alpha==null?1:alpha)+")"
+}
 function gGrad(ctx,p,w,h) {
-  var gType=p.gType||"radial",c1=p.c1||"#f03",c2=p.c2||"#00f",s1=p.s1||0,s2=p.s2||1
+  var gType=p.gType||"radial"
   var angle=p.angle||90,cx=p.cx||.5,cy=p.cy||.5,r=p.r||.7,sa=p.sa||0,alpha=p.alpha==null?1:p.alpha
+  var stops=gradStops(p).slice().sort(function(a,b){return a.pos-b.pos})
   ctx.save();ctx.globalAlpha=alpha;var g
   try {
     if(gType==="linear"){var rd=angle*Math.PI/180,d=Math.max(w,h)/2;g=ctx.createLinearGradient(w/2-Math.cos(rd)*d,h/2-Math.sin(rd)*d,w/2+Math.cos(rd)*d,h/2+Math.sin(rd)*d)}
     else if(gType==="radial")g=ctx.createRadialGradient(cx*w,cy*h,0,cx*w,cy*h,r*Math.max(w,h))
     else g=ctx.createConicGradient(sa*Math.PI/180,cx*w,cy*h)
-    g.addColorStop(Math.max(0,Math.min(s1,s2-.001)),c1);g.addColorStop(Math.min(1,Math.max(s2,s1+.001)),c2);ctx.fillStyle=g
-  } catch(e){ctx.fillStyle=c1}
+    stops.forEach(function(st){g.addColorStop(Math.max(0,Math.min(1,st.pos)),gradRgba(st.color,st.alpha))})
+    ctx.fillStyle=g
+  } catch(e){ctx.fillStyle=stops[0]?stops[0].color:"#f03"}
   ctx.fillRect(0,0,w,h);ctx.restore()
 }
 function gNoise(ctx,p,w,h) {
@@ -711,6 +726,7 @@ function gNoise(ctx,p,w,h) {
 function gPat(ctx,p,w,h) {
   var pType=p.pType||"checkerboard",c1=p.c1||"#fff",c2=p.c2||"#000"
   var scale=p.scale||.1,sw=p.sw||.1,angle=p.angle||0,dr=p.dr||.03,ds=p.ds||.1,alpha=p.alpha==null?1:p.alpha
+  var a1=p.a1==null?1:p.a1, a2=p.a2==null?1:p.a2   // per-colour alpha (0-1)
   var CA=h2r(c1),CB=h2r(c2)
   var img=ctx.createImageData(w,h),d=img.data
   // cs = cell size in pixels. scale is fraction of canvas dimension (0.1 = 10% = ~10 tiles across).
@@ -726,25 +742,23 @@ function gPat(ctx,p,w,h) {
     if(pType==="checkerboard"){
       var t=(Math.floor(px/cs)+Math.floor(py/cs))%2
       r=t===0?CA.r:CB.r; g=t===0?CA.g:CB.g; b=t===0?CA.b:CB.b
-      d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=255
+      d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=Math.round((t===0?a1:a2)*255)
 
     } else if(pType==="stripes"){
       var pj=px*Math.cos(rad)+py*Math.sin(rad)
       var t2=((pj%(sW*2))+sW*2)%(sW*2)<sW?0:1
       r=t2===0?CA.r:CB.r; g=t2===0?CA.g:CB.g; b=t2===0?CA.b:CB.b
-      d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=255
+      d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=Math.round((t2===0?a1:a2)*255)
 
     } else if(pType==="dots"){
-      // Anti-aliased dots: blend at the 1px boundary using distance from edge
       var gx=((px%dS)+dS)%dS-dS/2
       var gy=((py%dS)+dS)%dS-dS/2
       var dist=Math.sqrt(gx*gx+gy*gy)
-      // t=0 inside dot (CA), t=1 outside (CB). Feather 1px at edge.
       var blend=Math.max(0,Math.min(1,dist-dR+0.5))
       r=Math.round(CA.r*(1-blend)+CB.r*blend)
       g=Math.round(CA.g*(1-blend)+CB.g*blend)
       b=Math.round(CA.b*(1-blend)+CB.b*blend)
-      d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=255
+      d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=Math.round((a1*(1-blend)+a2*blend)*255)
     }
   }
   ctx.save();ctx.globalAlpha=alpha;ctx.putImageData(img,0,0);ctx.restore()
@@ -1309,23 +1323,81 @@ function ShapeP(props) {
 }
 function GradP(props) {
   var p=props.p, up=props.up
+  // Migrate legacy c1/s1/c2/s2 to stops on first render via gradStops helper
+  var stops=gradStops(p).slice().sort(function(a,b){return a.pos-b.pos})
+  function setStops(ns){up(Object.assign({},p,{stops:ns,c1:undefined,s1:undefined,c2:undefined,s2:undefined}))}
+  function updStop(i,patch){setStops(stops.map(function(s,si){return si===i?Object.assign({},s,patch):s}))}
+  function addStop(){
+    // Insert at widest gap, interpolate colour + alpha
+    var maxGap=0,ins=.5,insC="#808080",insA=1
+    for(var i=0;i<stops.length-1;i++){
+      var gap=stops[i+1].pos-stops[i].pos
+      if(gap>maxGap){
+        maxGap=gap; ins=stops[i].pos+gap/2
+        function ph(h){var s=(h||"#000").replace("#","");if(s.length===3)s=s.split("").map(function(c){return c+c}).join("");return[parseInt(s.slice(0,2),16)||0,parseInt(s.slice(2,4),16)||0,parseInt(s.slice(4,6),16)||0]}
+        var r1=ph(stops[i].color),r2=ph(stops[i+1].color)
+        insC="#"+[0,1,2].map(function(j){return Math.round((r1[j]+r2[j])/2).toString(16).padStart(2,"0")}).join("")
+        var ai=stops[i].alpha==null?1:stops[i].alpha, aj=stops[i+1].alpha==null?1:stops[i+1].alpha
+        insA=(ai+aj)/2
+      }
+    }
+    setStops(stops.concat([{pos:ins,color:insC,alpha:insA}]))
+  }
+  function delStop(i){if(stops.length<=2)return;setStops(stops.filter(function(_,si){return si!==i}))}
+  // CSS preview strip using rgba stops
+  var previewStops=stops.map(function(s){
+    var hex=(s.color||"#000000").replace("#",""),a=s.alpha==null?1:s.alpha
+    if(hex.length===3)hex=hex.split("").map(function(c){return c+c}).join("")
+    return "rgba("+[parseInt(hex.slice(0,2),16),parseInt(hex.slice(2,4),16),parseInt(hex.slice(4,6),16),a].join(",")+" "+(s.pos*100).toFixed(1)+"%"
+  }).join(",")
   return (
     <div>
       <Se l="type" v={p.gType} opts={GTYPES} fn={function(v){up(Object.assign({},p,{gType:v}))}}/>
-      <Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>
-      <Sl l="stop 1" v={p.s1} mn={0} mx={.999} st={.01} fn={function(v){up(Object.assign({},p,{s1:v}))}}/>
-      <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
-      <Sl l="stop 2" v={p.s2} mn={.001} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{s2:v}))}}/>
-      {p.gType==="linear" && <Sl l="angle" v={p.angle} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>}
+      {/* Gradient preview */}
+      <div style={{height:24,borderRadius:5,margin:"4px 0 8px",border:"1px solid var(--bd)",
+        background:"linear-gradient(to right,"+previewStops+"),repeating-conic-gradient(#1a1a38 0deg 90deg,#121228 90deg 180deg) 0 0 / 10px 10px"}}/>
+      {/* Stops editor */}
+      <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
+        {stops.map(function(s,i){
+          var aVal=s.alpha==null?1:s.alpha
+          return (
+            <div key={i} style={{background:"rgba(20,20,44,.5)",border:"1px solid var(--bd)",borderRadius:6,padding:"6px 8px",display:"flex",flexDirection:"column",gap:4}}>
+              {/* Row 1: swatch + position + delete */}
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input type="color" value={s.color||"#ffffff"}
+                  onChange={function(e){updStop(i,{color:e.target.value})}}
+                  style={{width:32,height:28,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer",flexShrink:0}}/>
+                <span style={{fontSize:9,color:"var(--mu)",flexShrink:0}}>pos</span>
+                <input type="range" min={0} max={1} step={.001} value={s.pos}
+                  onChange={function(e){updStop(i,{pos:parseFloat(e.target.value)})}}
+                  style={{flex:1}}/>
+                <span style={{fontSize:10,color:"var(--di)",minWidth:38,textAlign:"right",flexShrink:0}}>{(s.pos*100).toFixed(1)}%</span>
+                <button onClick={function(){delStop(i)}} disabled={stops.length<=2}
+                  style={{minHeight:28,padding:"0 8px",fontSize:12,color:stops.length<=2?"var(--mu)":"var(--dng)",background:"none",border:"none",cursor:stops.length<=2?"default":"pointer",flexShrink:0}}>×</button>
+              </div>
+              {/* Row 2: alpha */}
+              <div style={{display:"flex",gap:6,alignItems:"center",paddingLeft:38}}>
+                <span style={{fontSize:9,color:"var(--mu)",flexShrink:0,minWidth:14}}>α</span>
+                <input type="range" min={0} max={1} step={.01} value={aVal}
+                  onChange={function(e){updStop(i,{alpha:parseFloat(e.target.value)})}}
+                  style={{flex:1}}/>
+                <span style={{fontSize:10,color:"var(--di)",minWidth:38,textAlign:"right",flexShrink:0}}>{Math.round(aVal*100)}%</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <button className="ac" style={{width:"100%",marginBottom:8}} onClick={addStop}>+ stop</button>
+      {p.gType==="linear" && <Sl l="angle" v={p.angle||90} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>}
       {(p.gType==="radial"||p.gType==="conic") && (
         <div>
-          <Sl l="centre x" v={p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
-          <Sl l="centre y" v={p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+          <Sl l="centre x" v={p.cx||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+          <Sl l="centre y" v={p.cy||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
         </div>
       )}
-      {p.gType==="radial" && <Sl l="radius" v={p.r} mn={.01} mx={2.5} st={.01} fn={function(v){up(Object.assign({},p,{r:v}))}}/>}
-      {p.gType==="conic" && <Sl l="start" v={p.sa} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{sa:v}))}}/>}
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      {p.gType==="radial" && <Sl l="radius" v={p.r||.7} mn={.01} mx={2.5} st={.01} fn={function(v){up(Object.assign({},p,{r:v}))}}/>}
+      {p.gType==="conic" && <Sl l="start" v={p.sa||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{sa:v}))}}/>}
+      <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
   )
 }
@@ -1349,7 +1421,9 @@ function PatP(props) {
     <div>
       <Se l="type" v={p.pType} opts={PTYPES} fn={function(v){up(Object.assign({},p,{pType:v}))}}/>
       <Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>
+      <Sl l="opacity 1" v={p.a1==null?1:p.a1} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a1:v}))}}/>
       <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
+      <Sl l="opacity 2" v={p.a2==null?1:p.a2} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a2:v}))}}/>
       <Sl l="scale" v={p.scale} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
       {p.pType==="stripes" && (
         <div>
