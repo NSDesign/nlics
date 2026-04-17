@@ -161,6 +161,7 @@ var ECFG   = {
   levels:     ["gamma",0.1,4,.05,1],
   posterize:  ["levels",2,16,1,4]
 }
+// Colour map uses an array of stops, handled specially (not via ECFG)
 // Curves effect has no single inline-slider param (uses in/out point pairs), handled separately
 var ECFG_CURVES_ONLY = ["curves"]
 var ETYPES = Object.keys(ECFG)
@@ -180,6 +181,11 @@ function mkEfx(t) {
   var params=cfg ? { [cfg[0]]:cfg[4] } : {}
   if(t==="curves")    params={inBlack:0,inWhite:255,outBlack:0,outWhite:255,sCurve:0}
   if(t==="transform") params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
+  if(t==="colour-map") params={
+    stops:[{pos:0,color:"#000000"},{pos:1,color:"#ffffff"}],
+    reverse:false,
+    amount:100
+  }
   return { id:uid(), type:t, enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[] }
 }
 function mkMask() { return { id:uid(), refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
@@ -312,6 +318,40 @@ function pxFn(d,w,h,t,p) {
       clut[li]=Math.round(outB+(outW-outB)*Math.max(0,Math.min(1,norm)))
     }
     for(i=0;i<d.length;i+=4){d[i]=clut[d[i]];d[i+1]=clut[d[i+1]];d[i+2]=clut[d[i+2]]}
+  } else if (t==="colour-map") {
+    // Map luminosity [0..1] through a sorted list of colour stops, producing
+    // a 256-entry RGB lookup. Each pixel's luminosity indexes the lookup.
+    var stops=(p.stops||[]).slice().sort(function(a,b){return a.pos-b.pos})
+    if(stops.length<2){stops=[{pos:0,color:"#000000"},{pos:1,color:"#ffffff"}]}
+    if(p.reverse){stops=stops.slice().reverse().map(function(s){return {pos:1-s.pos,color:s.color}})}
+    function parseHex(h){
+      var s=(h||"#000000").replace("#","")
+      if(s.length===3)s=s.split("").map(function(c){return c+c}).join("")
+      return [parseInt(s.slice(0,2),16)||0,parseInt(s.slice(2,4),16)||0,parseInt(s.slice(4,6),16)||0]
+    }
+    var rgbs=stops.map(function(s){return parseHex(s.color)})
+    var lutR=new Uint8Array(256), lutG=new Uint8Array(256), lutB=new Uint8Array(256)
+    for(var cli=0;cli<256;cli++){
+      var t01=cli/255
+      // find surrounding stops
+      var si=0
+      while(si<stops.length-1 && t01>stops[si+1].pos) si++
+      var s0=stops[si], s1=stops[Math.min(si+1,stops.length-1)]
+      var range=s1.pos-s0.pos
+      var local=range>0?(t01-s0.pos)/range:0
+      local=Math.max(0,Math.min(1,local))
+      var c0=rgbs[si], c1=rgbs[Math.min(si+1,stops.length-1)]
+      lutR[cli]=Math.round(c0[0]+(c1[0]-c0[0])*local)
+      lutG[cli]=Math.round(c0[1]+(c1[1]-c0[1])*local)
+      lutB[cli]=Math.round(c0[2]+(c1[2]-c0[2])*local)
+    }
+    var mix=(p.amount==null?100:p.amount)/100
+    for(i=0;i<d.length;i+=4){
+      var lum=Math.round(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])
+      d[i]  =Math.round(d[i]  *(1-mix)+lutR[lum]*mix)
+      d[i+1]=Math.round(d[i+1]*(1-mix)+lutG[lum]*mix)
+      d[i+2]=Math.round(d[i+2]*(1-mix)+lutB[lum]*mix)
+    }
   }
   // NOTE: "transform" is handled specially in applyEfxStk (needs full canvas context, not just ImageData)
 }
@@ -555,7 +595,8 @@ function applyBack(pre,post,mv,opacity,mode) {
 }
 function compMasks(stack,cmap,cache,iC,w,h,vis) {
   var out=new Float32Array(w*h).fill(1),any=false
-  for(var mi=0;mi<stack.length;mi++){
+  // Bottom-to-top iteration: last in list applied first, first in list applied last
+  for(var mi=stack.length-1;mi>=0;mi--){
     var mk=stack[mi];if(mk.enabled===false)continue
     // Stack reference — apply referenced Mask Stack with opacity/blendMode control
     if(mk.type==="__stackref__"){
@@ -603,7 +644,9 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
   return any?out:null
 }
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
-  for(var ei=0;ei<stack.length;ei++){
+  // Iterate bottom-to-top: last item in list is applied first (bottom layer),
+  // first item in list is applied last (top layer). Standard layer convention.
+  for(var ei=stack.length-1;ei>=0;ei--){
     var efx=stack[ei]; if(!efx.enabled) continue
     // Stack reference — apply referenced Effect Stack with opacity/blendMode control
     if(efx.type==="__stackref__"){
@@ -681,7 +724,10 @@ function blendCv(ctx,srcCv,mode,amount,w,h) {
 // Partially evaluate an effect stack up to and including a given effect id.
 // withSub: if true, also apply that effect's own maskStack (for promoted taps that include the masked result).
 function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
-  for(var ei=0;ei<stack.length;ei++){
+  // Find the index of afterId in the stack (display order top-to-bottom)
+  var afterIdx=-1; for(var fi=0;fi<stack.length;fi++){if(stack[fi].id===afterId){afterIdx=fi;break}}
+  // Iterate bottom-to-top, stopping at afterIdx (inclusive)
+  for(var ei=stack.length-1;ei>=(afterIdx>=0?afterIdx:0);ei--){
     var efx=stack[ei]; if(!efx.enabled)continue
     if(efx.type==="transform"){applyTransform(ctx,efx.params,w,h)}
     else {
@@ -693,14 +739,14 @@ function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
       applyBack(pre.data,post,mv,efx.opacity,efx.blendMode||"normal")
       ctx.putImageData(pre,0,0)
     }
-    if(efx.id===afterId)break
   }
 }
 // Partially evaluate a mask stack up to and including a given mask id.
 // Returns the Float32Array of mask values at that point.
 function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
   var out=new Float32Array(w*h).fill(1),any=false
-  for(var mi=0;mi<stack.length;mi++){
+  var afterIdx=-1; for(var fi=0;fi<stack.length;fi++){if(stack[fi].id===afterId){afterIdx=fi;break}}
+  for(var mi=stack.length-1;mi>=(afterIdx>=0?afterIdx:0);mi--){
     var mk=stack[mi];if(mk.enabled===false||!mk.refId||vis.has(mk.refId))continue
     var cv=compAny(mk.refId,cmap,cache,iC,w,h,new Set(vis));if(!cv)continue;any=true
     var useSub = withSub || mk.id!==afterId
@@ -720,7 +766,6 @@ function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
       else if(mk.blendMode==="normal")out[ii]=mv2
       else out[ii]*=mv2
     }
-    if(mk.id===afterId)break
   }
   return any?out:null
 }
@@ -804,8 +849,9 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     if(n.stackType==="effect"&&(n.effectStack||[]).length>0){
       applyEfxStk(pctx,n.effectStack,cmap,cache,iC,w,h,spVis)
     } else if(n.stackType==="mask"&&(n.maskStack||[]).length>0){
-      // Mask stack: render as pure grayscale (white=fully unmasked, black=fully masked)
-      // This matches how all professional compositing tools display masks/mattes
+      // Mask stack: render as greyscale. White = fully unmasked, black = fully masked.
+      // When compMasks returns null (no mask has a valid source), fall back to
+      // displaying the preview source as greyscale so the preview is still useful.
       var mv=compMasks(n.maskStack,cmap,cache,iC,w,h,spVis)
       var gid=pctx.createImageData(w,h)
       if(mv){
@@ -813,13 +859,19 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
           var gv=Math.round(mv[gi]*255)
           gid.data[gi*4]=gv; gid.data[gi*4+1]=gv; gid.data[gi*4+2]=gv; gid.data[gi*4+3]=255
         }
+        pctx.putImageData(gid,0,0)
       }else{
-        // No masks computed — show white (fully unmasked)
+        // No valid mask values — show the preview source as greyscale so the user
+        // can still see the base and understands the mask has no source set yet.
+        var srcData=pctx.getImageData(0,0,w,h)
+        var sd=srcData.data
         for(var gi2=0;gi2<w*h;gi2++){
-          gid.data[gi2*4]=255;gid.data[gi2*4+1]=255;gid.data[gi2*4+2]=255;gid.data[gi2*4+3]=255
+          var pi=gi2*4
+          var lum=Math.round(0.299*sd[pi]+0.587*sd[pi+1]+0.114*sd[pi+2])
+          gid.data[pi]=lum; gid.data[pi+1]=lum; gid.data[pi+2]=lum; gid.data[pi+3]=255
         }
+        pctx.putImageData(gid,0,0)
       }
-      pctx.putImageData(gid,0,0)
     }
     cache.set(id,pcv);vis.delete(id);return pcv
   }
@@ -1063,6 +1115,97 @@ function CreatorProps(props) {
 }
 
 /* ─── EFFECT PRIMARY PARAMS ──────────────────────────── */
+/* ─── COLOUR MAP EDITOR ──────────────────────────────── */
+function ColourMapEditor(props) {
+  var p=props.p, up=props.up
+  var stops=(p.stops||[]).slice().sort(function(a,b){return a.pos-b.pos})
+  function setStops(ns){up({stops:ns})}
+  function updStop(i,nw){var ns=stops.map(function(s,si){return si===i?Object.assign({},s,nw):s});setStops(ns)}
+  function addStop(){
+    // Insert new stop at midpoint between two adjacent stops that are farthest apart
+    var maxGap=0,insertAt=.5,afterColor="#808080"
+    for(var i=0;i<stops.length-1;i++){
+      var gap=stops[i+1].pos-stops[i].pos
+      if(gap>maxGap){maxGap=gap;insertAt=stops[i].pos+gap/2
+        // interpolate colour
+        var c1=stops[i].color,c2=stops[i+1].color
+        function ph(h){var s=h.replace("#","");return [parseInt(s.slice(0,2),16)||0,parseInt(s.slice(2,4),16)||0,parseInt(s.slice(4,6),16)||0]}
+        var r1=ph(c1),r2=ph(c2)
+        var ri=Math.round((r1[0]+r2[0])/2),gi=Math.round((r1[1]+r2[1])/2),bi=Math.round((r1[2]+r2[2])/2)
+        afterColor="#"+[ri,gi,bi].map(function(v){return v.toString(16).padStart(2,"0")}).join("")
+      }
+    }
+    setStops(stops.concat([{pos:insertAt,color:afterColor}]))
+  }
+  function delStop(i){
+    if(stops.length<=2)return // keep at least 2
+    setStops(stops.filter(function(_,si){return si!==i}))
+  }
+  function distribute(mode){
+    var n=stops.length
+    if(n<2)return
+    var ns=stops.map(function(s,i){
+      var t=i/(n-1)
+      var pos=t
+      if(mode==="even")         pos=t
+      else if(mode==="expo")    pos=t*t
+      else if(mode==="log")     pos=Math.sqrt(t)
+      return Object.assign({},s,{pos:pos})
+    })
+    setStops(ns)
+  }
+  // Build CSS gradient preview
+  var grad=(p.reverse?stops.slice().reverse().map(function(s){return {pos:1-s.pos,color:s.color}}):stops)
+    .map(function(s){return s.color+" "+(s.pos*100).toFixed(1)+"%"}).join(",")
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {/* Gradient preview strip */}
+      <div style={{height:32,borderRadius:6,border:"1px solid var(--bd)",
+        background:"linear-gradient(to right,"+grad+")"}}/>
+      {/* Stops list */}
+      <div style={{display:"flex",flexDirection:"column",gap:4}}>
+        <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em"}}>stops</div>
+        {stops.map(function(s,i){
+          return (
+            <div key={i} style={{display:"flex",gap:6,alignItems:"center",padding:"4px 0"}}>
+              <input type="color" value={s.color}
+                onChange={function(e){updStop(i,{color:e.target.value})}}
+                style={{width:32,height:28,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
+              <input type="range" min={0} max={1} step={0.001} value={s.pos}
+                onChange={function(e){updStop(i,{pos:parseFloat(e.target.value)})}}
+                style={{flex:1}}/>
+              <span style={{fontSize:10,color:"var(--di)",minWidth:38,textAlign:"right"}}>
+                {(s.pos*100).toFixed(1)}%
+              </span>
+              <button onClick={function(){delStop(i)}} disabled={stops.length<=2}
+                style={{minHeight:28,padding:"0 8px",fontSize:12,color:stops.length<=2?"var(--mu)":"var(--dng)",
+                background:"none",border:"none",cursor:stops.length<=2?"default":"pointer"}}>×</button>
+            </div>
+          )
+        })}
+      </div>
+      {/* Controls */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <button className="ac" style={{flex:"1 1 0",minWidth:90}} onClick={addStop}>+ stop</button>
+        <button onClick={function(){up({reverse:!p.reverse})}}
+          className={p.reverse?"ac":"ghost"}
+          style={{flex:"1 1 0",minWidth:90}}>
+          {p.reverse?"reversed":"reverse"}
+        </button>
+      </div>
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        <span style={{fontSize:9,color:"var(--mu)",alignSelf:"center",marginRight:4}}>distribute</span>
+        <button className="ghost" style={{fontSize:10,padding:"4px 10px"}} onClick={function(){distribute("even")}}>even</button>
+        <button className="ghost" style={{fontSize:10,padding:"4px 10px"}} onClick={function(){distribute("expo")}}>expo</button>
+        <button className="ghost" style={{fontSize:10,padding:"4px 10px"}} onClick={function(){distribute("log")}}>log</button>
+      </div>
+      <Sl l="mix" v={p.amount!=null?p.amount:100} mn={0} mx={100} st={1}
+        fmt={function(v){return Math.round(v)+"%"}}
+        fn={function(v){up({amount:v})}}/>
+    </div>
+  )
+}
+
 function EfxPrimary(props) {
   var efx=props.efx, p=efx.params
   function up(np){props.onChange(Object.assign({},efx,{params:Object.assign({},p,np)}))}
@@ -1086,6 +1229,7 @@ function EfxPrimary(props) {
       <Sl l="S-curve"   v={p.sCurve||0}                     mn={-100} mx={100} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({sCurve:v})}}/>
     </div>
   )
+  if(efx.type==="colour-map") return <ColourMapEditor efx={efx} p={p} up={up}/>
   if(efx.type==="transform") return (
     <div>
       <Sl l="translate x" v={p.tx||0}  mn={-.5} mx={.5}   st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({tx:v})}}/>
@@ -1304,7 +1448,7 @@ function EfxCard(props) {
             )
           })}
           <button className="lv" style={{width:"100%",marginTop:4}} onClick={function(){
-            var ms=(efx.maskStack||[]).concat([mkMask()])
+            var ms=[mkMask()].concat(efx.maskStack||[])
             props.onChange(Object.assign({},efx,{maskStack:ms}))
           }}>+ add mask</button>
         </div>
@@ -1316,7 +1460,7 @@ function EfxCard(props) {
 /* ─── ADD EFFECT MENU ─────────────────────────────────── */
 var EFX_GROUPS=[
   {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
-  {label:"Colour",   items:["hue-shift","saturation","vibrance"]},
+  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
   {label:"Pixel",    items:["blur","invert","threshold"]},
   {label:"Transform",items:["transform"]},
 ]
@@ -1407,9 +1551,9 @@ function EfxStack(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[lkOpen])
 
-  function addEfx(type){props.onChange(props.stack.concat([mkEfx(type)]))}
+  function addEfx(type){props.onChange([mkEfx(type)].concat(props.stack))}
   function linkStack(stackId){
-    props.onChange(props.stack.concat([mkEfxStackRef(stackId)]))
+    props.onChange([mkEfxStackRef(stackId)].concat(props.stack))
     setLkOpen(false)
   }
   function upd(id,nw){props.onChange(props.stack.map(function(e){return e.id===id?nw:e}))}
@@ -1510,9 +1654,9 @@ function MaskStackPanel(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[lkOpen])
 
-  function addMask(){props.onChange(props.stack.concat([mkMask()]))}
+  function addMask(){props.onChange([mkMask()].concat(props.stack))}
   function linkStack(stackId){
-    props.onChange(props.stack.concat([mkMaskStackRef(stackId)]))
+    props.onChange([mkMaskStackRef(stackId)].concat(props.stack))
     setLkOpen(false)
   }
   function upd(id,nw){props.onChange(props.stack.map(function(m){return m.id===id?nw:m}))}
