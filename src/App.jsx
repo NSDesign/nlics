@@ -1233,8 +1233,8 @@ function AddEfxMenu(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
   return (
-    <div ref={ref} style={{position:"relative",marginTop:4}}>
-      <button className="ac" style={{width:"100%"}} onClick={function(){setOpen(!open)}}>+ add effect</button>
+    <div ref={ref} style={{position:"relative",flex:2,minWidth:0}}>
+      <button className="ac" style={{width:"100%",height:"100%"}} onClick={function(){setOpen(!open)}}>+ effect</button>
       {open && (
         <div className="eff-menu">
           {EFX_GROUPS.map(function(grp){
@@ -1317,28 +1317,36 @@ function EfxStack(props) {
           />
         )
       })}
-      <div style={{display:"flex",gap:6,marginTop:4}}>
-        <div style={{flex:1}}><AddEfxMenu onAdd={addEfx}/></div>
-        {efxStacks.length>0&&(
-          <div ref={lkRef} style={{position:"relative",flexShrink:0}}>
-            <button className="ac" style={{fontSize:10,padding:"0 10px"}}
-              onClick={function(){setLkOpen(!lkOpen)}}>↗ Stack</button>
-            {lkOpen&&(
-              <div className="eff-menu" style={{width:180}}>
-                {efxStacks.map(function(n){
-                  return(
-                    <div key={n.id} className="drop-item" onClick={function(){linkStack(n.id)}}>
-                      {n.name}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
+      <div style={{display:"flex",gap:4,marginTop:6,alignItems:"stretch",minHeight:36}}>
+        {/* + effect — 2 parts */}
+        <AddEfxMenu onAdd={addEfx}/>
+        {/* + stack — 2 parts */}
+        <div ref={lkRef} style={{position:"relative",flex:2,minWidth:0}}>
+          <button className="ac" style={{width:"100%",height:"100%",fontSize:11}}
+            onClick={function(){setLkOpen(!lkOpen)}}>+ stack</button>
+          {lkOpen&&(
+            <div className="eff-menu" style={{left:0,right:0}}>
+              {efxStacks.length===0
+                ? <div className="drop-item" style={{color:"var(--mu)",cursor:"default"}}>no effect stacks yet</div>
+                : efxStacks.map(function(n){
+                    return(
+                      <div key={n.id} className="drop-item" onClick={function(){linkStack(n.id)}}>
+                        {n.name}
+                      </div>
+                    )
+                  })
+              }
+            </div>
+          )}
+        </div>
+        {/* extract — 1 part */}
         {props.onExtract&&props.stack.length>0&&(
-          <button className="promote-btn" style={{flexShrink:0}} onClick={props.onExtract}
-            title="Extract to Effect Stack node">↗ Extract</button>
+          <button className="promote-btn" style={{flex:1,minWidth:0,fontSize:10}}
+            onClick={props.onExtract} title="Extract to Effect Stack node">↗</button>
+        )}
+        {/* placeholder to keep grid when extract not shown */}
+        {!(props.onExtract&&props.stack.length>0)&&(
+          <div style={{flex:1}}/>
         )}
       </div>
     </div>
@@ -1399,28 +1407,37 @@ function MaskStackPanel(props) {
           />
         )
       })}
-      <div style={{display:"flex",gap:6,marginTop:4,flexWrap:"wrap"}}>
-        <button className="lv" style={{flex:1,minWidth:100}} onClick={addMask}>+ add mask</button>
-        {mskStacks.length>0&&(
-          <div ref={lkRef} style={{position:"relative",flexShrink:0}}>
-            <button className="lv" style={{fontSize:10,padding:"0 10px"}}
-              onClick={function(){setLkOpen(!lkOpen)}}>↗ Stack</button>
-            {lkOpen&&(
-              <div className="eff-menu" style={{width:180}}>
-                {mskStacks.map(function(n){
-                  return(
-                    <div key={n.id} className="drop-item" onClick={function(){linkStack(n.id)}}>
-                      {n.name}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
+      <div style={{display:"flex",gap:4,marginTop:6,alignItems:"stretch",minHeight:36}}>
+        {/* + mask — 2 parts */}
+        <button className="lv" style={{flex:2,minWidth:0,fontSize:11}}
+          onClick={addMask}>+ mask</button>
+        {/* + stack — 2 parts */}
+        <div ref={lkRef} style={{position:"relative",flex:2,minWidth:0}}>
+          <button className="lv" style={{width:"100%",height:"100%",fontSize:11}}
+            onClick={function(){setLkOpen(!lkOpen)}}>+ stack</button>
+          {lkOpen&&(
+            <div className="eff-menu" style={{left:0,right:0}}>
+              {mskStacks.length===0
+                ? <div className="drop-item" style={{color:"var(--mu)",cursor:"default"}}>no mask stacks yet</div>
+                : mskStacks.map(function(n){
+                    return(
+                      <div key={n.id} className="drop-item" onClick={function(){linkStack(n.id)}}>
+                        {n.name}
+                      </div>
+                    )
+                  })
+              }
+            </div>
+          )}
+        </div>
+        {/* extract — 1 part */}
         {props.onExtract&&props.stack.length>0&&(
-          <button className="promote-btn" style={{flexShrink:0}} onClick={props.onExtract}
-            title="Extract to Mask Stack node">↗ Extract</button>
+          <button className="promote-btn" style={{flex:1,minWidth:0,fontSize:10}}
+            onClick={props.onExtract} title="Extract to Mask Stack node">↗</button>
+        )}
+        {/* placeholder to keep grid when extract not shown */}
+        {!(props.onExtract&&props.stack.length>0)&&(
+          <div style={{flex:1}}/>
         )}
       </div>
     </div>
