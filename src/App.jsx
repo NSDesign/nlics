@@ -46,14 +46,19 @@ button.icon-btn.sm{width:var(--tap-sm);height:var(--tap-sm);font-size:14px;}
 .bp-toggle{display:inline-flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden;height:40px;}
 .bp-toggle button{background:none;border:none;color:var(--mu);padding:0 14px;cursor:pointer;height:100%;display:inline-flex;align-items:center;justify-content:center;}
 .bp-toggle button svg{display:block;}
-.bp-toggle button.active{background:var(--sl);color:var(--ac);}
+.bp-toggle button:hover,.bp-toggle button:active,.bp-toggle button:focus{background:none;border-color:var(--bd);color:var(--mu);}
+.bp-toggle button.active,.bp-toggle button.active:hover,.bp-toggle button.active:active{background:var(--sl);color:var(--ac);}
 .bp-toggle button+button{border-left:1px solid var(--bd);}
 .bp-tabs{display:flex;gap:4px;padding:6px 10px 4px;flex-wrap:wrap;}
-.bp-tab{flex:1 1 0;min-width:0;background:var(--sf);border:1px solid var(--bd);color:var(--mu);padding:8px 6px;font-size:10px;font-family:'IBM Plex Mono',monospace;border-radius:6px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;min-height:36px;}
-.bp-tab.on{background:var(--sl);color:var(--tx);border-color:var(--ac);}
-.bp-tab.on.lv{border-color:var(--lv);color:var(--lv);}
-.bp-tab.on.co{border-color:var(--co);color:var(--co);}
-.bp-tab.on.di{border-color:var(--di);color:var(--di);}
+.bp-tab{flex:1 1 0;min-width:0;background:var(--sf);border:1px solid var(--bd);color:var(--mu);padding:8px 6px;font-size:10px;font-family:'IBM Plex Mono',monospace;border-radius:6px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;min-height:36px;transition:background .1s,border-color .1s,color .1s;}
+/* Override global button:hover/:active which would otherwise paint all buttons
+   green (var(--ac)) on tap and leave mobile tabs stuck in hover state. */
+button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf);border-color:var(--bd);color:var(--mu);}
+.bp-tab.on,button.bp-tab.on:hover,button.bp-tab.on:active,button.bp-tab.on:focus{background:var(--sl);color:var(--tx);border-color:var(--ac);}
+.bp-tab.on.ac,button.bp-tab.on.ac:hover,button.bp-tab.on.ac:active{border-color:var(--ac);color:var(--ac);}
+.bp-tab.on.lv,button.bp-tab.on.lv:hover,button.bp-tab.on.lv:active{border-color:var(--lv);color:var(--lv);}
+.bp-tab.on.co,button.bp-tab.on.co:hover,button.bp-tab.on.co:active{border-color:var(--co);color:var(--co);}
+.bp-tab.on.di,button.bp-tab.on.di:hover,button.bp-tab.on.di:active{border-color:var(--di);color:var(--di);}
 
 .card-body{padding:10px 12px;}
 .tabs{display:flex;gap:2px;padding:6px 8px;background:var(--bg);border-bottom:1px solid var(--bd);}
@@ -2169,7 +2174,7 @@ function BlenderProps(props) {
       {layout==="tabs" ? (
         <div>
           <div className="bp-tabs">
-            <button className={"bp-tab"+(activeTabs.inputA?" on":"")} onClick={function(){toggleTab("inputA")}}>Input A</button>
+            <button className={"bp-tab"+(activeTabs.inputA?" on ac":"")} onClick={function(){toggleTab("inputA")}}>Input A</button>
             <button className={"bp-tab"+(activeTabs.blend?" on di":"")} onClick={function(){toggleTab("blend")}}>Blend</button>
             <button className={"bp-tab"+(activeTabs.inputB?" on co":"")} onClick={function(){toggleTab("inputB")}}>Input B</button>
             <button className={"bp-tab"+(activeTabs.output?" on lv":"")} onClick={function(){toggleTab("output")}}>Output</button>
