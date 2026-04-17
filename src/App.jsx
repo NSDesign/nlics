@@ -710,8 +710,11 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
       continue
     }
     if(!mk.refId||vis.has(mk.refId))continue
-    var visMk=new Set(vis); visMk.add(mk.refId)
+    // Do NOT pre-add mk.refId to vis. compAny adds/removes its own id internally.
+    // Pre-adding caused compAny's vis.has(id) guard to always fire, returning null.
+    var visMk=new Set(vis)
     var cv=compAny(mk.refId,cmap,cache,iC,w,h,visMk);if(!cv)continue;any=true
+    visMk.add(mk.refId) // now safe to mark visited for effectStack processing below
     if(mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,visMk)}
     var src=clCv(cv,w,h).getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
     for(var ii=0;ii<w*h;ii++){
