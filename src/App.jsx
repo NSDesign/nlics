@@ -173,6 +173,50 @@ var CPROPS = {
   pattern:  { pType:"checkerboard", c1:"#ffffff", c2:"#000000", scale:.1, sw:.1, angle:0, dr:.03, ds:.1, alpha:1 },
   image:    { url:"", fit:"contain", alpha:1 }
 }
+// Creator defaults override via localStorage.
+// Saved defaults take precedence over built-in CPROPS when creating new nodes.
+// Image URLs are deliberately stripped when saving — URLs are per-instance.
+var CDEF_KEY = "nlics:creator-defaults:v1"
+function getCreatorDefaults(type) {
+  try {
+    var raw = localStorage.getItem(CDEF_KEY)
+    if(raw){
+      var saved = JSON.parse(raw)
+      if(saved && saved[type]) return Object.assign({}, CPROPS[type]||{}, saved[type])
+    }
+  } catch(e) {}
+  return Object.assign({}, CPROPS[type]||{})
+}
+function saveCreatorDefault(type, props) {
+  try {
+    var raw = localStorage.getItem(CDEF_KEY)
+    var all = raw ? JSON.parse(raw) : {}
+    // Strip volatile per-instance fields
+    var toSave = Object.assign({}, props)
+    if(type==="image") delete toSave.url
+    all[type] = toSave
+    localStorage.setItem(CDEF_KEY, JSON.stringify(all))
+    return true
+  } catch(e) { return false }
+}
+function resetCreatorDefault(type) {
+  try {
+    var raw = localStorage.getItem(CDEF_KEY)
+    if(!raw) return true
+    var all = JSON.parse(raw)
+    delete all[type]
+    localStorage.setItem(CDEF_KEY, JSON.stringify(all))
+    return true
+  } catch(e) { return false }
+}
+function hasCreatorDefault(type) {
+  try {
+    var raw = localStorage.getItem(CDEF_KEY)
+    if(!raw) return false
+    var all = JSON.parse(raw)
+    return !!(all && all[type])
+  } catch(e) { return false }
+}
 
 var _uid = 100
 function uid() { return "n" + (_uid++) }
@@ -186,12 +230,12 @@ function mkEfx(t) {
     reverse:false,
     amount:100
   }
-  return { id:uid(), type:t, enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[] }
+  return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[] }
 }
-function mkMask() { return { id:uid(), refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
+function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[] } }
 function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"screen", amount:100, switched:false, outEfx:[], outMask:[] } }
-function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:Object.assign({},CPROPS[t]) } }
+function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
 
 // Stack node — named reusable container for an effect or mask stack.
 // Not a compositor; has no source or inputs of its own.
@@ -203,10 +247,10 @@ function mkStack(stackType) {
 }
 // Stack reference item — sits in an effect or mask stack array as a first-class item
 function mkEfxStackRef(stackRefId) {
-  return { id:uid(), type:"__stackref__", stackRefId:stackRefId, enabled:true, opacity:100, blendMode:"normal" }
+  return { id:uid(), type:"__stackref__", name:"", stackRefId:stackRefId, enabled:true, opacity:100, blendMode:"normal" }
 }
 function mkMaskStackRef(stackRefId) {
-  return { id:uid(), type:"__stackref__", stackRefId:stackRefId, enabled:true, opacity:100, blendMode:"multiply" }
+  return { id:uid(), type:"__stackref__", name:"", stackRefId:stackRefId, enabled:true, opacity:100, blendMode:"multiply" }
 }
 
 // Promoted node — a named tap point on an intermediate chain state
@@ -1102,6 +1146,20 @@ function ImgP(props) {
 function CreatorProps(props) {
   var node=props.node, onUpdate=props.onUpdate, onLoad=props.onLoad
   function up(p){onUpdate(Object.assign({},node,{props:p}))}
+  var savedSt=useState(false); var savedMsg=savedSt[0], setSavedMsg=savedSt[1]
+  var hasSt=useState(hasCreatorDefault(node.type)); var hasDef=hasSt[0], setHasDef=hasSt[1]
+  function saveDefault(){
+    if(saveCreatorDefault(node.type, node.props)){
+      setSavedMsg("saved ✓"); setHasDef(true)
+      setTimeout(function(){setSavedMsg(false)},1800)
+    }
+  }
+  function resetDefault(){
+    if(resetCreatorDefault(node.type)){
+      setSavedMsg("cleared"); setHasDef(false)
+      setTimeout(function(){setSavedMsg(false)},1800)
+    }
+  }
   return (
     <div style={{padding:"12px 12px 4px"}}>
       {node.type==="solid"    && <SolidP p={node.props} up={up}/>}
@@ -1110,6 +1168,29 @@ function CreatorProps(props) {
       {node.type==="noise"    && <NoiseP p={node.props} up={up}/>}
       {node.type==="pattern"  && <PatP   p={node.props} up={up}/>}
       {node.type==="image"    && <ImgP   p={node.props} up={up} onLoad={onLoad}/>}
+      {/* Save-as-default row */}
+      <div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid var(--bd)",alignItems:"center"}}>
+        <button className="ghost" style={{flex:1,fontSize:10,padding:"6px 10px"}}
+          onClick={saveDefault}
+          title={"Make these "+node.type+" settings the default for new "+node.type+" nodes"}>
+          save as default
+        </button>
+        {hasDef&&(
+          <button className="ghost" style={{flex:1,fontSize:10,padding:"6px 10px",color:"var(--mu)"}}
+            onClick={resetDefault}
+            title="Remove custom default, revert to built-in">
+            reset
+          </button>
+        )}
+        {savedMsg&&(
+          <span style={{fontSize:10,color:"var(--ac)",minWidth:52,textAlign:"right"}}>{savedMsg}</span>
+        )}
+      </div>
+      {hasDef&&!savedMsg&&(
+        <div style={{fontSize:9,color:"var(--mu)",marginTop:4,textAlign:"center"}}>
+          custom defaults active for {node.type}
+        </div>
+      )}
     </div>
   )
 }
@@ -1246,6 +1327,48 @@ function EfxPrimary(props) {
 }
 
 /* ─── MASK CARD ───────────────────────────────────────── */
+/* ─── INLINE RENAME ────────────────────────────────────── */
+// Small inline rename widget for effect/mask/stackref cards. Shows the label
+// (custom name if set, else default label). Double-click/tap to rename.
+// props: value (current name, may be empty), fallback (default label when no name),
+//        onChange(newName), style, labelStyle
+function InlineRename(props) {
+  var edSt=useState(false); var ed=edSt[0], setEd=edSt[1]
+  var nmSt=useState(props.value||""); var nm=nmSt[0], setNm=nmSt[1]
+  var inR=useRef(null)
+  useEffect(function(){setNm(props.value||"")},[props.value])
+  useEffect(function(){if(ed&&inR.current){inR.current.focus();inR.current.select()}},[ed])
+  function commit(){
+    setEd(false)
+    var t=nm.trim()
+    if(t!==(props.value||""))props.onChange(t)
+  }
+  if(ed){
+    return (
+      <input ref={inR} value={nm}
+        onChange={function(e){setNm(e.target.value)}}
+        onBlur={commit}
+        onKeyDown={function(e){
+          if(e.key==="Enter")commit()
+          if(e.key==="Escape"){setEd(false);setNm(props.value||"")}
+        }}
+        onClick={function(e){e.stopPropagation()}}
+        placeholder={props.fallback}
+        style={Object.assign({flex:1,minWidth:0,fontSize:12,padding:"2px 6px",
+          background:"var(--bg)",border:"1px solid var(--ac)",borderRadius:4,
+          color:"var(--tx)",fontFamily:"'IBM Plex Mono',monospace"},props.style||{})}/>
+    )
+  }
+  return (
+    <span onDoubleClick={function(e){e.stopPropagation();setEd(true)}}
+      title="Double-tap to rename"
+      style={Object.assign({flex:1,minWidth:0,cursor:"text",userSelect:"none",
+        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},props.labelStyle||{})}>
+      {props.value && props.value.trim() ? props.value : props.fallback}
+    </span>
+  )
+}
+
 function MaskCard(props) {
   var mk=props.mask
   var armSt=useState(false); var armed=armSt[0],setArmed=armSt[1]
@@ -1265,6 +1388,11 @@ function MaskCard(props) {
       </div>
       <span style={{fontSize:16,color:"var(--lv)",flexShrink:0,paddingTop:2}}>◈</span>
       <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+          <InlineRename value={mk.name} fallback={"mask "+(mk.channel||"luminosity")}
+            onChange={function(nw){props.onChange(Object.assign({},mk,{name:nw}))}}
+            labelStyle={{fontSize:11,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace"}}/>
+        </div>
         <select value={mk.refId||""} onChange={function(e){props.onChange(Object.assign({},mk,{refId:e.target.value||null}))}} style={{width:"100%",marginBottom:8}}>
           <option value="">— select source —</option>
           <optgroup label="Pixel Creators">
@@ -1329,7 +1457,7 @@ function StackRefCard(props) {
   var accentBg = isMask ? "rgba(176,96,240,.08)" : "rgba(36,204,168,.08)"
   return (
     <div className="card" style={{marginBottom:10,border:isMask?"1px solid rgba(176,96,240,.3)":"1px solid rgba(36,204,168,.28)"}}>
-      <div className="card-hdr" style={{background:accentBg}}>
+      <div className="card-hdr" style={{background:accentBg,flexWrap:"wrap"}}>
         <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
           <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
           <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
@@ -1349,20 +1477,28 @@ function StackRefCard(props) {
             minHeight:0,lineHeight:1.4}}>
           {isMask?"mask":"effect"} stack ↗
         </button>
-        <select value={item.stackRefId||""}
-          onChange={function(e){props.onChange(Object.assign({},item,{stackRefId:e.target.value||null}))}}
-          style={{flex:1,fontSize:11,padding:"3px 4px",
-            background:"none",border:"none",color:item.enabled?accent:"var(--mu)",
-            fontFamily:"'IBM Plex Mono',monospace",cursor:"pointer"}}>
-          <option value="">— select stack —</option>
-          {matchingStacks.map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
-        </select>
+        <InlineRename value={item.name} fallback={refNode?refNode.name:(isMask?"mask ref":"effect ref")}
+          onChange={function(nw){props.onChange(Object.assign({},item,{name:nw}))}}
+          labelStyle={{fontSize:11,color:item.enabled?accent:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",padding:"2px 0"}}/>
         <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",
           fontSize:armed?10:14,background:armed?"rgba(224,48,96,.2)":"none",
           border:armed?"1px solid var(--dng)":"none",
           color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
           {armed?"confirm ×":"×"}
         </button>
+      </div>
+      {/* Reference selector below header */}
+      <div style={{padding:"6px 10px",borderBottom:"1px solid var(--bd)",display:"flex",gap:8,alignItems:"center"}}>
+        <span style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".08em",flexShrink:0}}>refs</span>
+        <select value={item.stackRefId||""}
+          onChange={function(e){props.onChange(Object.assign({},item,{stackRefId:e.target.value||null}))}}
+          style={{flex:1,fontSize:11,padding:"3px 4px",
+            background:"var(--bg)",border:"1px solid var(--bd)",borderRadius:4,
+            color:item.enabled?accent:"var(--mu)",
+            fontFamily:"'IBM Plex Mono',monospace",cursor:"pointer"}}>
+          <option value="">— select stack —</option>
+          {matchingStacks.map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
+        </select>
       </div>
         {/* Opacity + blend mode row */}
       <div style={{padding:"8px 12px",borderTop:"1px solid var(--bd)",display:"flex",gap:8,alignItems:"center"}}>
@@ -1411,7 +1547,9 @@ function EfxCard(props) {
         <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},efx,{enabled:!efx.enabled}))}} style={{color:efx.enabled?"var(--ac)":"var(--mu)",fontSize:18}}>
           {efx.enabled?"●":"○"}
         </button>
-        <span style={{flex:1,fontSize:12,color:efx.enabled?"var(--tx)":"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}>{efx.type}</span>
+        <InlineRename value={efx.name} fallback={efx.type}
+          onChange={function(nw){props.onChange(Object.assign({},efx,{name:nw}))}}
+          labelStyle={{fontSize:12,color:efx.enabled?"var(--tx)":"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500,padding:"2px 0"}}/>
         {props.onPromote&&<button className="promote-btn" onClick={function(e){e.stopPropagation();props.onPromote()}} title="Promote to named tap point">↗</button>}
         <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
           {armed?"confirm x":"x"}
