@@ -188,6 +188,7 @@ var ECFG   = {
   posterize:  ["levels",2,16,1,4]
 }
 // Colour map uses an array of stops, handled specially (not via ECFG)
+// Directional blur uses angle+distance+mode, handled specially
 // Curves effect has no single inline-slider param (uses in/out point pairs), handled separately
 var ECFG_CURVES_ONLY = ["curves"]
 var ETYPES = Object.keys(ECFG)
@@ -255,6 +256,7 @@ function mkEfx(t) {
     stops:[{pos:0,color:"#000000",alpha:100},{pos:1,color:"#ffffff",alpha:100}],
     reverse:false
   }
+  if(t==="dir-blur") params={angle:0, distance:20, spread:"both"}
   return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[] }
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
@@ -435,6 +437,33 @@ function pxFn(d,w,h,t,p) {
       d[i+1]=lutG[lum]
       d[i+2]=lutB[lum]
       d[i+3]=Math.round(d[i+3]*lutA[lum]/100)
+    }
+  } else if (t==="dir-blur") {
+    // Directional (motion) blur — samples pixels along an angle.
+    // angle: 0-360 degrees, distance: pixel length of blur, spread: "forward"|"backward"|"both"
+    var ang = ((p.angle||0) * Math.PI / 180)
+    var dist = Math.max(1, Math.round(p.distance||20))
+    var spread = p.spread || "both"
+    var cos = Math.cos(ang), sin = Math.sin(ang)
+    // Build sample offsets along the direction vector
+    var offsets = []
+    for(var si=1; si<=dist; si++){
+      if(spread==="forward" || spread==="both") offsets.push(si)
+      if(spread==="backward" || spread==="both") offsets.push(-si)
+    }
+    if(offsets.length===0) offsets=[0]
+    var n = offsets.length + 1  // include center pixel
+    var orig = new Uint8ClampedArray(d)  // copy before mutating
+    for(i=0;i<d.length;i+=4){
+      var px = ((i/4) % w), py = Math.floor((i/4) / w)
+      var rs=orig[i], gs=orig[i+1], bs=orig[i+2], as=orig[i+3], cnt=1
+      for(var oi=0;oi<offsets.length;oi++){
+        var nx=Math.round(px + cos*offsets[oi]), ny=Math.round(py + sin*offsets[oi])
+        if(nx<0||nx>=w||ny<0||ny>=h)continue
+        var ni=(ny*w+nx)*4
+        rs+=orig[ni]; gs+=orig[ni+1]; bs+=orig[ni+2]; as+=orig[ni+3]; cnt++
+      }
+      d[i]=rs/cnt; d[i+1]=gs/cnt; d[i+2]=bs/cnt; d[i+3]=as/cnt
     }
   }
   // NOTE: "transform" is handled specially in applyEfxStk (needs full canvas context, not just ImageData)
@@ -731,11 +760,6 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
       else if(mk.blendMode==="normal")out[ii]=mv2
       else out[ii]*=mv2
     }
-  }
-  if(typeof console!=="undefined"&&console.debug){
-    if(!any)console.debug("[compMasks] no valid masks (all refIds null or unresolved)", stack.length,"items")
-    else{var mn=1,mx=0;for(var di=0;di<out.length;di++){if(out[di]<mn)mn=out[di];if(out[di]>mx)mx=out[di]}
-      console.debug("[compMasks] result range min="+mn.toFixed(3)+" max="+mx.toFixed(3))}
   }
   return any?out:null
 }
@@ -1401,6 +1425,28 @@ function EfxPrimary(props) {
     </div>
   )
   if(efx.type==="colour-map") return <ColourMapEditor efx={efx} p={p} up={up}/>
+  if(efx.type==="dir-blur") return (
+    <div>
+      <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1}
+        fmt={function(v){return Math.round(v)+"deg"}}
+        fn={function(v){up({angle:v})}}/>
+      <Sl l="distance" v={p.distance==null?20:p.distance} mn={1} mx={200} st={1}
+        fmt={function(v){return Math.round(v)+"px"}}
+        fn={function(v){up({distance:v})}}/>
+      <PR l="spread">
+        {["both","forward","backward"].map(function(opt){
+          return (
+            <button key={opt}
+              className={(p.spread||"both")===opt?"ac":"ghost"}
+              style={{flex:1,fontSize:10,minHeight:32}}
+              onClick={function(){up({spread:opt})}}>
+              {opt}
+            </button>
+          )
+        })}
+      </PR>
+    </div>
+  )
   if(efx.type==="transform") return (
     <div>
       <Sl l="translate x" v={p.tx||0}  mn={-.5} mx={.5}   st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({tx:v})}}/>
@@ -1702,7 +1748,7 @@ function EfxCard(props) {
 var EFX_GROUPS=[
   {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
   {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
-  {label:"Pixel",    items:["blur","invert","threshold"]},
+  {label:"Pixel",    items:["blur","dir-blur","invert","threshold"]},
   {label:"Transform",items:["transform"]},
 ]
 // Hook: compute a fixed-position rect for a popover relative to an anchor ref.
