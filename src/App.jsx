@@ -2868,16 +2868,63 @@ function SettingsSheet(props) {
 
 /* ─── NODE DETAIL SHEET (panel style = sheet) ──────────────── */
 function NodeDetailSheet(props) {
-  // props: node, sec, open, onClose, onUpdate, onLoad, nodes
+  // props: node, sec, open, onClose, onUpdate, onLoad, nodes, dispId, onDsp
+  var sheetRef=useRef(null)
+  var dragRef=useRef(null)  // {startY, startH, sheetEl}
+  var heightSt=useState(null); var sheetH=heightSt[0], setSheetH=heightSt[1]
+
+  function onGripDown(e){
+    var el=sheetRef.current; if(!el)return
+    e.preventDefault()
+    var startY=e.touches?e.touches[0].clientY:e.clientY
+    var startH=el.offsetHeight
+    dragRef.current={startY:startY, startH:startH}
+    function onMove(ev){
+      if(!dragRef.current)return
+      var y=ev.touches?ev.touches[0].clientY:ev.clientY
+      var delta=dragRef.current.startY-y   // drag up = expand
+      var newH=Math.max(120, Math.min(window.innerHeight*0.92, dragRef.current.startH+delta))
+      setSheetH(newH)
+    }
+    function onUp(){
+      dragRef.current=null
+      document.removeEventListener("mousemove",onMove)
+      document.removeEventListener("mouseup",onUp)
+      document.removeEventListener("touchmove",onMove)
+      document.removeEventListener("touchend",onUp)
+    }
+    document.addEventListener("mousemove",onMove,{passive:false})
+    document.addEventListener("mouseup",onUp)
+    document.addEventListener("touchmove",onMove,{passive:false})
+    document.addEventListener("touchend",onUp)
+  }
+
   if (!props.open || !props.node) return null
+  var isDsp = props.dispId === props.node.id
+  var sheetStyle = sheetH ? {maxHeight:sheetH+"px"} : {}
   return (
     <div className="sheet-scrim" onClick={function(e){ if(e.target===e.currentTarget) props.onClose() }}>
-      <div className="node-sheet">
+      <div className="node-sheet" ref={sheetRef} style={sheetStyle}>
+        {/* Draggable grip — finger/pointer drag up/down resizes sheet */}
+        <div className="sheet-grip"
+          style={{position:"absolute",top:8,left:"50%",transform:"translateX(-50%)",
+            cursor:"row-resize",touchAction:"none",padding:"8px 20px",margin:"-8px -20px"}}
+          onMouseDown={onGripDown}
+          onTouchStart={onGripDown}/>
         <div className="node-sheet-hdr">
-          <div className="sheet-grip" style={{position:"absolute",top:8,left:"50%",transform:"translateX(-50%)"}}/>
-          <span style={{flex:1,fontSize:13,fontFamily:"'IBM Plex Mono',monospace",color:"var(--tx)",fontWeight:500,marginTop:4}}>
+          <span style={{flex:1,fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
+            color:"var(--tx)",fontWeight:500}}>
             {props.node.name}
           </span>
+          {/* Display toggle — same ◎/◉ as the list item */}
+          {props.onDsp && (
+            <button className="icon-btn sm"
+              onClick={function(){props.onDsp(props.node.id)}}
+              style={{color:isDsp?"var(--lv)":"var(--mu)",fontSize:20,marginRight:4}}
+              title={isDsp?"Stop previewing this node":"Set as live preview"}>
+              {isDsp?"◉":"◎"}
+            </button>
+          )}
           <button className="ghost" style={{fontSize:20,minHeight:36}} onClick={props.onClose}>×</button>
         </div>
         <div className="node-sheet-scroll">
@@ -3518,6 +3565,7 @@ function App() {
         sec={sheetNode?sheetNode.sec:null}
         onClose={function(){setSheetNode(null);setSelId(null)}}
         onUpdate={upd} onLoad={loadUrl} nodes={nodes}
+        dispId={dispId} onDsp={dsp}
         onPromote={handlePromote} onExtract={handleExtract} onNavigate={handleNavigate}/>
 
       {anyFS && (
