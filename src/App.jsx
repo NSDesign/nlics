@@ -2358,7 +2358,7 @@ function LivePreview(props) {
         <span style={{fontSize:9,color:"var(--mu)"}}>{props.sz}x{props.sz}px</span>
         {props.active && <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>[{props.active.type}]</span>}
         <span style={{flex:1}}/>
-        <span style={{fontSize:8,color:"var(--bd)",letterSpacing:".1em"}}>NLICS v3.2 mobile</span>
+        <span style={{fontSize:8,color:"var(--bd)",letterSpacing:".1em"}}>{(typeof __BUILD_HASH__!=="undefined"?__BUILD_HASH__:"dev")+" · NLICS"}</span>
       </div>
     </div>
   )
