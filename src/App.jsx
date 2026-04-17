@@ -682,6 +682,10 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
   // Bottom-to-top iteration: last in list applied first, first in list applied last
   for(var mi=stack.length-1;mi>=0;mi--){
     var mk=stack[mi];if(mk.enabled===false)continue
+    // Defensive: treat missing strength as 1 (full), missing opacity as 100,
+    // missing channel as luminosity, missing blendMode as multiply
+    if(mk.strength==null) mk=Object.assign({},mk,{strength:1})
+    if(mk.opacity==null) mk=Object.assign({},mk,{opacity:100})
     // Stack reference — apply referenced Mask Stack with opacity/blendMode control
     if(mk.type==="__stackref__"){
       var refMaskNode=cmap.get(mk.stackRefId)
@@ -933,29 +937,29 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     if(n.stackType==="effect"&&(n.effectStack||[]).length>0){
       applyEfxStk(pctx,n.effectStack,cmap,cache,iC,w,h,spVis)
     } else if(n.stackType==="mask"&&(n.maskStack||[]).length>0){
-      // Mask stack: render as greyscale. White = fully unmasked, black = fully masked.
-      // When compMasks returns null (no mask has a valid source), fall back to
-      // displaying the preview source as greyscale so the preview is still useful.
+      // Mask stack preview mode: "applied" (default) shows the preview source
+      // with the mask applied as alpha; "greyscale" shows the mask value as B&W.
+      // Configurable per-stack node via previewMode; defaults to "applied".
       var mv=compMasks(n.maskStack,cmap,cache,iC,w,h,spVis)
-      var gid=pctx.createImageData(w,h)
+      var previewMode=n.previewMode||"applied"
       if(mv){
-        for(var gi=0;gi<w*h;gi++){
-          var gv=Math.round(mv[gi]*255)
-          gid.data[gi*4]=gv; gid.data[gi*4+1]=gv; gid.data[gi*4+2]=gv; gid.data[gi*4+3]=255
+        if(previewMode==="greyscale"){
+          var gid=pctx.createImageData(w,h)
+          for(var gi=0;gi<w*h;gi++){
+            var gv=Math.round(mv[gi]*255)
+            gid.data[gi*4]=gv; gid.data[gi*4+1]=gv; gid.data[gi*4+2]=gv; gid.data[gi*4+3]=255
+          }
+          pctx.putImageData(gid,0,0)
+        } else {
+          // "applied": multiply the preview source's alpha by the mask value
+          var id=pctx.getImageData(0,0,w,h)
+          for(var gi3=0;gi3<w*h;gi3++){
+            id.data[gi3*4+3]=Math.round(id.data[gi3*4+3]*mv[gi3])
+          }
+          pctx.putImageData(id,0,0)
         }
-        pctx.putImageData(gid,0,0)
-      }else{
-        // No valid mask values — show the preview source as greyscale so the user
-        // can still see the base and understands the mask has no source set yet.
-        var srcData=pctx.getImageData(0,0,w,h)
-        var sd=srcData.data
-        for(var gi2=0;gi2<w*h;gi2++){
-          var pi=gi2*4
-          var lum=Math.round(0.299*sd[pi]+0.587*sd[pi+1]+0.114*sd[pi+2])
-          gid.data[pi]=lum; gid.data[pi+1]=lum; gid.data[pi+2]=lum; gid.data[pi+3]=255
-        }
-        pctx.putImageData(gid,0,0)
       }
+      // If mv is null (no masks have sources), leave the preview source as-is.
     }
     cache.set(id,pcv);vis.delete(id);return pcv
   }
@@ -2646,10 +2650,28 @@ function StackProps(props) {
         <div className="card-body">
           <NRef l="source" v={node.previewRefId||null} nodes={nodes} selfId={node.id}
             fn={function(v){onChange(Object.assign({},node,{previewRefId:v||null}))}}/>
+          {!isEffect && node.previewRefId && (
+            <div style={{marginTop:8,display:"flex",gap:6,alignItems:"center"}}>
+              <span style={{fontSize:9,color:"var(--mu)",minWidth:54}}>preview as</span>
+              <button
+                className={(node.previewMode||"applied")==="applied"?"ac":"ghost"}
+                style={{flex:1,fontSize:10,minHeight:30}}
+                onClick={function(){onChange(Object.assign({},node,{previewMode:"applied"}))}}
+                title="Show preview source with mask applied as alpha">
+                applied
+              </button>
+              <button
+                className={node.previewMode==="greyscale"?"ac":"ghost"}
+                style={{flex:1,fontSize:10,minHeight:30}}
+                onClick={function(){onChange(Object.assign({},node,{previewMode:"greyscale"}))}}
+                title="Show mask values as greyscale (white = unmasked, black = masked)">
+                greyscale
+              </button>
+            </div>
+          )}
           {node.previewRefId && (
             <div style={{fontSize:9,color:"var(--mu)",marginTop:6,lineHeight:1.5}}>
-              Tap ◎ on this node to preview the {isEffect?"effects":"masks"} applied to the selected source.
-              This reference is ignored during compositing.
+              Tap ◎ on this node to preview. This reference is ignored during compositing.
             </div>
           )}
         </div>
