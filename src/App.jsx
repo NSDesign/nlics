@@ -3242,6 +3242,87 @@ function SettingsSheet(props) {
 }
 
 /* ─── NODE DETAIL SHEET (panel style = sheet) ──────────────── */
+/* ─── LAYER CARD ───────────────────────────────────────── */
+// Extracted from LayerCompProps.map() — each layer needs its own hook scope.
+// useState inside .map() violates Rules of Hooks (error #300 on rename/reorder).
+function LayerCard(props) {
+  var lyr=props.lyr, li=props.li
+  var tabSt=useState("source"); var layerTab=tabSt[0], setLayerTab=tabSt[1]
+  var nEfx=(lyr.effectStack||[]).length, nMask=(lyr.maskStack||[]).length
+  var lyrTabs=[
+    {id:"source",  label:"Source"},
+    {id:"effects", label:"Fx"+(nEfx>0?" ("+nEfx+")":""), color:"ac"},
+    {id:"masks",   label:"Mask"+(nMask>0?" ("+nMask+")":""), color:"lv"},
+    {id:"layer",   label:"Layer"},
+  ]
+  return (
+    <div className="card" style={{marginBottom:8}}>
+      <div className="card-hdr" style={{background:"rgba(224,104,40,.06)"}}>
+        <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+          <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
+          <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
+        </div>
+        <button className="icon-btn sm" onClick={function(){props.onChange({enabled:lyr.enabled===false})}}
+          style={{color:lyr.enabled===false?"var(--mu)":"#e06828",fontSize:18}}>
+          {lyr.enabled===false?"○":"●"}
+        </button>
+        <InlineRename value={lyr.name} fallback={"layer "+(props.totalLayers-li)}
+          onChange={function(nw){props.onChange({name:nw})}}
+          labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
+        <button onClick={props.onDel} disabled={props.totalLayers<=1}
+          style={{minHeight:32,padding:"0 10px",fontSize:14,
+            color:props.totalLayers<=1?"var(--bd)":"var(--mu)",background:"none",border:"none",
+            cursor:props.totalLayers<=1?"default":"pointer"}}>
+          ×
+        </button>
+      </div>
+      <TabBar tabs={lyrTabs} active={layerTab} onChange={setLayerTab}/>
+      {layerTab==="source" && (
+        <div className="card-body">
+          <NRef l="source" v={lyr.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC} mode="source"
+            fn={function(v){props.onChange({refId:v})}}/>
+        </div>
+      )}
+      {layerTab==="effects" && (
+        <div style={{padding:10}}>
+          <EfxStack
+            key={(lyr.effectStack||[]).map(function(e){return e.id}).join(",")}
+            stack={lyr.effectStack||[]} nodes={props.nodes} selfId={props.selfId}
+            navPush={props.navPush}
+            basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
+            onNavigate={props.onNavigate}
+            onChange={function(es){props.onChange({effectStack:es})}}/>
+        </div>
+      )}
+      {layerTab==="masks" && (
+        <div style={{padding:10}}>
+          <MaskStackPanel
+            key={(lyr.maskStack||[]).map(function(m){return m.id}).join(",")}
+            stack={lyr.maskStack||[]} nodes={props.nodes} selfId={props.selfId}
+            navPush={props.navPush}
+            basePath={{slotKey:"layers["+li+"].maskStack", steps:[]}}
+            onNavigate={props.onNavigate}
+            onChange={function(ms){props.onChange({maskStack:ms})}}/>
+        </div>
+      )}
+      {layerTab==="layer" && (
+        <div className="card-body">
+          <Se l="blend" v={lyr.blendMode||"normal"} opts={BMODES}
+            fn={function(v){props.onChange({blendMode:v})}}/>
+          <Sl l="opacity" v={lyr.opacity==null?100:lyr.opacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){props.onChange({opacity:v})}}/>
+          {COMMUTATIVE_MODES[lyr.blendMode] && (
+            <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",fontStyle:"italic"}}>
+              order has no effect in {lyr.blendMode} mode
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── LAYER COMP PROPS ─────────────────────────────────── */
 function LayerCompProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
@@ -3331,79 +3412,15 @@ function LayerCompProps(props) {
           <button className="ac" style={{fontSize:10,padding:"0 10px",minHeight:30}} onClick={addLayer}>+ layer</button>
         </div>
         {layers.map(function(lyr,li){
-          var isFirst=li===0, isLast=li===layers.length-1
-          var nEfx=(lyr.effectStack||[]).length, nMask=(lyr.maskStack||[]).length
-          var layerTabSt=useState("source"); var layerTab=layerTabSt[0], setLayerTab=layerTabSt[1]
-          var lyrTabs=[
-            {id:"source",  label:"Source"},
-            {id:"effects", label:"Fx"+(nEfx>0?" ("+nEfx+")":""), color:"ac"},
-            {id:"masks",   label:"Mask"+(nMask>0?" ("+nMask+")":""), color:"lv"},
-            {id:"layer",   label:"Layer"},
-          ]
           return (
-            <div key={lyr.id} className="card" style={{marginBottom:8}}>
-              <div className="card-hdr" style={{background:"rgba(224,104,40,.06)"}}>
-                <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
-                  <button className="icon-btn sm" onClick={function(){moveLayer(li,-1)}} disabled={isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
-                  <button className="icon-btn sm" onClick={function(){moveLayer(li,1)}}  disabled={isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
-                </div>
-                <button className="icon-btn sm" onClick={function(){updLayer(li,{enabled:lyr.enabled===false})}}
-                  style={{color:lyr.enabled===false?"var(--mu)":"#e06828",fontSize:18}}>
-                  {lyr.enabled===false?"○":"●"}
-                </button>
-                <InlineRename value={lyr.name} fallback={"layer "+(layers.length-li)}
-                  onChange={function(nw){updLayer(li,{name:nw})}}
-                  labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
-                <button onClick={function(){delLayer(li)}} disabled={layers.length<=1}
-                  style={{minHeight:32,padding:"0 10px",fontSize:14,
-                    color:layers.length<=1?"var(--bd)":"var(--mu)",background:"none",border:"none",cursor:layers.length<=1?"default":"pointer"}}>
-                  ×
-                </button>
-              </div>
-              <TabBar tabs={lyrTabs} active={layerTab} onChange={setLayerTab}/>
-              {layerTab==="source" && (
-                <div className="card-body">
-                  <NRef l="source" v={lyr.refId} nodes={nodes} selfId={node.id} iC={props.iC} mode="source"
-                    fn={function(v){updLayer(li,{refId:v})}}/>
-                </div>
-              )}
-              {layerTab==="effects" && (
-                <div style={{padding:10}}>
-                  <EfxStack
-                    key={(lyr.effectStack||[]).map(function(e){return e.id}).join(",")}
-                    stack={lyr.effectStack||[]} nodes={nodes} selfId={node.id}
-                    navPush={navPush}
-                    basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
-                    onNavigate={props.onNavigate}
-                    onChange={function(es){updLayer(li,{effectStack:es})}}/>
-                </div>
-              )}
-              {layerTab==="masks" && (
-                <div style={{padding:10}}>
-                  <MaskStackPanel
-                    key={(lyr.maskStack||[]).map(function(m){return m.id}).join(",")}
-                    stack={lyr.maskStack||[]} nodes={nodes} selfId={node.id}
-                    navPush={navPush}
-                    basePath={{slotKey:"layers["+li+"].maskStack", steps:[]}}
-                    onNavigate={props.onNavigate}
-                    onChange={function(ms){updLayer(li,{maskStack:ms})}}/>
-                </div>
-              )}
-              {layerTab==="layer" && (
-                <div className="card-body">
-                  <Se l="blend" v={lyr.blendMode||"normal"} opts={BMODES}
-                    fn={function(v){updLayer(li,{blendMode:v})}}/>
-                  <Sl l="opacity" v={lyr.opacity==null?100:lyr.opacity} mn={0} mx={100} st={1}
-                    fmt={function(v){return Math.round(v)+"%"}}
-                    fn={function(v){updLayer(li,{opacity:v})}}/>
-                  {COMMUTATIVE_MODES[lyr.blendMode] && (
-                    <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",fontStyle:"italic"}}>
-                      order has no effect in {lyr.blendMode} mode
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <LayerCard key={lyr.id} lyr={lyr} li={li}
+              isFirst={li===0} isLast={li===layers.length-1}
+              totalLayers={layers.length}
+              nodes={nodes} selfId={node.id} iC={props.iC}
+              navPush={navPush} onNavigate={props.onNavigate}
+              onMove={function(dir){moveLayer(li,dir)}}
+              onDel={function(){delLayer(li)}}
+              onChange={function(patch){updLayer(li,patch)}}/>
           )
         })}
       </div>
