@@ -2101,17 +2101,120 @@ function EfxCard(props) {
   var tabSt=useState("primary"); var tab=tabSt[0], setTab=tabSt[1]
   var armedSt=useState(false); var armed=armedSt[0], setArmed=armedSt[1]
   var timerRef=useRef(null)
+  // Swap state machine: null | "picking" | {type, keepMask, keepLayer}
+  var swapSt=useState(null); var swap=swapSt[0], setSwap=swapSt[1]
+  var swapAnchorRef=useRef(null)
+  var swapMenuRef=useRef(null)
+  var swapPos=usePopoverPosition(swapAnchorRef, swap==="picking", "above")
   useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
+  useEffect(function(){
+    if(swap!=="picking") return
+    function h(e){
+      if(swapAnchorRef.current&&swapAnchorRef.current.contains(e.target)) return
+      if(swapMenuRef.current&&swapMenuRef.current.contains(e.target)) return
+      setSwap(null)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[swap])
   function handleDel(){
     if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
     else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
   }
+  function pickType(t){
+    // Same type — nothing to do
+    if(t===efx.type){setSwap(null);return}
+    // Go to confirm step with both retain options on by default
+    setSwap({type:t, keepMask:true, keepLayer:true})
+  }
+  function confirmSwap(){
+    var s=swap; if(!s||!s.type) return
+    var fresh=mkEfx(s.type)
+    var next=Object.assign({},fresh,{
+      id:efx.id,                               // keep same id so list key stable
+      name:efx.name,                           // keep user's custom name
+      enabled:efx.enabled,
+      maskStack: s.keepMask  ? efx.maskStack  : [],
+      opacity:   s.keepLayer ? efx.opacity    : 100,
+      blendMode: s.keepLayer ? efx.blendMode  : "normal",
+    })
+    props.onChange(next)
+    setSwap(null)
+  }
   var nMasks=(efx.maskStack||[]).length
+  var hasNonDefaultLayer=(efx.opacity!==100||efx.blendMode!=="normal")
   var tabs=[
     {id:"primary",label:"Primary"},
     {id:"layer",  label:"Layer"},
     {id:"mask",   label:"Mask"+(nMasks>0?" ("+nMasks+")":""),color:"lv"},
   ]
+  // Confirm-swap overlay rendered inside the card body
+  if(swap&&swap!=="picking") return (
+    <div className="card" style={{marginBottom:10,border:"1px solid var(--ac)"}}>
+      <div className="card-hdr" style={{background:"rgba(36,204,168,.06)"}}>
+        <span style={{fontSize:11,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>
+          {efx.type}
+        </span>
+        <span style={{fontSize:12,color:"var(--mu)",padding:"0 6px"}}>→</span>
+        <span style={{flex:1,fontSize:12,color:"var(--ac)",fontFamily:"'IBM Plex Mono',monospace",fontWeight:600}}>
+          {swap.type}
+        </span>
+        <button className="ghost" style={{fontSize:12,padding:"0 8px",minHeight:32}} onClick={function(){setSwap(null)}}>cancel</button>
+      </div>
+      <div style={{padding:"10px 12px",display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{fontSize:11,color:"var(--di)"}}>What to carry over from the current effect?</div>
+        {/* Retain mask stack option — only shown when masks exist */}
+        {nMasks>0 && (
+          <button
+            onClick={function(){setSwap(Object.assign({},swap,{keepMask:!swap.keepMask}))}}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",
+              background:swap.keepMask?"var(--sl)":"var(--sf)",border:"1px solid "+(swap.keepMask?"var(--lv)":"var(--bd)"),
+              borderRadius:6,cursor:"pointer",textAlign:"left"}}>
+            <span style={{fontSize:16,color:swap.keepMask?"var(--lv)":"var(--mu)"}}>
+              {swap.keepMask?"◈":"○"}
+            </span>
+            <div>
+              <div style={{fontSize:11,color:swap.keepMask?"var(--tx)":"var(--mu)",fontWeight:swap.keepMask?600:400}}>
+                retain mask stack
+              </div>
+              <div style={{fontSize:9,color:"var(--mu)"}}>
+                {nMasks} mask{nMasks!==1?"s":""} · {swap.keepMask?"will be kept":"will be cleared"}
+              </div>
+            </div>
+          </button>
+        )}
+        {/* Retain layer settings option — only shown when non-default */}
+        {hasNonDefaultLayer && (
+          <button
+            onClick={function(){setSwap(Object.assign({},swap,{keepLayer:!swap.keepLayer}))}}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",
+              background:swap.keepLayer?"var(--sl)":"var(--sf)",border:"1px solid "+(swap.keepLayer?"var(--ac)":"var(--bd)"),
+              borderRadius:6,cursor:"pointer",textAlign:"left"}}>
+            <span style={{fontSize:16,color:swap.keepLayer?"var(--ac)":"var(--mu)"}}>
+              {swap.keepLayer?"●":"○"}
+            </span>
+            <div>
+              <div style={{fontSize:11,color:swap.keepLayer?"var(--tx)":"var(--mu)",fontWeight:swap.keepLayer?600:400}}>
+                retain layer settings
+              </div>
+              <div style={{fontSize:9,color:"var(--mu)"}}>
+                opacity {Math.round(efx.opacity)}% · {efx.blendMode} · {swap.keepLayer?"will be kept":"will reset to defaults"}
+              </div>
+            </div>
+          </button>
+        )}
+        {/* No non-default settings to carry over */}
+        {nMasks===0&&!hasNonDefaultLayer&&(
+          <div style={{fontSize:11,color:"var(--mu)",padding:"4px 0"}}>
+            No custom masks or layer settings to carry over.
+          </div>
+        )}
+        <button className="ac" style={{width:"100%",minHeight:40}} onClick={confirmSwap}>
+          apply {swap.type}
+        </button>
+      </div>
+    </div>
+  )
   return (
     <div className="card" style={{marginBottom:10}}>
       <div className="card-hdr">
@@ -2122,9 +2225,37 @@ function EfxCard(props) {
         <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},efx,{enabled:!efx.enabled}))}} style={{color:efx.enabled?"var(--ac)":"var(--mu)",fontSize:18}}>
           {efx.enabled?"●":"○"}
         </button>
-        <InlineRename value={efx.name} fallback={efx.type}
+        {/* Type button — tap to open effect-swap picker */}
+        <button ref={swapAnchorRef} onClick={function(){setSwap(swap==="picking"?null:"picking")}}
+          title="Tap to swap effect type"
+          style={{fontSize:12,padding:"0 8px",minHeight:32,fontFamily:"'IBM Plex Mono',monospace",
+            fontWeight:500,color:efx.enabled?"var(--tx)":"var(--mu)",
+            background:"none",border:"none",cursor:"pointer",flexShrink:0,
+            textDecoration:"underline dotted",textUnderlineOffset:3}}>
+          {efx.type}
+        </button>
+        {/* Custom name (separate from type) */}
+        <InlineRename value={efx.name} fallback=""
           onChange={function(nw){props.onChange(Object.assign({},efx,{name:nw}))}}
-          labelStyle={{fontSize:12,color:efx.enabled?"var(--tx)":"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500,padding:"2px 0"}}/>
+          labelStyle={{fontSize:11,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",fontStyle:"italic",padding:"2px 0"}}/>
+        {/* Effect-swap picker portal */}
+        {swap==="picking"&&swapPos&&createPortal(
+          <div ref={swapMenuRef} className="eff-menu" style={swapPos}>
+            {EFX_GROUPS.map(function(grp){return (
+              <div key={grp.label}>
+                <div className="drop-grp">{grp.label}</div>
+                {grp.items.map(function(t){return (
+                  <div key={t} className={"drop-item"+(t===efx.type?" sel":"")}
+                    onClick={function(){pickType(t)}}
+                    style={t===efx.type?{color:"var(--ac)"}:{}}>
+                    {t}{t===efx.type?" ✓":""}
+                  </div>
+                )})}
+              </div>
+            )})}
+          </div>,
+          document.body
+        )}
         {props.onPromote&&<button className="promote-btn" onClick={function(e){e.stopPropagation();props.onPromote()}} title="Promote to named tap point">↗</button>}
         <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
           {armed?"confirm x":"x"}
