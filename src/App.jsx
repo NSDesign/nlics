@@ -3327,6 +3327,8 @@ function LayerCard(props) {
 function LayerCompProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
+  // Hoist ALL hooks above any early return — Rules of Hooks
+  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
   function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
 
@@ -3401,7 +3403,6 @@ function LayerCompProps(props) {
     {id:"effects",label:"Effects"+((node.outEfx||[]).length>0?" ("+(node.outEfx||[]).length+")":""),color:"ac"},
     {id:"masks",  label:"Masks"+((node.outMask||[]).length>0?" ("+(node.outMask||[]).length+")":""),color:"lv"},
   ]
-  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
   return (
     <div style={{padding:10,overflowY:"auto"}}>
       {/* Layers list — top of list = top layer (applied last) */}
