@@ -1176,13 +1176,33 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   if(n.outMask&&n.outMask.length>0)maskToAlpha(ctx2,n.outMask,cmap,cache,iC,w,h,new Set(vis))
   cache.set(id,cv2);vis.delete(id);return cv2
 }
-function renderPipeline(canvas,dispId,nodes,iC) {
+function renderPipeline(canvas,dispId,nodes,iC,dispMask) {
   if(!canvas||!dispId)return
   try {
     var ctx=canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height)
     var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
-    var result=compAny(dispId,cmap,new Map(),iC,canvas.width,canvas.height,new Set())
-    if(result)ctx.drawImage(result,0,0)
+    var w=canvas.width,h=canvas.height
+    if(dispMask){
+      // Render outMask of the display node as greyscale
+      var n=cmap.get(dispId)
+      var mv=n&&n.outMask&&n.outMask.length>0
+        ? compMasks(n.outMask,cmap,new Map(),iC,w,h,new Set())
+        : null
+      ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
+      if(mv){
+        var gid=ctx.createImageData(w,h)
+        for(var gi=0;gi<w*h;gi++){var gv=Math.round(mv[gi]*255);gid.data[gi*4]=gv;gid.data[gi*4+1]=gv;gid.data[gi*4+2]=gv;gid.data[gi*4+3]=255}
+        ctx.putImageData(gid,0,0)
+      } else {
+        // No mask configured — show diagonal hint
+        ctx.fillStyle="var(--bd)"; ctx.fillRect(0,0,w,h)
+        ctx.fillStyle="#040412"; ctx.font="12px 'IBM Plex Mono',monospace"
+        ctx.textAlign="center"; ctx.fillText("no output mask",w/2,h/2)
+      }
+    } else {
+      var result=compAny(dispId,cmap,new Map(),iC,w,h,new Set())
+      if(result)ctx.drawImage(result,0,0)
+    }
   } catch(err) {
     // Render pipeline failed — draw a soft error overlay so the UI stays interactive
     try {
@@ -2121,11 +2141,18 @@ function EfxCard(props) {
     if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
     else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
   }
+  var nMasks=(efx.maskStack||[]).length
+  var hasNonDefaultLayer=(efx.opacity!==100||efx.blendMode!=="normal")
   function pickType(t){
-    // Same type — nothing to do
     if(t===efx.type){setSwap(null);return}
-    // Go to confirm step with both retain options on by default
-    setSwap({type:t, keepMask:true, keepLayer:true})
+    // Skip confirm step entirely when there's nothing to carry over
+    if(nMasks===0&&!hasNonDefaultLayer){
+      var fresh=mkEfx(t)
+      props.onChange(Object.assign({},fresh,{id:efx.id,name:efx.name,enabled:efx.enabled,maskStack:[],opacity:100,blendMode:"normal"}))
+      setSwap(null)
+    } else {
+      setSwap({type:t, keepMask:true, keepLayer:true})
+    }
   }
   function confirmSwap(){
     var s=swap; if(!s||!s.type) return
@@ -2141,8 +2168,6 @@ function EfxCard(props) {
     props.onChange(next)
     setSwap(null)
   }
-  var nMasks=(efx.maskStack||[]).length
-  var hasNonDefaultLayer=(efx.opacity!==100||efx.blendMode!=="normal")
   var tabs=[
     {id:"primary",label:"Primary"},
     {id:"layer",  label:"Layer"},
@@ -2926,8 +2951,10 @@ function NodeItem(props) {
       <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onTog(node.id)}} style={{color:node.enabled?"var(--ac)":"var(--mu)"}}>
         {node.enabled?"●":"○"}
       </button>
-      <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onDsp(node.id)}} style={{color:props.isDsp?"var(--lv)":"var(--mu)",fontSize:20}}>
-        {props.isDsp?"◉":"◎"}
+      <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onDsp(node.id)}}
+        style={{color:props.isDsp?(props.isMaskDisp?"var(--lv)":"var(--lv)"):"var(--mu)",fontSize:20}}
+        title={props.isDsp?(props.isMaskDisp?"showing mask · tap for off":"showing comp · tap for mask-only"):"set as live preview"}>
+        {props.isDsp?(props.isMaskDisp?"◈":"◉"):"◎"}
       </button>
       <button onClick={handleDel} style={{minHeight:32,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?56:32}}>
         {armed?"sure?":"×"}
@@ -3213,12 +3240,14 @@ function NodeDetailSheet(props) {
   return (
     <div className="sheet-scrim" onClick={function(e){ if(e.target===e.currentTarget) props.onClose() }}>
       <div className="node-sheet" ref={sheetRef} style={sheetStyle}>
-        {/* Draggable grip — finger/pointer drag up/down resizes sheet */}
+        {/* Draggable grip pill — original visual design, drag to resize */}
         <div className="sheet-grip"
-          style={{position:"absolute",top:8,left:"50%",transform:"translateX(-50%)",
-            cursor:"row-resize",touchAction:"none",padding:"8px 20px",margin:"-8px -20px"}}
+          style={{cursor:"row-resize",touchAction:"none",padding:"12px 40px",
+            marginTop:-10,marginBottom:-6,display:"flex",justifyContent:"center"}}
           onMouseDown={onGripDown}
-          onTouchStart={onGripDown}/>
+          onTouchStart={onGripDown}>
+          <div style={{width:40,height:4,background:"var(--bd)",borderRadius:2}}/>
+        </div>
         <div className="node-sheet-hdr">
           <span style={{flex:1,fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
             color:"var(--tx)",fontWeight:500}}>
@@ -3229,8 +3258,8 @@ function NodeDetailSheet(props) {
             <button className="icon-btn sm"
               onClick={function(){props.onDsp(props.node.id)}}
               style={{color:isDsp?"var(--lv)":"var(--mu)",fontSize:20,marginRight:4}}
-              title={isDsp?"Stop previewing this node":"Set as live preview"}>
-              {isDsp?"◉":"◎"}
+              title={isDsp?(props.dispMask?"showing mask · tap for off":"showing comp · tap for mask-only"):"Set as live preview"}>
+              {isDsp?(props.dispMask?"◈":"◉"):"◎"}
             </button>
           )}
           <button className="ghost" style={{fontSize:20,minHeight:36}} onClick={props.onClose}>×</button>
@@ -3426,6 +3455,7 @@ function Section(props) {
             return (
               <div key={node.id}>
                 <NodeItem node={node} isSel={isSel} isDsp={isDsp}
+                  isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
                   onSel={function(id){ props.onSel(id===props.selId?null:id) }}
                   onDsp={props.onDsp} onDel={props.onDel}
                   onRen={function(name){ props.onRen(node.id,name) }}
@@ -3458,6 +3488,7 @@ function Section(props) {
                 return (
                   <div key={node.id}>
                     <NodeItem node={node} isSel={isSel} isDsp={isDsp}
+                      isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
                       onSel={function(id){ props.onSel(id===props.selId?null:id) }}
                       onDsp={props.onDsp} onDel={props.onDel}
                       onRen={function(name){ props.onRen(node.id,name) }}
@@ -3562,6 +3593,7 @@ function App() {
   var init = initState()
   var s1 = useState(init.nodes);  var nodes=s1[0],   setNodes=s1[1]
   var s2 = useState(init.dispId); var dispId=s2[0],  setDispId=s2[1]
+  var s2m= useState(false);      var dispMask=s2m[0],setDispMask=s2m[1]
   var s3 = useState(null);        var selId=s3[0],   setSelId=s3[1]
   var s4 = useState(36);          var leftW=s4[0],   setLeftW=s4[1]
   var s5 = useState(56);          var topH=s5[0],    setTopH=s5[1]
@@ -3605,7 +3637,7 @@ function App() {
     showToast()
   }
 
-  useEffect(function(){stRef.current={nodes:nodes,dispId:dispId}},[nodes,dispId])
+  useEffect(function(){stRef.current={nodes:nodes,dispId:dispId,dispMask:dispMask}},[nodes,dispId])
 
   // ── Persist settings via localStorage ───────────────────────────────────
   // Works on GitHub Pages, local dev, and any browser.
@@ -3668,13 +3700,13 @@ function App() {
   },[])
   // Immediate re-render on data changes
   useEffect(function(){
-    if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current)
-  },[nodes,dispId,sz])
+    if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask)
+  },[nodes,dispId,sz,dispMask])
   // Deferred re-render on layout changes — waits for browser reflow so
   // canvas has correct dimensions and cvRef is attached to the live canvas
   useEffect(function(){
     var t = setTimeout(function(){
-      if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current)
+      if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask)
     }, 60)
     return function(){ clearTimeout(t) }
   },[flipped,isVert])
@@ -3693,7 +3725,7 @@ function App() {
     img.src=url
   }
   function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
-  function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id)setDispId(null)}
+  function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id){setDispId(null);setDispMask(false)}}
   function upd(u){
     setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})
     // Keep sheet node in sync if it's the one being updated
@@ -3701,7 +3733,15 @@ function App() {
   }
   function ren(id,name){pushHistory({nodes:nodes});setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{name:name}):n})})}
   function tog(id){setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{enabled:!n.enabled}):n})})}
-  function dsp(id){setDispId(function(p){return p===id?null:id})}
+  function dsp(id){
+    if(dispId===id){
+      // Already displaying this node — cycle to mask-only, then off
+      if(!dispMask){setDispMask(true)}
+      else{setDispId(null);setDispMask(false)}
+    } else {
+      setDispId(id); setDispMask(false)
+    }
+  }
   function sel(id){setSelId(function(p){return p===id?null:id})}
   function doExport(fmt){var cv=cvRef.current;if(!cv)return;var a=document.createElement("a");a.download="nlics."+fmt;a.href=cv.toDataURL(fmt==="jpeg"?"image/jpeg":fmt==="webp"?"image/webp":"image/png",.95);a.click()}
 
@@ -3813,7 +3853,7 @@ function App() {
     else setS2Col(false)
   }
 
-  var sp={nodes:nodes,selId:selId,dispId:dispId,
+  var sp={nodes:nodes,selId:selId,dispId:dispId,dispMask:dispMask,
     onSel:selWithSheet,onDsp:dsp,onDel:del,onAdd:add,onUpd:upd,onLoad:loadUrl,onRen:ren,onTog:tog,
     panelStyle:settings.panelStyle,onPromote:handlePromote,onExtract:handleExtract,onNavigate:handleNavigate,
     iC:iC}
@@ -3874,7 +3914,7 @@ function App() {
         sec={sheetNode?sheetNode.sec:null}
         onClose={function(){setSheetNode(null);setSelId(null)}}
         onUpdate={upd} onLoad={loadUrl} nodes={nodes} iC={iC}
-        dispId={dispId} onDsp={dsp}
+        dispId={dispId} dispMask={dispMask} onDsp={dsp}
         onPromote={handlePromote} onExtract={handleExtract} onNavigate={handleNavigate}/>
 
       {anyFS && (
