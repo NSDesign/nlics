@@ -2025,70 +2025,94 @@ function InlineRename(props) {
 }
 
 function MaskCard(props) {
-  // Defensive copy — backfill any missing fields so range inputs stay controlled
-  // and blend-mode select has a valid value. Does NOT mutate the original.
+  // Defensive copy — backfill missing fields
   var mk=Object.assign({
     refId:null, channel:"luminosity", invert:false, strength:1, opacity:100,
     blendMode:"multiply", effectStack:[], enabled:true, name:""
   }, props.mask||{})
-  var armSt=useState(false); var armed=armSt[0],setArmed=armSt[1]
+  var tabSt=useState("source"); var tab=tabSt[0], setTab=tabSt[1]
+  var armSt=useState(false); var armed=armSt[0], setArmed=armSt[1]
   var timerRef=useRef(null)
   useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
   function handleDel(){
     if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
     else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
   }
+  var nEfx=(mk.effectStack||[]).length
+  var tabs=[
+    {id:"source", label:"Source"},
+    {id:"layer",  label:"Layer"},
+    {id:"effects",label:"Effects"+(nEfx>0?" ("+nEfx+")":""),color:"ac"},
+  ]
   return (
-    <div className="mask-card" style={{opacity:mk.enabled===false?.4:1}}>
-      <div style={{display:"flex",flexDirection:"column",gap:2,alignSelf:"flex-start",flexShrink:0,marginRight:4}}>
-        {props.onMove&&<button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:26}}>▲</button>}
+    <div className="card" style={{marginBottom:10,border:"1px solid rgba(176,96,240,.25)"}}>
+      {/* Header — matches EfxCard layout */}
+      <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+        <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+          {props.onMove&&<button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>}
+          {props.onMove&&<button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>}
+        </div>
         <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},mk,{enabled:mk.enabled===false}))}}
-          style={{color:mk.enabled===false?"var(--mu)":"var(--ac)",fontSize:16,height:28,width:26}}>{mk.enabled===false?"○":"●"}</button>
-        {props.onMove&&<button className="icon-btn sm" onClick={function(){props.onMove(1)}} disabled={props.isLast} style={{fontSize:11,height:20,width:26}}>▼</button>}
+          style={{color:mk.enabled===false?"var(--mu)":"var(--lv)",fontSize:18}}>
+          {mk.enabled===false?"○":"●"}
+        </button>
+        <InlineRename value={mk.name} fallback={mk.channel||"luminosity"}
+          onChange={function(nw){props.onChange(Object.assign({},mk,{name:nw}))}}
+          labelStyle={{fontSize:12,color:mk.enabled===false?"var(--mu)":"var(--lv)",
+            fontFamily:"'IBM Plex Mono',monospace",fontWeight:500,padding:"2px 0"}}/>
+        {props.onPromote&&<button className="promote-btn" onClick={props.onPromote} title="Promote mask tap point">↗</button>}
+        <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,
+          background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",
+          color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
+          {armed?"confirm ×":"×"}
+        </button>
       </div>
-      <span style={{fontSize:16,color:"var(--lv)",flexShrink:0,paddingTop:2}}>◈</span>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-          <InlineRename value={mk.name} fallback={"mask "+(mk.channel||"luminosity")}
-            onChange={function(nw){props.onChange(Object.assign({},mk,{name:nw}))}}
-            labelStyle={{fontSize:11,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace"}}/>
+      <TabBar tabs={tabs} active={tab} onChange={setTab}/>
+      {tab==="source" && (
+        <div className="card-body">
+          {!mk.refId && (
+            <div style={{fontSize:9,color:"#e0a060",background:"rgba(224,160,96,.1)",
+              border:"1px solid rgba(224,160,96,.25)",borderRadius:4,padding:"4px 8px",marginBottom:8}}>
+              ⚠ no source — mask inactive until a source is selected
+            </div>
+          )}
+          <NRef l="source" v={mk.refId} nodes={props.nodes} selfId={props.selfId}
+            iC={props.iC} mode="source"
+            fn={function(v){props.onChange(Object.assign({},mk,{refId:v}))}}/>
+          <Se l="channel" v={mk.channel}
+            opts={MCH}
+            fn={function(v){props.onChange(Object.assign({},mk,{channel:v}))}}/>
+          <Sl l="strength" v={mk.strength} mn={0} mx={1} st={.01}
+            fmt={function(v){return Math.round(v*100)+"%"}}
+            fn={function(v){props.onChange(Object.assign({},mk,{strength:v}))}}/>
+          <PR l="invert">
+            <button className={mk.invert?"ac":"ghost"}
+              style={{minHeight:32,padding:"0 14px"}}
+              onClick={function(){props.onChange(Object.assign({},mk,{invert:!mk.invert}))}}>
+              {mk.invert?"on":"off"}
+            </button>
+          </PR>
         </div>
-        {!mk.refId && (
-          <div style={{fontSize:9,color:"#e0a060",background:"rgba(224,160,96,.1)",border:"1px solid rgba(224,160,96,.25)",
-            borderRadius:4,padding:"4px 8px",marginBottom:6}}>
-            ⚠ no source — mask has no effect until a source is selected
-          </div>
-        )}
-        <NRef l="source" v={mk.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC} mode="source" fn={function(v){props.onChange(Object.assign({},mk,{refId:v}))}}/>
-        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
-          <select value={mk.channel} onChange={function(e){props.onChange(Object.assign({},mk,{channel:e.target.value}))}} style={{width:90,flex:"none"}}>
-            {MCH.map(function(c){return <option key={c}>{c}</option>})}
-          </select>
-          <input type="range" min={0} max={1} step={.01} value={mk.strength} onChange={function(e){props.onChange(Object.assign({},mk,{strength:+e.target.value}))}} style={{flex:1}}/>
-          <span style={{fontSize:10,color:"var(--ac)",minWidth:32,textAlign:"right"}}>{Math.round(mk.strength*100)}%</span>
-          <button className={mk.invert?"ac":"ghost"} style={{minHeight:32,padding:"0 10px",fontSize:11}} onClick={function(){props.onChange(Object.assign({},mk,{invert:!mk.invert}))}}>inv</button>
+      )}
+      {tab==="layer" && (
+        <div className="card-body">
+          <Se l="blend" v={mk.blendMode} opts={MBMS}
+            fn={function(v){props.onChange(Object.assign({},mk,{blendMode:v}))}}/>
+          <Sl l="opacity" v={mk.opacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){props.onChange(Object.assign({},mk,{opacity:v}))}}/>
         </div>
-        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:props.onEditEffects?8:0}}>
-          <select value={mk.blendMode} onChange={function(e){props.onChange(Object.assign({},mk,{blendMode:e.target.value}))}} style={{flex:1}}>
-            {MBMS.map(function(m){return <option key={m}>{m}</option>})}
-          </select>
-          <input type="range" min={0} max={100} step={1} value={mk.opacity} onChange={function(e){props.onChange(Object.assign({},mk,{opacity:+e.target.value}))}} style={{flex:1}}/>
-          <span style={{fontSize:10,color:"var(--di)",minWidth:32,textAlign:"right"}}>{Math.round(mk.opacity)}%</span>
-        </div>
-        <div style={{display:"flex",gap:4,marginTop:4}}>
+      )}
+      {tab==="effects" && (
+        <div className="card-body" style={{paddingTop:8}}>
+          {nEfx===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no effects on this mask</div>}
           {props.onEditEffects && (
-            <button className="ac" style={{flex:1}} onClick={props.onEditEffects}>
-              effects ({(mk.effectStack||[]).length}) →
+            <button className="ac" style={{width:"100%",marginTop:nEfx===0?0:4}} onClick={props.onEditEffects}>
+              {nEfx>0?"edit effects ("+nEfx+") →":"+ add effects →"}
             </button>
           )}
         </div>
-      </div>
-      <div style={{display:"flex",flexDirection:"column",gap:4,alignSelf:"flex-start",flexShrink:0}}>
-        {props.onPromote&&<button className="promote-btn" style={{padding:"2px 6px",fontSize:9}} onClick={props.onPromote} title="Promote mask tap point">↗</button>}
-        <button onClick={handleDel} style={{minHeight:30,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?52:28}}>
-          {armed?"sure?":"×"}
-        </button>
-      </div>
+      )}
     </div>
   )
 }
