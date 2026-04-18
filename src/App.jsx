@@ -2086,11 +2086,14 @@ function MaskCard(props) {
             fmt={function(v){return Math.round(v*100)+"%"}}
             fn={function(v){props.onChange(Object.assign({},mk,{strength:v}))}}/>
           <PR l="invert">
-            <button className={mk.invert?"ac":"ghost"}
-              style={{minHeight:32,padding:"0 14px"}}
-              onClick={function(){props.onChange(Object.assign({},mk,{invert:!mk.invert}))}}>
-              {mk.invert?"on":"off"}
+            <button className="icon-btn sm"
+              onClick={function(){props.onChange(Object.assign({},mk,{invert:!mk.invert}))}}
+              style={{color:mk.invert?"var(--ac)":"var(--mu)",fontSize:18,width:32,height:32}}>
+              {mk.invert?"●":"○"}
             </button>
+            <span style={{fontSize:10,color:mk.invert?"var(--ac)":"var(--mu)",marginLeft:4}}>
+              {mk.invert?"inverted":"normal"}
+            </span>
           </PR>
         </div>
       )}
@@ -2642,7 +2645,7 @@ function MaskStackPanel(props) {
             onNavigate={props.onNavigate}/>
         )
         return (
-          <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId}
+          <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
             isFirst={mi===0} isLast={mi===props.stack.length-1}
             onMove={function(dir){move(mi,dir)}}
             onChange={function(nw){upd(mk.id,nw)}}
@@ -2724,7 +2727,7 @@ function SlotPanel(props) {
       {tab==="masks" && (
         <div style={{padding:10}}>
           <MaskStackPanel key={(slot.maskStack||[]).map(function(e){return e.id}).join(",")}
-            stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
+            stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush} iC={props.iC}
             basePath={{slotKey:(props.slotKey||"")+".maskStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
@@ -2909,7 +2912,7 @@ function BlenderProps(props) {
         )}
         {outTab==="masks" && (
           <div style={{padding:10}}>
-            <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+            <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush} iC={props.iC}
               basePath={{slotKey:"outMask", steps:[]}}
               onNavigate={props.onNavigate}
               onPromote={props.onPromote}
@@ -3618,7 +3621,7 @@ function LayerCompProps(props) {
         )}
         {outTab==="masks" && (
           <div style={{padding:10}}>
-            <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+            <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush} iC={props.iC}
               basePath={{slotKey:"outMask", steps:[]}}
               onNavigate={props.onNavigate}
               onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}/>
@@ -3820,7 +3823,7 @@ function StackProps(props) {
           stack={node.maskStack||[]}
           nodes={nodes}
           selfId={node.id}
-          navPush={navPush}
+          navPush={navPush} iC={props.iC}
           basePath={{slotKey:"maskStack",steps:[]}}
           onNavigate={props.onNavigate}
           onChange={function(ms){onChange(Object.assign({},node,{maskStack:ms}))}}
