@@ -2060,7 +2060,7 @@ function MaskCard(props) {
           onChange={function(nw){props.onChange(Object.assign({},mk,{name:nw}))}}
           labelStyle={{fontSize:12,color:mk.enabled===false?"var(--mu)":"var(--lv)",
             fontFamily:"'IBM Plex Mono',monospace",fontWeight:500,padding:"2px 0"}}/>
-        {props.onPromote&&<button className="promote-btn" onClick={props.onPromote} title="Promote mask tap point">↗</button>}
+        {props.onPromote&&<button className="promote-btn" onClick={props.onPromote} title="Promote: capture mask state here as a reusable tap point">↗ tap</button>}
         <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,
           background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",
           color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
@@ -2373,7 +2373,7 @@ function EfxCard(props) {
           </div>,
           document.body
         )}
-        {props.onPromote&&<button className="promote-btn" onClick={function(e){e.stopPropagation();props.onPromote()}} title="Promote to named tap point">↗</button>}
+        {props.onPromote&&<button className="promote-btn" onClick={function(e){e.stopPropagation();props.onPromote()}} title="Promote: capture pipeline state here as a reusable tap point">↗ tap</button>}
         <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
           {armed?"confirm x":"x"}
         </button>
@@ -2592,7 +2592,7 @@ function EfxStack(props) {
         {/* extract — 1 part, only when available */}
         {props.onExtract&&props.stack.length>0&&(
           <button className="promote-btn" style={{flex:1,minWidth:0,fontSize:10}}
-            onClick={props.onExtract} title="Extract to Effect Stack node">↗</button>
+            onClick={props.onExtract} title="Extract stack to a reusable Stack node">⊞ extract</button>
         )}
       </div>
     </div>
@@ -2689,7 +2689,7 @@ function MaskStackPanel(props) {
         {/* extract — 1 part, only when available */}
         {props.onExtract&&props.stack.length>0&&(
           <button className="promote-btn" style={{flex:1,minWidth:0,fontSize:10}}
-            onClick={props.onExtract} title="Extract to Mask Stack node">↗</button>
+            onClick={props.onExtract} title="Extract stack to a reusable Stack node">⊞ extract</button>
         )}
       </div>
     </div>
@@ -2720,6 +2720,7 @@ function SlotPanel(props) {
             stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             basePath={{slotKey:(props.slotKey||"")+".effectStack", steps:[]}}
             onNavigate={props.onNavigate}
+            onPromote={props.onPromote}
             onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}}
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"effect",owner:props.owner})} : null}/>
         </div>
@@ -2808,6 +2809,7 @@ function BlenderProps(props) {
             navPush={navPush}
             basePath={{slotKey:top.slotKey,steps:top.steps}}
             onNavigate={props.onNavigate}
+            onPromote={props.onPromote}
             onChange={function(es){
               var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
                 return Object.assign({},mask,{effectStack:es})
@@ -2906,6 +2908,7 @@ function BlenderProps(props) {
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
+              onPromote={props.onPromote}
               onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}
               onExtract={props.onExtract ? function(){props.onExtract({slot:"outEfx",slotObj:{effectStack:node.outEfx||[]},kind:"effect",owner:node})} : null}/>
           </div>
@@ -3616,6 +3619,7 @@ function LayerCompProps(props) {
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
+              onPromote={props.onPromote}
               onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}/>
           </div>
         )}
@@ -3762,6 +3766,7 @@ function StackProps(props) {
             navPush={navPush}
             basePath={{slotKey:top.slotKey,steps:top.steps}}
             onNavigate={props.onNavigate}
+            onPromote={props.onPromote}
             onChange={function(es){
               var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
                 return Object.assign({},mask,{effectStack:es})
@@ -3816,6 +3821,7 @@ function StackProps(props) {
           navPush={navPush}
           basePath={{slotKey:"effectStack",steps:[]}}
           onNavigate={props.onNavigate}
+          onPromote={props.onPromote}
           onChange={function(es){onChange(Object.assign({},node,{effectStack:es}))}}
         />
       ) : (
