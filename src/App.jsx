@@ -3139,8 +3139,11 @@ function NodeItem(props) {
       <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onTog(node.id)}} style={{color:node.enabled?"var(--ac)":"var(--mu)"}}>
         {node.enabled?"●":"○"}
       </button>
-      <DisplayModeBtn active={props.isDsp} maskMode={props.isMaskDisp}
-        onDsp={function(){props.onDsp(node.id)}} size={32}/>
+      <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onDsp(node.id)}}
+        style={{color:props.isDsp?(props.isMaskDisp?"var(--lv)":"var(--lv)"):"var(--mu)",fontSize:20}}
+        title={props.isDsp?(props.isMaskDisp?"mask view · tap for off":"composite · tap for mask view"):"Set as live preview"}>
+        {props.isDsp?(props.isMaskDisp?"◈":"◉"):"◎"}
+      </button>
       <button onClick={handleDel} style={{minHeight:32,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?56:32}}>
         {armed?"sure?":"×"}
       </button>
@@ -3655,8 +3658,12 @@ function NodeDetailSheet(props) {
           </span>
           {/* Display toggle — same ◎/◉ as the list item */}
           {props.onDsp && (
-            <DisplayModeBtn active={isDsp} maskMode={props.dispMask&&isDsp}
-              onDsp={function(){props.onDsp(props.node.id)}} size={32}/>
+            <button className="icon-btn sm"
+              onClick={function(){props.onDsp(props.node.id)}}
+              style={{color:isDsp?"var(--lv)":"var(--mu)",fontSize:20,marginRight:4}}
+              title={isDsp?(props.dispMask?"mask view · tap for off":"composite · tap for mask view"):"Set as live preview"}>
+              {isDsp?(props.dispMask?"◈":"◉"):"◎"}
+            </button>
           )}
           <button className="ghost" style={{fontSize:20,minHeight:36}} onClick={props.onClose}>×</button>
         </div>
