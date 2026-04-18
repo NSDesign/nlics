@@ -2517,7 +2517,7 @@ function EfxStack(props) {
             onNavigate={props.onNavigate}/>
         )
         return (
-          <EfxCard key={efx.id} efx={efx} nodes={props.nodes} selfId={props.selfId}
+          <EfxCard key={efx.id} efx={efx} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
             isFirst={i===0} isLast={i===props.stack.length-1}
             onChange={function(nw){upd(efx.id,nw)}}
             onDel={function(){del(efx.id)}}
@@ -3434,9 +3434,10 @@ function LayerCard(props) {
           <EfxStack
             key={(lyr.effectStack||[]).map(function(e){return e.id}).join(",")}
             stack={lyr.effectStack||[]} nodes={props.nodes} selfId={props.selfId}
-            navPush={props.navPush}
+            navPush={props.navPush} iC={props.iC}
             basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
             onNavigate={props.onNavigate}
+            onPromote={props.onPromote}
             onChange={function(es){props.onChange({effectStack:es})}}/>
         </div>
       )}
@@ -3445,9 +3446,10 @@ function LayerCard(props) {
           <MaskStackPanel
             key={(lyr.maskStack||[]).map(function(m){return m.id}).join(",")}
             stack={lyr.maskStack||[]} nodes={props.nodes} selfId={props.selfId}
-            navPush={props.navPush}
+            navPush={props.navPush} iC={props.iC}
             basePath={{slotKey:"layers["+li+"].maskStack", steps:[]}}
             onNavigate={props.onNavigate}
+            onPromote={props.onPromote}
             onChange={function(ms){props.onChange({maskStack:ms})}}/>
         </div>
       )}
@@ -3565,6 +3567,7 @@ function LayerCompProps(props) {
               totalLayers={layers.length}
               nodes={nodes} selfId={node.id} iC={props.iC}
               navPush={navPush} onNavigate={props.onNavigate}
+              onPromote={props.onPromote}
               onMove={function(dir){moveLayer(li,dir)}}
               onDel={function(){delLayer(li)}}
               onChange={function(patch){updLayer(li,patch)}}/>
@@ -3666,7 +3669,7 @@ function NodeDetailSheet(props) {
                   onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
               : props.node.type==="layers"
                 ? <LayerCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                    onNavigate={props.onNavigate}/>
+                    onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                 : props.node.type==="promoted"
                 ? <PromotedProps node={props.node} nodes={props.nodes}/>
                 : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
@@ -3864,7 +3867,7 @@ function Section(props) {
                       : node.type==="blender"
                         ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                         : node.type==="layers"
-                          ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
+                          ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                         : node.type==="stack"
                           ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                           : null
