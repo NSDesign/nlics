@@ -2857,6 +2857,7 @@ function BlenderProps(props) {
         slotKey="inputA" owner={node} iC={props.iC}
         headless={headless}
         onNavigate={props.onNavigate}
+        onPromote={props.onPromote}
         onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
     )
@@ -2895,6 +2896,7 @@ function BlenderProps(props) {
         slotKey="inputB" owner={node} iC={props.iC}
         headless={headless}
         onNavigate={props.onNavigate}
+        onPromote={props.onPromote}
         onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
     )
