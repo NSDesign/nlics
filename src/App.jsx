@@ -1307,11 +1307,39 @@ function renderThumb(canvas, nodeId, nodes, iC) {
   if(!canvas||!nodeId) return
   var ctx=canvas.getContext("2d"); ctx.clearRect(0,0,THUMB_PX,THUMB_PX)
   var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
+  var n=cmap.get(nodeId)
+  // Stack nodes with no previewRefId return null from compAny.
+  // For mask stacks: render their mask as greyscale if possible.
+  // For effect stacks with no preview: show a hatched placeholder.
+  if(n&&n.type==="stack"&&!n.previewRefId){
+    ctx.fillStyle="#0d0d22"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX)
+    if(n.stackType==="mask"&&(n.maskStack||[]).length>0){
+      // Try to render mask values using a white base
+      var baseC=document.createElement("canvas"); baseC.width=THUMB_PX; baseC.height=THUMB_PX
+      var bx=baseC.getContext("2d"); bx.fillStyle="#ffffff"; bx.fillRect(0,0,THUMB_PX,THUMB_PX)
+      try {
+        var mv=compMasks(n.maskStack,cmap,new Map(),iC||new Map(),THUMB_PX,THUMB_PX,new Set())
+        if(mv){
+          var gid=ctx.createImageData(THUMB_PX,THUMB_PX)
+          for(var gi=0;gi<THUMB_PX*THUMB_PX;gi++){var gv=Math.round(mv[gi]*255);gid.data[gi*4]=gv;gid.data[gi*4+1]=gv;gid.data[gi*4+2]=gv;gid.data[gi*4+3]=255}
+          ctx.putImageData(gid,0,0)
+        } else { drawThumbLabel(ctx,"mask stack",THUMB_PX) }
+      } catch(_) { drawThumbLabel(ctx,"mask stack",THUMB_PX) }
+    } else {
+      drawThumbLabel(ctx,n.stackType==="mask"?"mask stack":"effect stack",THUMB_PX)
+    }
+    return
+  }
   try {
     var result=compAny(nodeId,cmap,new Map(),iC||new Map(),THUMB_PX,THUMB_PX,new Set())
     if(result) ctx.drawImage(result,0,0,THUMB_PX,THUMB_PX)
-    else { ctx.fillStyle="var(--sf)"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX) }
-  } catch(_) { ctx.fillStyle="var(--sf)"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX) }
+    else { ctx.fillStyle="#0d0d22"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX); drawThumbLabel(ctx,"no preview",THUMB_PX) }
+  } catch(_) { ctx.fillStyle="#0d0d22"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX) }
+}
+function drawThumbLabel(ctx, text, sz) {
+  ctx.fillStyle="rgba(96,104,152,.5)"; ctx.fillRect(0,0,sz,sz)
+  ctx.fillStyle="#8090c0"; ctx.font="8px 'IBM Plex Mono',monospace"
+  ctx.textAlign="center"; ctx.fillText(text, sz/2, sz/2+3)
 }
 // Single thumb item in the picker
 function ThumbItem(props) {
@@ -2057,6 +2085,7 @@ function MaskCard(props) {
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:4,alignSelf:"flex-start",flexShrink:0}}>
         {props.onPromote&&<button className="promote-btn" style={{padding:"2px 6px",fontSize:9}} onClick={props.onPromote} title="Promote">↗</button>}
+        {props.onPromote&&<button className="promote-btn" style={{padding:"2px 6px",fontSize:9}} onClick={props.onPromote} title="Promote mask tap point">↗</button>}
         <button onClick={handleDel} style={{minHeight:30,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?52:28}}>
           {armed?"sure?":"×"}
         </button>
@@ -2493,6 +2522,7 @@ function EfxStack(props) {
             onChange={function(nw){upd(efx.id,nw)}}
             onDel={function(){del(efx.id)}}
             onMove={function(dir){move(i,dir)}}
+            onPromote={props.onPromote ? function(){props.onPromote({slot:props.basePath&&props.basePath.slotKey,afterId:efx.id,withSub:true,stackType:"effect"})} : null}
             onDrillMask={function(mi){
               if(!props.navPush||!props.basePath)return
               var curEfx=props.stack.find(function(e){return e.id===efx.id})||efx
@@ -2594,6 +2624,7 @@ function MaskStackPanel(props) {
             onMove={function(dir){move(mi,dir)}}
             onChange={function(nw){upd(mk.id,nw)}}
             onDel={function(){del(mk.id)}}
+            onPromote={props.onPromote ? function(){props.onPromote({slot:props.basePath&&props.basePath.slotKey,afterId:mk.id,withSub:true,stackType:"mask"})} : null}
             onEditEffects={function(){
               if(!props.navPush||!props.basePath)return
               props.navPush({
@@ -2673,6 +2704,7 @@ function SlotPanel(props) {
             stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             basePath={{slotKey:(props.slotKey||"")+".maskStack", steps:[]}}
             onNavigate={props.onNavigate}
+            onPromote={props.onPromote}
             onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}}
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"mask",owner:props.owner})} : null}/>
         </div>
@@ -2857,6 +2889,7 @@ function BlenderProps(props) {
             <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush}
               basePath={{slotKey:"outMask", steps:[]}}
               onNavigate={props.onNavigate}
+              onPromote={props.onPromote}
               onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}
               onExtract={props.onExtract ? function(){props.onExtract({slot:"outMask",slotObj:{maskStack:node.outMask||[]},kind:"mask",owner:node})} : null}/>
           </div>
@@ -2954,6 +2987,122 @@ function BlenderProps(props) {
 
 /* ─── NODE ITEM ───────────────────────────────────────── */
 var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","blender":"#b82880","layers":"#e06828","stack":"#24acc4","promoted":"#d4b428"}
+/* ─── DISPLAY MODE BUTTON ──────────────────────────────── */
+// Renders a stacked-layers SVG icon in a round-rect.
+// A small triangle badge in the bottom-right signals multiple modes.
+// Tap: cycle off→comp→mask. Long-press: popover with labelled options.
+function DisplayModeBtn(props) {
+  // props: active (bool), maskMode (bool), onDsp (fn), size (number)
+  var pressTimer=useRef(null)
+  var popSt=useState(false); var pop=popSt[0], setPop=popSt[1]
+  var anchorRef=useRef(null)
+  var menuRef=useRef(null)
+  var pos=usePopoverPosition(anchorRef, pop, "above")
+
+  useEffect(function(){
+    if(!pop) return
+    function h(e){
+      if(anchorRef.current&&anchorRef.current.contains(e.target)) return
+      if(menuRef.current&&menuRef.current.contains(e.target)) return
+      setPop(false)
+    }
+    document.addEventListener("mousedown",h)
+    document.addEventListener("touchstart",h)
+    return function(){
+      document.removeEventListener("mousedown",h)
+      document.removeEventListener("touchstart",h)
+    }
+  },[pop])
+
+  function startPress(){
+    pressTimer.current=setTimeout(function(){
+      pressTimer.current=null
+      setPop(true)
+    }, 400)
+  }
+  function endPress(e){
+    if(pressTimer.current){
+      clearTimeout(pressTimer.current); pressTimer.current=null
+      // Short tap — cycle
+      props.onDsp()
+    }
+    // Long press opened popover — don't cycle
+  }
+  function cancelPress(){
+    if(pressTimer.current){ clearTimeout(pressTimer.current); pressTimer.current=null }
+  }
+
+  var sz=props.size||28
+  var isOn=props.active
+  var isMask=props.maskMode
+  // Colours
+  var col=isOn?(isMask?"var(--lv)":"var(--lv)"):"var(--mu)"
+  var bg=isOn?"rgba(176,96,240,.12)":"none"
+  var border=isOn?"1px solid "+(isMask?"var(--lv)":"var(--lv)"):"1px solid transparent"
+
+  var modes=[
+    {key:"off",   label:"Off",        icon:"○"},
+    {key:"comp",  label:"Composite",  icon:"◉"},
+    {key:"mask",  label:"Mask only",  icon:"◈"},
+  ]
+  var curMode=!isOn?"off":isMask?"mask":"comp"
+
+  return (
+    <div style={{position:"relative",display:"inline-flex"}}>
+      <button ref={anchorRef}
+        onMouseDown={startPress} onMouseUp={endPress} onMouseLeave={cancelPress}
+        onTouchStart={startPress} onTouchEnd={endPress} onTouchCancel={cancelPress}
+        onClick={function(e){e.preventDefault()}}
+        title={"Display: "+curMode+" — tap to cycle, hold to pick"}
+        style={{width:sz,height:sz,padding:0,background:bg,border:border,
+          borderRadius:6,cursor:"pointer",display:"inline-flex",alignItems:"center",
+          justifyContent:"center",flexShrink:0,position:"relative",transition:"all .15s"}}>
+        {/* Stacked layers icon */}
+        <svg width={sz-8} height={sz-8} viewBox="0 0 18 18" fill="none" stroke={col} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 12l7 4 7-4"/>
+          <path d="M2 9l7 4 7-4"/>
+          <path d="M2 6l7-4 7 4"/>
+        </svg>
+        {/* Triangle badge — signals multiple modes */}
+        <svg width={8} height={8} viewBox="0 0 8 8" style={{position:"absolute",bottom:1,right:1}}>
+          <path d="M8 8 L0 8 L8 0 Z" fill={isOn?"var(--lv)":"var(--bd)"}/>
+        </svg>
+      </button>
+      {pop&&pos&&createPortal(
+        <div ref={menuRef} style={Object.assign({},pos,{
+          position:"fixed",zIndex:9000,background:"var(--pn)",
+          border:"1px solid var(--bd)",borderRadius:10,
+          boxShadow:"0 -6px 24px rgba(0,0,0,.7)",
+          minWidth:140,padding:"6px 0"})}>
+          <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
+            letterSpacing:".1em",padding:"4px 12px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
+            Display mode
+          </div>
+          {modes.map(function(m){
+            var isActive=m.key===curMode
+            return (
+              <div key={m.key} onClick={function(){
+                  if(m.key==="off"&&isOn) props.onDsp()
+                  else if(m.key==="comp"&&(!isOn||isMask)) props.onDsp()
+                  else if(m.key==="mask"&&(!isOn||!isMask)) props.onDsp()
+                  setPop(false)
+                }}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
+                  cursor:"pointer",background:isActive?"var(--sl)":"none",
+                  color:isActive?"var(--lv)":"var(--mu)"}}>
+                <span style={{fontSize:16,width:20,textAlign:"center"}}>{m.icon}</span>
+                <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}>{m.label}</span>
+                {isActive&&<span style={{marginLeft:"auto",fontSize:9,color:"var(--lv)"}}>✓</span>}
+              </div>
+            )
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
 function NodeItem(props) {
   var node=props.node
   var edSt=useState(false);    var ed=edSt[0],     setEd=edSt[1]
@@ -2991,11 +3140,8 @@ function NodeItem(props) {
       <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onTog(node.id)}} style={{color:node.enabled?"var(--ac)":"var(--mu)"}}>
         {node.enabled?"●":"○"}
       </button>
-      <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onDsp(node.id)}}
-        style={{color:props.isDsp?(props.isMaskDisp?"var(--lv)":"var(--lv)"):"var(--mu)",fontSize:20}}
-        title={props.isDsp?(props.isMaskDisp?"showing mask · tap for off":"showing comp · tap for mask-only"):"set as live preview"}>
-        {props.isDsp?(props.isMaskDisp?"◈":"◉"):"◎"}
-      </button>
+      <DisplayModeBtn active={props.isDsp} maskMode={props.isMaskDisp}
+        onDsp={function(){props.onDsp(node.id)}} size={32}/>
       <button onClick={handleDel} style={{minHeight:32,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?56:32}}>
         {armed?"sure?":"×"}
       </button>
@@ -3507,12 +3653,8 @@ function NodeDetailSheet(props) {
           </span>
           {/* Display toggle — same ◎/◉ as the list item */}
           {props.onDsp && (
-            <button className="icon-btn sm"
-              onClick={function(){props.onDsp(props.node.id)}}
-              style={{color:isDsp?"var(--lv)":"var(--mu)",fontSize:20,marginRight:4}}
-              title={isDsp?(props.dispMask?"showing mask · tap for off":"showing comp · tap for mask-only"):"Set as live preview"}>
-              {isDsp?(props.dispMask?"◈":"◉"):"◎"}
-            </button>
+            <DisplayModeBtn active={isDsp} maskMode={props.dispMask&&isDsp}
+              onDsp={function(){props.onDsp(props.node.id)}} size={32}/>
           )}
           <button className="ghost" style={{fontSize:20,minHeight:36}} onClick={props.onClose}>×</button>
         </div>
