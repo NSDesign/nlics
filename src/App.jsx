@@ -2084,7 +2084,6 @@ function MaskCard(props) {
         </div>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:4,alignSelf:"flex-start",flexShrink:0}}>
-        {props.onPromote&&<button className="promote-btn" style={{padding:"2px 6px",fontSize:9}} onClick={props.onPromote} title="Promote">↗</button>}
         {props.onPromote&&<button className="promote-btn" style={{padding:"2px 6px",fontSize:9}} onClick={props.onPromote} title="Promote mask tap point">↗</button>}
         <button onClick={handleDel} style={{minHeight:30,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?52:28}}>
           {armed?"sure?":"×"}
