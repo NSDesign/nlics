@@ -270,6 +270,8 @@ function mkEfx(t) {
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[] } }
 function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"normal", amount:100, switched:false, outEfx:[], outMask:[] } }
+function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled:true, effectStack:[], maskStack:[], blendMode:"normal", opacity:100 } }
+function mkLayerComp() { return { id:uid(), name:"Layer Comp "+(_uid-100), type:"layers", section:2, enabled:true, layers:[mkLayer(),mkLayer()], outEfx:[], outMask:[] } }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
 
 // Stack node — named reusable container for an effect or mask stack.
@@ -794,6 +796,9 @@ function getRootArr(node, slotKey) {
   if (slotKey === "outMask") return node.outMask || []
   if (slotKey === "effectStack") return node.effectStack || []
   if (slotKey === "maskStack") return node.maskStack || []
+  // Handle layers[N].effectStack / layers[N].maskStack
+  var lm = slotKey.match(/^layers\[(\d+)\]\.(\w+)$/)
+  if (lm) { var li=parseInt(lm[1]); return ((node.layers||[])[li]||{})[lm[2]] || [] }
   var parts = slotKey.split(".")
   var slot = node[parts[0]] || {}
   return slot[parts[1]] || []
@@ -803,6 +808,16 @@ function setRootArr(node, slotKey, newArr) {
   if (slotKey === "outMask") return Object.assign({}, node, {outMask: newArr})
   if (slotKey === "effectStack") return Object.assign({}, node, {effectStack: newArr})
   if (slotKey === "maskStack") return Object.assign({}, node, {maskStack: newArr})
+  // Handle layers[N].effectStack / layers[N].maskStack
+  var lm = slotKey.match(/^layers\[(\d+)\]\.(\w+)$/)
+  if (lm) {
+    var li=parseInt(lm[1])
+    var nl=(node.layers||[]).map(function(l,i){
+      if(i!==li) return l
+      var upd={}; upd[lm[2]]=newArr; return Object.assign({},l,upd)
+    })
+    return Object.assign({},node,{layers:nl})
+  }
   var parts = slotKey.split(".")
   var slotObj = Object.assign({}, node[parts[0]])
   slotObj[parts[1]] = newArr
@@ -1162,6 +1177,28 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     cache.set(id,pcv);vis.delete(id);return pcv
   }
 
+  // ── Layer compositor ──────────────────────────────────────
+  if(n.type==="layers"){
+    var lcv=mkCv(w,h),lctx=lcv.getContext("2d")
+    var layers=n.layers||[]
+    // Iterate bottom-to-top (last in array = top layer)
+    for(var li=layers.length-1;li>=0;li--){
+      var lyr=layers[li]
+      if(lyr.enabled===false) continue
+      if(!lyr.refId||vis.has(lyr.refId)) continue
+      var lVis=new Set(vis)
+      var lBase=compAny(lyr.refId,cmap,cache,iC,w,h,lVis)
+      if(!lBase) continue
+      var lCv=clCv(lBase,w,h),lCtx=lCv.getContext("2d")
+      if(lyr.effectStack&&lyr.effectStack.length>0) applyEfxStk(lCtx,lyr.effectStack,cmap,cache,iC,w,h,lVis)
+      if(lyr.maskStack&&lyr.maskStack.length>0) maskToAlpha(lCtx,lyr.maskStack,cmap,cache,iC,w,h,lVis)
+      blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h)
+    }
+    if(n.outEfx&&n.outEfx.length>0) applyEfxStk(lctx,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
+    if(n.outMask&&n.outMask.length>0) maskToAlpha(lctx,n.outMask,cmap,cache,iC,w,h,new Set(vis))
+    cache.set(id,lcv);vis.delete(id);return lcv
+  }
+
   // ── Blender compositor ───────────────────────────────────
   var cv2=mkCv(w,h),ctx2=cv2.getContext("2d")
   // Label semantics: "A over B" (switched=false) means A on top of B.
@@ -1330,9 +1367,9 @@ function NRef(props) {
     if(n.id===props.selfId) return false
     if(n.section!==2) return false
     if(mode==="intermediate") return n.type==="promoted"
-    if(mode==="source") return n.type!=="promoted"
+    if(mode==="source") return true  // all compositors (incl. promoted taps) are valid pixel sources
     if(mode==="effect-source") return n.type==="stack"&&n.stackType==="effect"
-    if(mode==="mask-source") return n.type==="stack"&&n.stackType==="mask"
+    if(mode==="mask-source") return n.type==="stack"&&n.stackType==="mask"||n.type==="promoted"
     return true
   })
   var allItems = creators.concat(comps)
@@ -2916,7 +2953,7 @@ function BlenderProps(props) {
 }
 
 /* ─── NODE ITEM ───────────────────────────────────────── */
-var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","blender":"#b82880","stack":"#24acc4","promoted":"#d4b428"}
+var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","blender":"#b82880","layers":"#e06828","stack":"#24acc4","promoted":"#d4b428"}
 function NodeItem(props) {
   var node=props.node
   var edSt=useState(false);    var ed=edSt[0],     setEd=edSt[1]
@@ -2947,7 +2984,10 @@ function NodeItem(props) {
             </span>
         }
       </div>
-      <span className={"ftag "+(node.type==="stack"?"tstack":node.type==="promoted"?"tprom":node.section===1?"tgn":"tco")}>{node.type==="stack"?(node.stackType||"effect")+" stack":node.type}</span>
+      <span className={"ftag "+(node.type==="stack"?"tstack":node.type==="promoted"?"tprom":node.type==="layers"?"tco":node.section===1?"tgn":"tco")}
+        style={node.type==="layers"?{borderColor:"#e06828",color:"#e06828",background:"rgba(224,104,40,.1)"}:{}}>
+        {node.type==="stack"?(node.stackType||"effect")+" stack":node.type==="layers"?"layer comp":node.type}
+      </span>
       <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onTog(node.id)}} style={{color:node.enabled?"var(--ac)":"var(--mu)"}}>
         {node.enabled?"●":"○"}
       </button>
@@ -2980,7 +3020,7 @@ function AddMenu(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
   var s1=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
-  var items=props.sec===1?s1:[{t:"blender",l:"Blender"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
+  var items=props.sec===1?s1:[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
   return (
     <div ref={anchorRef} style={{position:"relative"}}>
       <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
@@ -3202,6 +3242,200 @@ function SettingsSheet(props) {
 }
 
 /* ─── NODE DETAIL SHEET (panel style = sheet) ──────────────── */
+/* ─── LAYER COMP PROPS ─────────────────────────────────── */
+function LayerCompProps(props) {
+  var node=props.node, onChange=props.onChange, nodes=props.nodes
+  var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
+  function navPush(item){setNavStack(function(s){return s.concat([item])})}
+  function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
+
+  // Drill-down into layer effectStack → mask effects chain
+  if(navStack.length>0){
+    var top=navStack[navStack.length-1]
+    var drillMask=resolvePath(node, top.slotKey, top.steps)
+    if(!drillMask){
+      setTimeout(function(){setNavStack([])},0)
+      return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target gone — returning…</div>
+    }
+    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx+1)})}
+    return (
+      <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
+        <div className="breadcrumb">
+          <button className="ghost" style={{fontSize:13,padding:"0 6px 0 0",minHeight:32}} onClick={navPop}>Back</button>
+          <span className="bc-item" onClick={function(){setNavStack([])}}
+            style={{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>{node.name}</span>
+          {navStack.map(function(n,i){
+            var isCur=i===navStack.length-1
+            return (
+              <span key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{color:"var(--mu)"}}>›</span>
+                <span className={"bc-item"+(isCur?" cur":"")}
+                  onClick={isCur?null:function(){jumpTo(i)}}
+                  style={isCur?null:{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>
+                  {n.label}
+                </span>
+              </span>
+            )
+          })}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:10}}>
+          <div className="stack-lbl">effects on mask</div>
+          <EfxStack
+            key={(drillMask.effectStack||[]).map(function(e){return e.id}).join(",")}
+            stack={drillMask.effectStack||[]}
+            nodes={nodes} selfId={node.id}
+            navPush={navPush}
+            basePath={{slotKey:top.slotKey, steps:top.steps}}
+            onNavigate={props.onNavigate}
+            onChange={function(es){
+              var newNode=updatePath(node, top.slotKey, top.steps, function(mask){
+                return Object.assign({},mask,{effectStack:es})
+              })
+              onChange(newNode)
+            }}/>
+        </div>
+      </div>
+    )
+  }
+
+  var layers = node.layers || []
+  function updLayer(idx, patch){
+    var nl=layers.map(function(l,i){return i===idx?Object.assign({},l,patch):l})
+    onChange(Object.assign({},node,{layers:nl}))
+  }
+  function addLayer(){
+    onChange(Object.assign({},node,{layers:[mkLayer()].concat(layers)}))
+  }
+  function delLayer(idx){
+    if(layers.length<=1) return
+    onChange(Object.assign({},node,{layers:layers.filter(function(_,i){return i!==idx})}))
+  }
+  function moveLayer(idx, dir){
+    var ni=Math.max(0,Math.min(layers.length-1,idx+dir))
+    if(ni===idx) return
+    var a=layers.slice(); var tmp=a[idx]; a[idx]=a[ni]; a[ni]=tmp
+    onChange(Object.assign({},node,{layers:a}))
+  }
+  var outTabs=[
+    {id:"effects",label:"Effects"+((node.outEfx||[]).length>0?" ("+(node.outEfx||[]).length+")":""),color:"ac"},
+    {id:"masks",  label:"Masks"+((node.outMask||[]).length>0?" ("+(node.outMask||[]).length+")":""),color:"lv"},
+  ]
+  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  return (
+    <div style={{padding:10,overflowY:"auto"}}>
+      {/* Layers list — top of list = top layer (applied last) */}
+      <div style={{marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+          <span style={{fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+            textTransform:"uppercase",letterSpacing:".1em",color:"#e06828",flex:1}}>Layers</span>
+          <button className="ac" style={{fontSize:10,padding:"0 10px",minHeight:30}} onClick={addLayer}>+ layer</button>
+        </div>
+        {layers.map(function(lyr,li){
+          var isFirst=li===0, isLast=li===layers.length-1
+          var nEfx=(lyr.effectStack||[]).length, nMask=(lyr.maskStack||[]).length
+          var layerTabSt=useState("source"); var layerTab=layerTabSt[0], setLayerTab=layerTabSt[1]
+          var lyrTabs=[
+            {id:"source",  label:"Source"},
+            {id:"effects", label:"Fx"+(nEfx>0?" ("+nEfx+")":""), color:"ac"},
+            {id:"masks",   label:"Mask"+(nMask>0?" ("+nMask+")":""), color:"lv"},
+            {id:"layer",   label:"Layer"},
+          ]
+          return (
+            <div key={lyr.id} className="card" style={{marginBottom:8}}>
+              <div className="card-hdr" style={{background:"rgba(224,104,40,.06)"}}>
+                <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+                  <button className="icon-btn sm" onClick={function(){moveLayer(li,-1)}} disabled={isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
+                  <button className="icon-btn sm" onClick={function(){moveLayer(li,1)}}  disabled={isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
+                </div>
+                <button className="icon-btn sm" onClick={function(){updLayer(li,{enabled:lyr.enabled===false})}}
+                  style={{color:lyr.enabled===false?"var(--mu)":"#e06828",fontSize:18}}>
+                  {lyr.enabled===false?"○":"●"}
+                </button>
+                <InlineRename value={lyr.name} fallback={"layer "+(layers.length-li)}
+                  onChange={function(nw){updLayer(li,{name:nw})}}
+                  labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
+                <button onClick={function(){delLayer(li)}} disabled={layers.length<=1}
+                  style={{minHeight:32,padding:"0 10px",fontSize:14,
+                    color:layers.length<=1?"var(--bd)":"var(--mu)",background:"none",border:"none",cursor:layers.length<=1?"default":"pointer"}}>
+                  ×
+                </button>
+              </div>
+              <TabBar tabs={lyrTabs} active={layerTab} onChange={setLayerTab}/>
+              {layerTab==="source" && (
+                <div className="card-body">
+                  <NRef l="source" v={lyr.refId} nodes={nodes} selfId={node.id} iC={props.iC} mode="source"
+                    fn={function(v){updLayer(li,{refId:v})}}/>
+                </div>
+              )}
+              {layerTab==="effects" && (
+                <div style={{padding:10}}>
+                  <EfxStack
+                    key={(lyr.effectStack||[]).map(function(e){return e.id}).join(",")}
+                    stack={lyr.effectStack||[]} nodes={nodes} selfId={node.id}
+                    navPush={navPush}
+                    basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
+                    onNavigate={props.onNavigate}
+                    onChange={function(es){updLayer(li,{effectStack:es})}}/>
+                </div>
+              )}
+              {layerTab==="masks" && (
+                <div style={{padding:10}}>
+                  <MaskStackPanel
+                    key={(lyr.maskStack||[]).map(function(m){return m.id}).join(",")}
+                    stack={lyr.maskStack||[]} nodes={nodes} selfId={node.id}
+                    navPush={navPush}
+                    basePath={{slotKey:"layers["+li+"].maskStack", steps:[]}}
+                    onNavigate={props.onNavigate}
+                    onChange={function(ms){updLayer(li,{maskStack:ms})}}/>
+                </div>
+              )}
+              {layerTab==="layer" && (
+                <div className="card-body">
+                  <Se l="blend" v={lyr.blendMode||"normal"} opts={BMODES}
+                    fn={function(v){updLayer(li,{blendMode:v})}}/>
+                  <Sl l="opacity" v={lyr.opacity==null?100:lyr.opacity} mn={0} mx={100} st={1}
+                    fmt={function(v){return Math.round(v)+"%"}}
+                    fn={function(v){updLayer(li,{opacity:v})}}/>
+                  {COMMUTATIVE_MODES[lyr.blendMode] && (
+                    <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",fontStyle:"italic"}}>
+                      order has no effect in {lyr.blendMode} mode
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Output effects + masks */}
+      <div className="card">
+        <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+            textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
+        </div>
+        <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
+        {outTab==="effects" && (
+          <div style={{padding:10}}>
+            <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              basePath={{slotKey:"outEfx", steps:[]}}
+              onNavigate={props.onNavigate}
+              onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}/>
+          </div>
+        )}
+        {outTab==="masks" && (
+          <div style={{padding:10}}>
+            <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              basePath={{slotKey:"outMask", steps:[]}}
+              onNavigate={props.onNavigate}
+              onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}/>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function NodeDetailSheet(props) {
   // props: node, sec, open, onClose, onUpdate, onLoad, nodes, dispId, onDsp
   var sheetRef=useRef(null)
@@ -3270,7 +3504,10 @@ function NodeDetailSheet(props) {
             : props.node.type==="stack"
               ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
                   onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
-              : props.node.type==="promoted"
+              : props.node.type==="layers"
+                ? <LayerCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
+                    onNavigate={props.onNavigate}/>
+                : props.node.type==="promoted"
                 ? <PromotedProps node={props.node} nodes={props.nodes}/>
                 : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
                     onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
@@ -3466,6 +3703,8 @@ function Section(props) {
                       ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
                       : node.type==="blender"
                         ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                        : node.type==="layers"
+                          ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
                         : node.type==="stack"
                           ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                           : null
@@ -3724,7 +3963,7 @@ function App() {
     iC.current.set(url,img)
     img.src=url
   }
-  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
+  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
   function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id){setDispId(null);setDispMask(false)}}
   function upd(u){
     setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})
