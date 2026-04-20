@@ -1229,13 +1229,40 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   if(n.outMask&&n.outMask.length>0)maskToAlpha(ctx2,n.outMask,cmap,cache,iC,w,h,new Set(vis))
   cache.set(id,cv2);vis.delete(id);return cv2
 }
-function renderPipeline(canvas,dispId,nodes,iC,dispMask) {
+function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
   if(!canvas||!dispId)return
   try {
     var ctx=canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height)
     var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
     var w=canvas.width,h=canvas.height
-    if(dispMask){
+    if(dispSlot){
+      // Display a specific input slot — pixels or mask
+      var dsNode=cmap.get(dispSlot.nodeId)
+      var dsSlot=dsNode&&(dispSlot.slot==="inputA"?dsNode.inputA:dsNode.inputB)
+      if(dsSlot&&dsSlot.refId){
+        if(dispSlot.mode==="mask"){
+          // Render that slot's mask stack as greyscale
+          var dsMv=dsSlot.maskStack&&dsSlot.maskStack.length>0
+            ? compMasks(dsSlot.maskStack,cmap,new Map(),iC,w,h,new Set())
+            : null
+          ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
+          if(dsMv){
+            var dsGid=ctx.createImageData(w,h)
+            for(var dsi=0;dsi<w*h;dsi++){var dsv=Math.round(dsMv[dsi]*255);dsGid.data[dsi*4]=dsv;dsGid.data[dsi*4+1]=dsv;dsGid.data[dsi*4+2]=dsv;dsGid.data[dsi*4+3]=255}
+            ctx.putImageData(dsGid,0,0)
+          } else {
+            ctx.fillStyle="var(--bd)"; ctx.fillRect(0,0,w,h)
+            ctx.fillStyle="#040412"; ctx.font="12px 'IBM Plex Mono',monospace"
+            ctx.textAlign="center"; ctx.fillText("no mask on "+dispSlot.slot,w/2,h/2)
+          }
+        } else {
+          // Render the slot's pixel source with its effects applied
+          var dsRes=resolveSlot(dsSlot,cmap,new Map(),iC,w,h,new Set())
+          if(dsRes) ctx.drawImage(dsRes,0,0)
+          else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
+        }
+      } else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
+    } else if(dispMask){
       // Render outMask of the display node as greyscale
       var n=cmap.get(dispId)
       var mv=n&&n.outMask&&n.outMask.length>0
@@ -1247,7 +1274,6 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask) {
         for(var gi=0;gi<w*h;gi++){var gv=Math.round(mv[gi]*255);gid.data[gi*4]=gv;gid.data[gi*4+1]=gv;gid.data[gi*4+2]=gv;gid.data[gi*4+3]=255}
         ctx.putImageData(gid,0,0)
       } else {
-        // No mask configured — show diagonal hint
         ctx.fillStyle="var(--bd)"; ctx.fillRect(0,0,w,h)
         ctx.fillStyle="#040412"; ctx.font="12px 'IBM Plex Mono',monospace"
         ctx.textAlign="center"; ctx.fillText("no output mask",w/2,h/2)
@@ -2736,7 +2762,7 @@ function SlotPanel(props) {
             stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             basePath={{slotKey:(props.slotKey||"")+".effectStack", steps:[]}}
             onNavigate={props.onNavigate}
-            onPromote={props.onPromote}
+            onPromote={wrappedPromote}
             onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}}
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"effect",owner:props.owner})} : null}/>
         </div>
@@ -2747,7 +2773,7 @@ function SlotPanel(props) {
             stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush} iC={props.iC}
             basePath={{slotKey:(props.slotKey||"")+".maskStack", steps:[]}}
             onNavigate={props.onNavigate}
-            onPromote={props.onPromote}
+            onPromote={wrappedPromote}
             onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}}
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"mask",owner:props.owner})} : null}/>
         </div>
@@ -2759,6 +2785,16 @@ function SlotPanel(props) {
     <div className="card">
       <div className="card-hdr" style={{background:props.accent==="var(--ac)"?"rgba(36,204,168,.06)":"rgba(208,72,152,.06)"}}>
         <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:props.accent}}>{props.label}</span>
+        {props.dspSlot&&props.slotKey&&(function(){
+          var ds=props.dispSlot
+          var isThis=ds&&ds.nodeId===props.owner&&ds.slot===props.slotKey
+          var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
+          var col=!isThis?"var(--mu)":ds.mode==="pixels"?"var(--lv)":"var(--lv)"
+          var ttip=!isThis?"Preview this input":ds.mode==="pixels"?"Previewing pixels · tap for mask":"Previewing mask · tap to stop"
+          return <button className="icon-btn sm"
+            onClick={function(e){e.stopPropagation();props.dspSlot(props.owner.id,props.slotKey)}}
+            style={{color:col,fontSize:18}} title={ttip}>{icon}</button>
+        })()}
       </div>
       {inner}
     </div>
@@ -2768,6 +2804,8 @@ function SlotPanel(props) {
 /* ─── BLENDER PROPS ───────────────────────────────────── */
 function BlenderProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
+  // Wrap onPromote to inject nodeId — EfxStack/MaskStackPanel don't know which node they're inside
+  var wrappedPromote=props.onPromote?function(tp){props.onPromote(Object.assign({nodeId:node.id},tp))}:null
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
   // All hooks must be declared before any early return to satisfy Rules of Hooks
   var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
@@ -2825,7 +2863,7 @@ function BlenderProps(props) {
             navPush={navPush}
             basePath={{slotKey:top.slotKey,steps:top.steps}}
             onNavigate={props.onNavigate}
-            onPromote={props.onPromote}
+            onPromote={wrappedPromote}
             onChange={function(es){
               var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
                 return Object.assign({},mask,{effectStack:es})
@@ -2873,7 +2911,8 @@ function BlenderProps(props) {
         slotKey="inputA" owner={node} iC={props.iC}
         headless={headless}
         onNavigate={props.onNavigate}
-        onPromote={props.onPromote}
+        onPromote={wrappedPromote}
+        dspSlot={props.dspSlot} dispSlot={props.dispSlot}
         onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
     )
@@ -2912,7 +2951,8 @@ function BlenderProps(props) {
         slotKey="inputB" owner={node} iC={props.iC}
         headless={headless}
         onNavigate={props.onNavigate}
-        onPromote={props.onPromote}
+        onPromote={wrappedPromote}
+        dspSlot={props.dspSlot} dispSlot={props.dispSlot}
         onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
     )
@@ -2926,7 +2966,7 @@ function BlenderProps(props) {
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
-              onPromote={props.onPromote}
+              onPromote={wrappedPromote}
               onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}
               onExtract={props.onExtract ? function(){props.onExtract({slot:"outEfx",slotObj:{effectStack:node.outEfx||[]},kind:"effect",owner:node})} : null}/>
           </div>
@@ -2936,7 +2976,7 @@ function BlenderProps(props) {
             <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush} iC={props.iC}
               basePath={{slotKey:"outMask", steps:[]}}
               onNavigate={props.onNavigate}
-              onPromote={props.onPromote}
+              onPromote={wrappedPromote}
               onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}
               onExtract={props.onExtract ? function(){props.onExtract({slot:"outMask",slotObj:{maskStack:node.outMask||[]},kind:"mask",owner:node})} : null}/>
           </div>
@@ -3487,7 +3527,7 @@ function LayerCard(props) {
             navPush={props.navPush} iC={props.iC}
             basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
             onNavigate={props.onNavigate}
-            onPromote={props.onPromote}
+            onPromote={wrappedPromote}
             onChange={function(es){props.onChange({effectStack:es})}}/>
         </div>
       )}
@@ -3499,7 +3539,7 @@ function LayerCard(props) {
             navPush={props.navPush} iC={props.iC}
             basePath={{slotKey:"layers["+li+"].maskStack", steps:[]}}
             onNavigate={props.onNavigate}
-            onPromote={props.onPromote}
+            onPromote={wrappedPromote}
             onChange={function(ms){props.onChange({maskStack:ms})}}/>
         </div>
       )}
@@ -3524,6 +3564,7 @@ function LayerCard(props) {
 /* ─── LAYER COMP PROPS ─────────────────────────────────── */
 function LayerCompProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
+  var wrappedPromote=props.onPromote?function(tp){props.onPromote(Object.assign({nodeId:node.id},tp))}:null
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
   // Hoist ALL hooks above any early return — Rules of Hooks
   var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
@@ -3617,7 +3658,7 @@ function LayerCompProps(props) {
               totalLayers={layers.length}
               nodes={nodes} selfId={node.id} iC={props.iC}
               navPush={navPush} onNavigate={props.onNavigate}
-              onPromote={props.onPromote}
+              onPromote={wrappedPromote}
               onMove={function(dir){moveLayer(li,dir)}}
               onDel={function(){delLayer(li)}}
               onChange={function(patch){updLayer(li,patch)}}/>
@@ -3637,7 +3678,7 @@ function LayerCompProps(props) {
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
-              onPromote={props.onPromote}
+              onPromote={wrappedPromote}
               onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}/>
           </div>
         )}
@@ -3721,14 +3762,14 @@ function NodeDetailSheet(props) {
             ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad}/>
             : props.node.type==="stack"
               ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                  onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
+                  onPromote={wrappedPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
               : props.node.type==="layers"
                 ? <LayerCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                    onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                    onPromote={wrappedPromote} onNavigate={props.onNavigate}/>
                 : props.node.type==="promoted"
                 ? <PromotedProps node={props.node} nodes={props.nodes}/>
                 : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                    onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
+                    onPromote={wrappedPromote} onExtract={props.onExtract} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onNavigate={props.onNavigate}/>
           }
         </div>
       </div>
@@ -3741,6 +3782,7 @@ function NodeDetailSheet(props) {
 // Its UI is identical to the inline stack in a blender/stack input's tab.
 function StackProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
+  var wrappedPromote=props.onPromote?function(tp){props.onPromote(Object.assign({nodeId:node.id},tp))}:null
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
   // Hoist hook above early return
   var unused=useState(null) // placeholder so hook count is stable
@@ -3784,7 +3826,7 @@ function StackProps(props) {
             navPush={navPush}
             basePath={{slotKey:top.slotKey,steps:top.steps}}
             onNavigate={props.onNavigate}
-            onPromote={props.onPromote}
+            onPromote={wrappedPromote}
             onChange={function(es){
               var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
                 return Object.assign({},mask,{effectStack:es})
@@ -3839,7 +3881,7 @@ function StackProps(props) {
           navPush={navPush}
           basePath={{slotKey:"effectStack",steps:[]}}
           onNavigate={props.onNavigate}
-          onPromote={props.onPromote}
+          onPromote={wrappedPromote}
           onChange={function(es){onChange(Object.assign({},node,{effectStack:es}))}}
         />
       ) : (
@@ -3922,11 +3964,11 @@ function Section(props) {
                     {props.sec===1
                       ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
                       : node.type==="blender"
-                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={wrappedPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onNavigate={props.onNavigate}/>
                         : node.type==="layers"
-                          ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                          ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={wrappedPromote} onNavigate={props.onNavigate}/>
                         : node.type==="stack"
-                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={wrappedPromote} onNavigate={props.onNavigate}/>
                           : null
                     }
                   </div>
@@ -4053,6 +4095,7 @@ function App() {
   var s1 = useState(init.nodes);  var nodes=s1[0],   setNodes=s1[1]
   var s2 = useState(init.dispId); var dispId=s2[0],  setDispId=s2[1]
   var s2m= useState(false);      var dispMask=s2m[0],setDispMask=s2m[1]
+  var s2s= useState(null);       var dispSlot=s2s[0],setDispSlot=s2s[1]  // {nodeId,slot,mode}
   var s3 = useState(null);        var selId=s3[0],   setSelId=s3[1]
   var s4 = useState(36);          var leftW=s4[0],   setLeftW=s4[1]
   var s5 = useState(56);          var topH=s5[0],    setTopH=s5[1]
@@ -4096,7 +4139,7 @@ function App() {
     showToast()
   }
 
-  useEffect(function(){stRef.current={nodes:nodes,dispId:dispId,dispMask:dispMask}},[nodes,dispId])
+  useEffect(function(){stRef.current={nodes:nodes,dispId:dispId,dispMask:dispMask,dispSlot:dispSlot}},[nodes,dispId])
 
   // ── Persist settings via localStorage ───────────────────────────────────
   // Works on GitHub Pages, local dev, and any browser.
@@ -4159,13 +4202,13 @@ function App() {
   },[])
   // Immediate re-render on data changes
   useEffect(function(){
-    if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask)
+    if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask,dispSlot)
   },[nodes,dispId,sz,dispMask])
   // Deferred re-render on layout changes — waits for browser reflow so
   // canvas has correct dimensions and cvRef is attached to the live canvas
   useEffect(function(){
     var t = setTimeout(function(){
-      if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask)
+      if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask,dispSlot)
     }, 60)
     return function(){ clearTimeout(t) }
   },[flipped,isVert])
@@ -4184,7 +4227,7 @@ function App() {
     img.src=url
   }
   function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
-  function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id){setDispId(null);setDispMask(false)}}
+  function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id){setDispId(null);setDispMask(false);setDispSlot(null)}}
   function upd(u){
     setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})
     // Keep sheet node in sync if it's the one being updated
@@ -4193,12 +4236,22 @@ function App() {
   function ren(id,name){pushHistory({nodes:nodes});setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{name:name}):n})})}
   function tog(id){setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{enabled:!n.enabled}):n})})}
   function dsp(id){
+    setDispSlot(null)  // clear any per-slot display when cycling the node display
     if(dispId===id){
-      // Already displaying this node — cycle to mask-only, then off
       if(!dispMask){setDispMask(true)}
       else{setDispId(null);setDispMask(false)}
     } else {
       setDispId(id); setDispMask(false)
+    }
+  }
+  function dspSlot(nodeId,slot){
+    // Cycle: off → pixels → mask → off for a specific blender input slot
+    if(dispSlot&&dispSlot.nodeId===nodeId&&dispSlot.slot===slot){
+      if(dispSlot.mode==="pixels") setDispSlot({nodeId:nodeId,slot:slot,mode:"mask"})
+      else setDispSlot(null)
+    } else {
+      setDispId(nodeId); setDispMask(false)  // keep node highlighted in list
+      setDispSlot({nodeId:nodeId,slot:slot,mode:"pixels"})
     }
   }
   function sel(id){setSelId(function(p){return p===id?null:id})}
@@ -4319,7 +4372,7 @@ function App() {
     else setS2Col(false)
   }
 
-  var sp={nodes:nodes,selId:selId,dispId:dispId,dispMask:dispMask,
+  var sp={nodes:nodes,selId:selId,dispId:dispId,dispMask:dispMask,dispSlot:dispSlot,dspSlot:dspSlot,
     onSel:selWithSheet,onDsp:dsp,onDel:del,onAdd:add,onUpd:upd,onLoad:loadUrl,onRen:ren,onTog:tog,
     panelStyle:settings.panelStyle,onPromote:handlePromote,onExtract:handleExtract,onNavigate:handleNavigate,
     iC:iC}
@@ -4380,7 +4433,7 @@ function App() {
         sec={sheetNode?sheetNode.sec:null}
         onClose={function(){setSheetNode(null);setSelId(null)}}
         onUpdate={upd} onLoad={loadUrl} nodes={nodes} iC={iC}
-        dispId={dispId} dispMask={dispMask} onDsp={dsp}
+        dispId={dispId} dispMask={dispMask} dispSlot={dispSlot} onDsp={dsp} dspSlot={dspSlot}
         onPromote={handlePromote} onExtract={handleExtract} onNavigate={handleNavigate}/>
 
       {anyFS && (
