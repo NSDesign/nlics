@@ -3238,19 +3238,20 @@ function NodeItem(props) {
         {node.enabled?"●":"○"}
       </button>
       {(function(){
-        // Sub-flag (dispSlot) drives? → mirror its icon in its accent colour.
-        // Top-level driving? → show composite/mask in --tx (user took control).
-        // Off → muted ◎.
+        // Sub-flag driving (dispSlot) → purple, mirrors sub icon
+        // Top-level user control (dispId===node, no dispSlot) → teal --ac
+        // Off → muted ◎
         var nds=props.dispSlot&&props.dispSlot.nodeId===node.id?props.dispSlot:null
         var icon,col,tip
         if(nds){
           icon=nds.mode==="pixels"?"◉":"◈"
-          col=nds.slot==="inputA"?"var(--ac)":nds.slot==="inputB"?"var(--co)":"var(--lv)"
-          tip=(nds.slot==="inputA"?"Input A":nds.slot==="inputB"?"Input B":"Output")+" · "+(nds.mode==="pixels"?"pixels":"mask")+" · tap for composite"
+          col="var(--lv)"
+          var slotLabel=nds.slot==="inputA"?"Input A":nds.slot==="inputB"?"Input B":"Output"
+          tip=slotLabel+" · "+(nds.mode==="pixels"?"pixels":"mask")+" · tap for composite"
         } else if(props.isDsp){
           icon=props.isMaskDisp?"◈":"◉"
-          col="var(--tx)"
-          tip=props.isMaskDisp?"composite output mask · tap off":"composite output · tap for mask"
+          col="var(--ac)"
+          tip=props.isMaskDisp?"output mask · tap off":"composite · tap for mask"
         } else {
           icon="◎"; col="var(--mu)"; tip="Set as live preview"
         }
@@ -3778,10 +3779,11 @@ function NodeDetailSheet(props) {
             var icon,col,tip
             if(nds){
               icon=nds.mode==="pixels"?"◉":"◈"
-              col=nds.slot==="inputA"?"var(--ac)":nds.slot==="inputB"?"var(--co)":"var(--lv)"
-              tip=(nds.slot==="inputA"?"Input A":nds.slot==="inputB"?"Input B":"Output")+" · "+(nds.mode==="pixels"?"pixels":"mask")+" · tap for composite"
+              col="var(--lv)"
+              var slotLabel=nds.slot==="inputA"?"Input A":nds.slot==="inputB"?"Input B":"Output"
+              tip=slotLabel+" · "+(nds.mode==="pixels"?"pixels":"mask")+" · tap for composite"
             } else if(isDsp){
-              icon=props.dispMask?"◈":"◉"; col="var(--tx)"
+              icon=props.dispMask?"◈":"◉"; col="var(--ac)"
               tip=props.dispMask?"output mask · tap off":"composite · tap for mask"
             } else { icon="◎"; col="var(--mu)"; tip="Set as live preview" }
             return <button className="icon-btn sm"
