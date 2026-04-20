@@ -677,16 +677,30 @@ function gShape(ctx,p,w,h) {
   var s=p.shapeType||"ellipse",x=p.x||.5,y=p.y||.5,sz=p.sz||.6,rot=p.rot||0
   var fill=p.fill||"#fff",stroke=p.stroke||"#000",strokeW=p.strokeW||0
   var pts=p.pts||5,innerR=p.innerR||.45,sides=p.sides||5,ringR=p.ringR||.62,alpha=p.alpha==null?1:p.alpha
-  ctx.save();ctx.globalAlpha=alpha;var r=sz*Math.min(w,h)/2
-  ctx.translate(x*w,y*h);ctx.rotate(rot*Math.PI/180);ctx.beginPath()
-  if(s==="ellipse")ctx.ellipse(0,0,r,r,0,0,Math.PI*2)
-  else if(s==="rectangle")ctx.rect(-r,-r,r*2,r*2)
-  else if(s==="polygon"){for(var i=0;i<sides;i++){var a=(i*2*Math.PI/sides)-Math.PI/2;i===0?ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r):ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r)}ctx.closePath()}
-  else if(s==="star"){var ir=r*innerR;for(var j=0;j<pts*2;j++){var a2=(j*Math.PI/pts)-Math.PI/2,rr=j%2===0?r:ir;j===0?ctx.moveTo(Math.cos(a2)*rr,Math.sin(a2)*rr):ctx.lineTo(Math.cos(a2)*rr,Math.sin(a2)*rr)}ctx.closePath()}
-  else if(s==="ring"){ctx.arc(0,0,r,0,Math.PI*2);ctx.moveTo(r*ringR,0);ctx.arc(0,0,r*ringR,0,Math.PI*2,true)}
-  if(fill&&fill!=="none"){ctx.fillStyle=fill;ctx.fill("evenodd")}
-  if(strokeW>0){ctx.strokeStyle=stroke;ctx.lineWidth=strokeW;ctx.stroke()}
-  ctx.restore()
+  // Render at 2× resolution then downscale — gives SSAA-quality antialiasing on
+  // all path types, especially star and polygon which have sharp angle vertices.
+  var sc=2, sw2=w*sc, sh2=h*sc
+  var tc=document.createElement("canvas"); tc.width=sw2; tc.height=sh2
+  var tc2=tc.getContext("2d")
+  var r=sz*Math.min(sw2,sh2)/2
+  tc2.translate(x*sw2,y*sh2); tc2.rotate(rot*Math.PI/180); tc2.beginPath()
+  if(s==="ellipse")tc2.ellipse(0,0,r,r,0,0,Math.PI*2)
+  else if(s==="rectangle")tc2.rect(-r,-r,r*2,r*2)
+  else if(s==="polygon"){
+    for(var i=0;i<sides;i++){var a=(i*2*Math.PI/sides)-Math.PI/2;i===0?tc2.moveTo(Math.cos(a)*r,Math.sin(a)*r):tc2.lineTo(Math.cos(a)*r,Math.sin(a)*r)}
+    tc2.closePath()
+  }
+  else if(s==="star"){
+    var ir=r*innerR
+    for(var j=0;j<pts*2;j++){var a2=(j*Math.PI/pts)-Math.PI/2,rr=j%2===0?r:ir;j===0?tc2.moveTo(Math.cos(a2)*rr,Math.sin(a2)*rr):tc2.lineTo(Math.cos(a2)*rr,Math.sin(a2)*rr)}
+    tc2.closePath()
+  }
+  else if(s==="ring"){tc2.arc(0,0,r,0,Math.PI*2);tc2.moveTo(r*ringR,0);tc2.arc(0,0,r*ringR,0,Math.PI*2,true)}
+  if(fill&&fill!=="none"){tc2.fillStyle=fill;tc2.fill("evenodd")}
+  if(strokeW>0){tc2.strokeStyle=stroke;tc2.lineWidth=strokeW*sc;tc2.stroke()}
+  // Downscale to output with bilinear filtering for smooth edges
+  ctx.save();ctx.globalAlpha=alpha;ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high"
+  ctx.drawImage(tc,0,0,w,h);ctx.restore()
 }
 function gradStops(p) {
   // Migrate old c1/s1/c2/s2 format to stops array, or return existing stops.
