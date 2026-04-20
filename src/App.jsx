@@ -4235,7 +4235,14 @@ function App() {
   }
   function handlePromote(tapPath) {
     var suggestName = "Tap " + (tapPath.stackType||"") + " " + (tapPath.afterId||"").slice(0,4)
-    var name = window.prompt ? (window.prompt("Name this tap point:", suggestName)||suggestName) : suggestName
+    var name
+    if(window.prompt) {
+      var result = window.prompt("Name this tap point:", suggestName)
+      if(result === null) return  // user cancelled — do nothing
+      name = result.trim() || suggestName
+    } else {
+      name = suggestName
+    }
     var pNode = mkPromoted(name, tapPath)
     pNode.section = 2
     pushHistory({nodes:nodes})
