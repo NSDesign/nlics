@@ -1083,29 +1083,45 @@ function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
 function compPromoted(n,cmap,cache,iC,w,h,vis){
   var tp=n.tapPath; if(!tp||!tp.nodeId||vis.has(tp.nodeId))return null
   var srcNode=cmap.get(tp.nodeId); if(!srcNode||!srcNode.enabled)return null
-  // Get the slot to work from
+
+  // ── Resolve tp.slot to a {refId, effectStack, maskStack} slot object ─────
   var slot
-  if(tp.slot==="inputA")slot=srcNode.inputA
-  else if(tp.slot==="inputB")slot=srcNode.inputB
-  else if(tp.slot&&tp.slot.indexOf("input_")===0){
-    var idx=parseInt(tp.slot.slice(6))
-    slot=srcNode.inputs&&srcNode.inputs[idx]
+  var slotKey=tp.slot||""
+
+  if(slotKey==="inputA") slot=srcNode.inputA
+  else if(slotKey==="inputB") slot=srcNode.inputB
+
+  // "inputA.effectStack" / "inputB.effectStack" / "inputA.maskStack" etc.
+  else if(slotKey==="inputA.effectStack"||slotKey==="inputA.maskStack") slot=srcNode.inputA
+  else if(slotKey==="inputB.effectStack"||slotKey==="inputB.maskStack") slot=srcNode.inputB
+
+  // "layers[N].effectStack" / "layers[N].maskStack"
+  else if(/^layers\[\d+\]/.test(slotKey)){
+    var lm=slotKey.match(/^layers\[(\d+)\]/)
+    var li=parseInt(lm[1])
+    var lyr=(srcNode.layers||[])[li]
+    if(!lyr||lyr.enabled===false)return null
+    // Synthesise a slot-like object from the layer
+    slot={refId:lyr.refId, effectStack:lyr.effectStack||[], maskStack:lyr.maskStack||[]}
   }
-  else if(tp.slot==="outEfx"||tp.slot==="outMask"){
-    // Start from the fully composited output of the source node, then partially apply out stack
+
+  // Output stacks — tap into the node's outEfx or outMask after full composition
+  else if(slotKey==="outEfx"||slotKey==="outMask"){
     var baseOut=compAny(tp.nodeId,cmap,cache,iC,w,h,new Set(vis))
     if(!baseOut)return null
     var cv=clCv(baseOut,w,h),ctx=cv.getContext("2d")
-    if(tp.slot==="outEfx"&&srcNode.outEfx&&srcNode.outEfx.length>0){
+    if(slotKey==="outEfx"&&srcNode.outEfx&&srcNode.outEfx.length>0){
       applyEfxStkUpTo(ctx,srcNode.outEfx,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
-    }else if(tp.slot==="outMask"&&srcNode.outMask&&srcNode.outMask.length>0){
+    }else if(slotKey==="outMask"&&srcNode.outMask&&srcNode.outMask.length>0){
       var mv=compMasksUpTo(srcNode.outMask,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
-      if(mv){var id=ctx.getImageData(0,0,w,h);for(var i=0;i<w*h;i++)id.data[i*4+3]=Math.round(id.data[i*4+3]*mv[i]);ctx.putImageData(id,0,0)}
+      if(mv){var gid=ctx.getImageData(0,0,w,h);for(var i=0;i<w*h;i++)gid.data[i*4+3]=Math.round(gid.data[i*4+3]*mv[i]);ctx.putImageData(gid,0,0)}
     }
     return cv
   }
+
   if(!slot||!slot.refId||vis.has(slot.refId))return null
-  // Resolve the base source for this slot
+
+  // ── Resolve base source and partially apply the stack ────────────────────
   var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis));if(!base)return null
   var cv2=clCv(base,w,h),ctx2=cv2.getContext("2d")
   if(tp.stackType==="effect"&&slot.effectStack&&slot.effectStack.length>0){
