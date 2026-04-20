@@ -2785,14 +2785,15 @@ function SlotPanel(props) {
     <div className="card">
       <div className="card-hdr" style={{background:props.accent==="var(--ac)"?"rgba(36,204,168,.06)":"rgba(208,72,152,.06)"}}>
         <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:props.accent}}>{props.label}</span>
-        {props.dspSlot&&props.slotKey&&(function(){
+        {props.dspSlot&&props.slotKey&&props.owner&&(function(){
+          var ownerId=props.owner.id||props.owner
           var ds=props.dispSlot
-          var isThis=ds&&ds.nodeId===props.owner&&ds.slot===props.slotKey
+          var isThis=ds&&ds.nodeId===ownerId&&ds.slot===props.slotKey
           var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
-          var col=!isThis?"var(--mu)":ds.mode==="pixels"?"var(--lv)":"var(--lv)"
+          var col=!isThis?"var(--mu)":"var(--lv)"
           var ttip=!isThis?"Preview this input":ds.mode==="pixels"?"Previewing pixels · tap for mask":"Previewing mask · tap to stop"
           return <button className="icon-btn sm"
-            onClick={function(e){e.stopPropagation();props.dspSlot(props.owner.id,props.slotKey)}}
+            onClick={function(e){e.stopPropagation();props.dspSlot(ownerId,props.slotKey)}}
             style={{color:col,fontSize:18}} title={ttip}>{icon}</button>
         })()}
       </div>
@@ -2988,6 +2989,15 @@ function BlenderProps(props) {
       <div className="card">
         <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
+          {props.onDsp&&(function(){
+            var isDsp=props.dispId===node.id, isMask=isDsp&&props.dispMask
+            return <button className="icon-btn sm"
+              onClick={function(e){e.stopPropagation();props.onDsp(node.id)}}
+              style={{color:isDsp?"var(--lv)":"var(--mu)",fontSize:18}}
+              title={isDsp?(isMask?"mask view · tap to stop":"composite · tap for mask"):"Preview output"}>
+              {isDsp?(isMask?"◈":"◉"):"◎"}
+            </button>
+          })()}
         </div>
         {body}
       </div>
@@ -3769,7 +3779,7 @@ function NodeDetailSheet(props) {
                 : props.node.type==="promoted"
                 ? <PromotedProps node={props.node} nodes={props.nodes}/>
                 : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                    onPromote={props.onPromote} onExtract={props.onExtract} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onNavigate={props.onNavigate}/>
+                    onPromote={props.onPromote} onExtract={props.onExtract} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
           }
         </div>
       </div>
@@ -3964,7 +3974,7 @@ function Section(props) {
                     {props.sec===1
                       ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
                       : node.type==="blender"
-                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onNavigate={props.onNavigate}/>
+                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
                         : node.type==="layers"
                           ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                         : node.type==="stack"
@@ -4139,7 +4149,7 @@ function App() {
     showToast()
   }
 
-  useEffect(function(){stRef.current={nodes:nodes,dispId:dispId,dispMask:dispMask,dispSlot:dispSlot}},[nodes,dispId])
+  useEffect(function(){stRef.current={nodes:nodes,dispId:dispId,dispMask:dispMask,dispSlot:dispSlot}},[nodes,dispId,dispMask,dispSlot])
 
   // ── Persist settings via localStorage ───────────────────────────────────
   // Works on GitHub Pages, local dev, and any browser.
@@ -4203,7 +4213,7 @@ function App() {
   // Immediate re-render on data changes
   useEffect(function(){
     if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask,dispSlot)
-  },[nodes,dispId,sz,dispMask])
+  },[nodes,dispId,sz,dispMask,dispSlot])
   // Deferred re-render on layout changes — waits for browser reflow so
   // canvas has correct dimensions and cvRef is attached to the live canvas
   useEffect(function(){
