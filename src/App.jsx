@@ -2762,7 +2762,7 @@ function SlotPanel(props) {
             stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             basePath={{slotKey:(props.slotKey||"")+".effectStack", steps:[]}}
             onNavigate={props.onNavigate}
-            onPromote={wrappedPromote}
+            onPromote={props.onPromote}
             onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}}
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"effect",owner:props.owner})} : null}/>
         </div>
@@ -2773,7 +2773,7 @@ function SlotPanel(props) {
             stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush} iC={props.iC}
             basePath={{slotKey:(props.slotKey||"")+".maskStack", steps:[]}}
             onNavigate={props.onNavigate}
-            onPromote={wrappedPromote}
+            onPromote={props.onPromote}
             onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}}
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"mask",owner:props.owner})} : null}/>
         </div>
@@ -3527,7 +3527,7 @@ function LayerCard(props) {
             navPush={props.navPush} iC={props.iC}
             basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
             onNavigate={props.onNavigate}
-            onPromote={wrappedPromote}
+            onPromote={props.onPromote}
             onChange={function(es){props.onChange({effectStack:es})}}/>
         </div>
       )}
@@ -3539,7 +3539,7 @@ function LayerCard(props) {
             navPush={props.navPush} iC={props.iC}
             basePath={{slotKey:"layers["+li+"].maskStack", steps:[]}}
             onNavigate={props.onNavigate}
-            onPromote={wrappedPromote}
+            onPromote={props.onPromote}
             onChange={function(ms){props.onChange({maskStack:ms})}}/>
         </div>
       )}
@@ -3762,14 +3762,14 @@ function NodeDetailSheet(props) {
             ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad}/>
             : props.node.type==="stack"
               ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                  onPromote={wrappedPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
+                  onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
               : props.node.type==="layers"
                 ? <LayerCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                    onPromote={wrappedPromote} onNavigate={props.onNavigate}/>
+                    onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                 : props.node.type==="promoted"
                 ? <PromotedProps node={props.node} nodes={props.nodes}/>
                 : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                    onPromote={wrappedPromote} onExtract={props.onExtract} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onNavigate={props.onNavigate}/>
+                    onPromote={props.onPromote} onExtract={props.onExtract} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onNavigate={props.onNavigate}/>
           }
         </div>
       </div>
@@ -3964,11 +3964,11 @@ function Section(props) {
                     {props.sec===1
                       ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
                       : node.type==="blender"
-                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={wrappedPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onNavigate={props.onNavigate}/>
+                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onNavigate={props.onNavigate}/>
                         : node.type==="layers"
-                          ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={wrappedPromote} onNavigate={props.onNavigate}/>
+                          ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                         : node.type==="stack"
-                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={wrappedPromote} onNavigate={props.onNavigate}/>
+                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                           : null
                     }
                   </div>
