@@ -1277,11 +1277,29 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
         }
       } else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
     } else if(dispMask){
-      // Render outMask of the display node as greyscale
-      var n=cmap.get(dispId)
-      var mv=n&&n.outMask&&n.outMask.length>0
-        ? compMasks(n.outMask,cmap,new Map(),iC,w,h,new Set())
-        : null
+      // Render mask as greyscale — fallback chain:
+      // outMask → inputA.maskStack → inputB.maskStack → layers[*].maskStack → "no mask"
+      var mn=cmap.get(dispId)
+      var mv=null, mvLabel="no mask configured"
+      if(mn){
+        if(mn.outMask&&mn.outMask.length>0){
+          mv=compMasks(mn.outMask,cmap,new Map(),iC,w,h,new Set()); mvLabel="output mask"
+        } else if(mn.inputA&&mn.inputA.maskStack&&mn.inputA.maskStack.length>0){
+          mv=compMasks(mn.inputA.maskStack,cmap,new Map(),iC,w,h,new Set()); mvLabel="input A mask"
+        } else if(mn.inputB&&mn.inputB.maskStack&&mn.inputB.maskStack.length>0){
+          mv=compMasks(mn.inputB.maskStack,cmap,new Map(),iC,w,h,new Set()); mvLabel="input B mask"
+        } else if(mn.layers){
+          // Layer comp: find first layer with a mask stack
+          for(var mli=0;mli<mn.layers.length;mli++){
+            var mll=mn.layers[mli]
+            if(mll.maskStack&&mll.maskStack.length>0){
+              mv=compMasks(mll.maskStack,cmap,new Map(),iC,w,h,new Set())
+              mvLabel="layer "+(mli+1)+" mask"
+              if(mv) break
+            }
+          }
+        }
+      }
       ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
       if(mv){
         var gid=ctx.createImageData(w,h)
@@ -1289,8 +1307,8 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
         ctx.putImageData(gid,0,0)
       } else {
         ctx.fillStyle="var(--bd)"; ctx.fillRect(0,0,w,h)
-        ctx.fillStyle="#040412"; ctx.font="12px 'IBM Plex Mono',monospace"
-        ctx.textAlign="center"; ctx.fillText("no output mask",w/2,h/2)
+        ctx.fillStyle="#8090c0"; ctx.font="11px 'IBM Plex Mono',monospace"
+        ctx.textAlign="center"; ctx.fillText(mvLabel,w/2,h/2)
       }
     } else {
       var result=compAny(dispId,cmap,new Map(),iC,w,h,new Set())
