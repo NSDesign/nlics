@@ -3237,11 +3237,27 @@ function NodeItem(props) {
       <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onTog(node.id)}} style={{color:node.enabled?"var(--ac)":"var(--mu)"}}>
         {node.enabled?"●":"○"}
       </button>
-      <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onDsp(node.id)}}
-        style={{color:props.isDsp?(props.isMaskDisp?"var(--lv)":"var(--lv)"):"var(--mu)",fontSize:20}}
-        title={props.isDsp?(props.isMaskDisp?"mask view · tap for off":"composite · tap for mask view"):"Set as live preview"}>
-        {props.isDsp?(props.isMaskDisp?"◈":"◉"):"◎"}
-      </button>
+      {(function(){
+        // Sub-flag (dispSlot) drives? → mirror its icon in its accent colour.
+        // Top-level driving? → show composite/mask in --tx (user took control).
+        // Off → muted ◎.
+        var nds=props.dispSlot&&props.dispSlot.nodeId===node.id?props.dispSlot:null
+        var icon,col,tip
+        if(nds){
+          icon=nds.mode==="pixels"?"◉":"◈"
+          col=nds.slot==="inputA"?"var(--ac)":nds.slot==="inputB"?"var(--co)":"var(--lv)"
+          tip=(nds.slot==="inputA"?"Input A":nds.slot==="inputB"?"Input B":"Output")+" · "+(nds.mode==="pixels"?"pixels":"mask")+" · tap for composite"
+        } else if(props.isDsp){
+          icon=props.isMaskDisp?"◈":"◉"
+          col="var(--tx)"
+          tip=props.isMaskDisp?"composite output mask · tap off":"composite output · tap for mask"
+        } else {
+          icon="◎"; col="var(--mu)"; tip="Set as live preview"
+        }
+        return <button className="icon-btn sm"
+          onClick={function(e){e.stopPropagation();props.onDsp(node.id)}}
+          style={{color:col,fontSize:20}} title={tip}>{icon}</button>
+      })()}
       <button onClick={handleDel} style={{minHeight:32,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?56:32}}>
         {armed?"sure?":"×"}
       </button>
@@ -3757,14 +3773,21 @@ function NodeDetailSheet(props) {
             {props.node.name}
           </span>
           {/* Display toggle — same ◎/◉ as the list item */}
-          {props.onDsp && (
-            <button className="icon-btn sm"
+          {props.onDsp && (function(){
+            var nds=props.dispSlot&&props.dispSlot.nodeId===props.node.id?props.dispSlot:null
+            var icon,col,tip
+            if(nds){
+              icon=nds.mode==="pixels"?"◉":"◈"
+              col=nds.slot==="inputA"?"var(--ac)":nds.slot==="inputB"?"var(--co)":"var(--lv)"
+              tip=(nds.slot==="inputA"?"Input A":nds.slot==="inputB"?"Input B":"Output")+" · "+(nds.mode==="pixels"?"pixels":"mask")+" · tap for composite"
+            } else if(isDsp){
+              icon=props.dispMask?"◈":"◉"; col="var(--tx)"
+              tip=props.dispMask?"output mask · tap off":"composite · tap for mask"
+            } else { icon="◎"; col="var(--mu)"; tip="Set as live preview" }
+            return <button className="icon-btn sm"
               onClick={function(){props.onDsp(props.node.id)}}
-              style={{color:isDsp?"var(--lv)":"var(--mu)",fontSize:20,marginRight:4}}
-              title={isDsp?(props.dispMask?"mask view · tap for off":"composite · tap for mask view"):"Set as live preview"}>
-              {isDsp?(props.dispMask?"◈":"◉"):"◎"}
-            </button>
-          )}
+              style={{color:col,fontSize:20,marginRight:4}} title={tip}>{icon}</button>
+          })()}
           <button className="ghost" style={{fontSize:20,minHeight:36}} onClick={props.onClose}>×</button>
         </div>
         <div className="node-sheet-scroll">
@@ -3965,6 +3988,7 @@ function Section(props) {
               <div key={node.id}>
                 <NodeItem node={node} isSel={isSel} isDsp={isDsp}
                   isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
+                  dispSlot={props.dispSlot}
                   onSel={function(id){ props.onSel(id===props.selId?null:id) }}
                   onDsp={props.onDsp} onDel={props.onDel}
                   onRen={function(name){ props.onRen(node.id,name) }}
@@ -4000,6 +4024,7 @@ function Section(props) {
                   <div key={node.id}>
                     <NodeItem node={node} isSel={isSel} isDsp={isDsp}
                       isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
+                      dispSlot={props.dispSlot}
                       onSel={function(id){ props.onSel(id===props.selId?null:id) }}
                       onDsp={props.onDsp} onDel={props.onDel}
                       onRen={function(name){ props.onRen(node.id,name) }}
@@ -4246,8 +4271,14 @@ function App() {
   function ren(id,name){pushHistory({nodes:nodes});setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{name:name}):n})})}
   function tog(id){setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{enabled:!n.enabled}):n})})}
   function dsp(id){
-    setDispSlot(null)  // clear any per-slot display when cycling the node display
-    if(dispId===id){
+    // If a sub-flag is active for this node, tapping top-level takes control:
+    // clear dispSlot and go straight to composite mode rather than cycling from current sub state
+    var subActive = dispSlot&&dispSlot.nodeId===id
+    setDispSlot(null)
+    if(subActive){
+      // Sub was driving — switch to top-level composite
+      setDispId(id); setDispMask(false)
+    } else if(dispId===id){
       if(!dispMask){setDispMask(true)}
       else{setDispId(null);setDispMask(false)}
     } else {
