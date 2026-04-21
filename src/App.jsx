@@ -2976,22 +2976,50 @@ function BlenderProps(props) {
           })}
         </div>
         <div style={{flex:1,overflowY:"auto",padding:10}}>
-          <div className="stack-lbl">effects on mask</div>
-          <EfxStack
-            key={(drillMask.effectStack||[]).map(function(e){return e.id}).join(",")}
-            stack={drillMask.effectStack||[]}
-            nodes={nodes} selfId={node.id}
-            navPush={navPush}
-            basePath={{slotKey:top.slotKey,steps:top.steps}}
-            onNavigate={props.onNavigate}
-            onPromote={wrappedPromote}
-            onChange={function(es){
-              var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
-                return Object.assign({},mask,{effectStack:es})
-              })
-              onChange(newNode)
-            }}
-          />
+          {(function(){
+            // Last step determines what we're drilling into:
+            // kind="mask" → editing that mask's effectStack
+            // kind="effect" → editing that effect's maskStack (rendered as EfxStack drilling into masks)
+            var lastStep=top.steps[top.steps.length-1]
+            var isEffectDrill=lastStep&&lastStep.kind==="effect"
+            var stackToShow=isEffectDrill?(drillMask.maskStack||[]):(drillMask.effectStack||[])
+            var stackLabel=isEffectDrill?"masks on effect":"effects on mask"
+            if(isEffectDrill){
+              return (<div>
+                <div className="stack-lbl">{stackLabel}</div>
+                <MaskStackPanel
+                  key={stackToShow.map(function(m){return m.id}).join(",")}
+                  stack={stackToShow} nodes={nodes} selfId={node.id}
+                  navPush={navPush} iC={props.iC}
+                  basePath={{slotKey:top.slotKey,steps:top.steps}}
+                  onNavigate={props.onNavigate}
+                  onPromote={wrappedPromote}
+                  onChange={function(ms){
+                    var newNode=updatePath(node,top.slotKey,top.steps,function(efx){
+                      return Object.assign({},efx,{maskStack:ms})
+                    })
+                    onChange(newNode)
+                  }}/>
+              </div>)
+            }
+            return (<div>
+              <div className="stack-lbl">{stackLabel}</div>
+              <EfxStack
+                key={stackToShow.map(function(e){return e.id}).join(",")}
+                stack={stackToShow}
+                nodes={nodes} selfId={node.id}
+                navPush={navPush}
+                basePath={{slotKey:top.slotKey,steps:top.steps}}
+                onNavigate={props.onNavigate}
+                onPromote={wrappedPromote}
+                onChange={function(es){
+                  var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
+                    return Object.assign({},mask,{effectStack:es})
+                  })
+                  onChange(newNode)
+                }}/>
+            </div>)
+          })()}
         </div>
       </div>
     )
@@ -3045,11 +3073,6 @@ function BlenderProps(props) {
       <div className="card-body">
         <Se l="mode" v={node.mode} opts={BMODES} fn={function(v){onChange(Object.assign({},node,{mode:v}))}}/>
         <Sl l="amount" v={node.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){onChange(Object.assign({},node,{amount:v}))}}/>
-        <PR l="layer">
-          <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}} className={node.switched?"ac":""} style={{minHeight:36,padding:"0 14px"}}>
-            {node.switched?"B over A":"A over B"}
-          </button>
-        </PR>
         {COMMUTATIVE_MODES[node.mode] && (
           <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",lineHeight:1.5,fontStyle:"italic"}}>
             order has no effect in {node.mode} mode
@@ -3059,15 +3082,12 @@ function BlenderProps(props) {
     )
     var masksBody=(
       <div className="card-body">
-        <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 8px 84px",fontStyle:"italic",lineHeight:1.5}}>
-          Controls how the effective mattes (source alpha × mask) of Input A and B combine.
-        </div>
-        <Se l="A matte" v={node.inputA&&node.inputA.maskBlendMode||"add"} opts={MASK_BMODES}
+        <Se l="A mode" v={node.inputA&&node.inputA.maskBlendMode||"add"} opts={MASK_BMODES}
           fn={function(v){onChange(Object.assign({},node,{inputA:Object.assign({},node.inputA,{maskBlendMode:v})}))}}/>
         <Sl l="A opacity" v={node.inputA&&node.inputA.maskOpacity==null?100:node.inputA.maskOpacity} mn={0} mx={100} st={1}
           fmt={function(v){return Math.round(v)+"%"}}
           fn={function(v){onChange(Object.assign({},node,{inputA:Object.assign({},node.inputA,{maskOpacity:v})}))}}/>
-        <Se l="B matte" v={node.inputB&&node.inputB.maskBlendMode||"add"} opts={MASK_BMODES}
+        <Se l="B mode" v={node.inputB&&node.inputB.maskBlendMode||"add"} opts={MASK_BMODES}
           fn={function(v){onChange(Object.assign({},node,{inputB:Object.assign({},node.inputB,{maskBlendMode:v})}))}}/>
         <Sl l="B opacity" v={node.inputB&&node.inputB.maskOpacity==null?100:node.inputB.maskOpacity} mn={0} mx={100} st={1}
           fmt={function(v){return Math.round(v)+"%"}}
@@ -3080,6 +3100,11 @@ function BlenderProps(props) {
       <div className="card" style={{marginBottom:10}}>
         <div className="card-hdr">
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--di)"}}>Blend</span>
+          <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}}
+            className={node.switched?"ac":"ghost"}
+            style={{fontSize:10,padding:"0 10px",minHeight:28}}>
+            {node.switched?"B over A":"A over B"}
+          </button>
         </div>
         {body}
       </div>
