@@ -269,9 +269,9 @@ function mkEfx(t) {
   return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[] }
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
-function mkSlot() { return { refId:null, effectStack:[], maskStack:[], maskBlendMode:"add", maskOpacity:100 } }
-function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"normal", amount:100, switched:false, outEfx:[], outMask:[] } }
-function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled:true, effectStack:[], maskStack:[], blendMode:"normal", opacity:100, maskBlendMode:"add", maskOpacity:100 } }
+function mkSlot() { return { refId:null, effectStack:[], maskStack:[] } }
+function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"normal", amount:100, switched:false, maskMode:"add", maskAmount:100, outEfx:[], outMask:[] } }
+function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled:true, effectStack:[], maskStack:[], blendMode:"normal", opacity:100, maskMode:"add", maskAmount:100 } }
 function mkLayerComp() { return { id:uid(), name:"Layer Comp "+(_uid-100), type:"layers", section:2, enabled:true, layers:[mkLayer(),mkLayer()], outEfx:[], outMask:[] } }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
 
@@ -1284,7 +1284,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       var lCv=clCv(lBase,w,h),lCtx=lCv.getContext("2d")
       if(lyr.effectStack&&lyr.effectStack.length>0) applyEfxStk(lCtx,lyr.effectStack,cmap,cache,iC,w,h,lVis)
       if(lyr.maskStack&&lyr.maskStack.length>0) maskToAlpha(lCtx,lyr.maskStack,cmap,cache,iC,w,h,lVis)
-      blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h,lyr.maskBlendMode||"add",lyr.maskOpacity==null?100:lyr.maskOpacity)
+      blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h,lyr.maskMode||"add",lyr.maskAmount==null?100:lyr.maskAmount)
     }
     if(n.outEfx&&n.outEfx.length>0) applyEfxStk(lctx,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
     if(n.outMask&&n.outMask.length>0) maskToAlpha(lctx,n.outMask,cmap,cache,iC,w,h,new Set(vis))
@@ -1300,7 +1300,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   var cB=resolveSlot(n.inputB,cmap,cache,iC,w,h,new Set(vis))
   var bottom=n.switched?cA:cB, top=n.switched?cB:cA
   if(bottom)ctx2.drawImage(bottom,0,0)
-  if(top)blendCv(ctx2,top,n.mode,n.amount,w,h)
+  if(top)blendCv(ctx2,top,n.mode,n.amount,w,h,n.maskMode||"add",n.maskAmount==null?100:n.maskAmount)
   if(n.outEfx&&n.outEfx.length>0)applyEfxStk(ctx2,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
   if(n.outMask&&n.outMask.length>0)maskToAlpha(ctx2,n.outMask,cmap,cache,iC,w,h,new Set(vis))
   cache.set(id,cv2);vis.delete(id);return cv2
@@ -3082,16 +3082,11 @@ function BlenderProps(props) {
     )
     var masksBody=(
       <div className="card-body">
-        <Se l="A mode" v={node.inputA&&node.inputA.maskBlendMode||"add"} opts={MASK_BMODES}
-          fn={function(v){onChange(Object.assign({},node,{inputA:Object.assign({},node.inputA,{maskBlendMode:v})}))}}/>
-        <Sl l="A opacity" v={node.inputA&&node.inputA.maskOpacity==null?100:node.inputA.maskOpacity} mn={0} mx={100} st={1}
+        <Se l="mode" v={node.maskMode||"add"} opts={MASK_BMODES}
+          fn={function(v){onChange(Object.assign({},node,{maskMode:v}))}}/>
+        <Sl l="amount" v={node.maskAmount==null?100:node.maskAmount} mn={0} mx={100} st={1}
           fmt={function(v){return Math.round(v)+"%"}}
-          fn={function(v){onChange(Object.assign({},node,{inputA:Object.assign({},node.inputA,{maskOpacity:v})}))}}/>
-        <Se l="B mode" v={node.inputB&&node.inputB.maskBlendMode||"add"} opts={MASK_BMODES}
-          fn={function(v){onChange(Object.assign({},node,{inputB:Object.assign({},node.inputB,{maskBlendMode:v})}))}}/>
-        <Sl l="B opacity" v={node.inputB&&node.inputB.maskOpacity==null?100:node.inputB.maskOpacity} mn={0} mx={100} st={1}
-          fmt={function(v){return Math.round(v)+"%"}}
-          fn={function(v){onChange(Object.assign({},node,{inputB:Object.assign({},node.inputB,{maskOpacity:v})}))}}/>
+          fn={function(v){onChange(Object.assign({},node,{maskAmount:v}))}}/>
       </div>
     )
     var body=(<div><TabBar tabs={blendTabs} active={blendTab} onChange={setBlendTab}/>{blendTab==="pixels"?pixelsBody:masksBody}</div>)
@@ -3760,11 +3755,11 @@ function LayerCard(props) {
                 <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 8px 84px",fontStyle:"italic",lineHeight:1.5}}>
                   How this layer's matte (source alpha × mask) composites over layers below.
                 </div>
-                <Se l="matte" v={lyr.maskBlendMode||"add"} opts={MASK_BMODES}
-                  fn={function(v){props.onChange({maskBlendMode:v})}}/>
-                <Sl l="opacity" v={lyr.maskOpacity==null?100:lyr.maskOpacity} mn={0} mx={100} st={1}
+                <Se l="mode" v={lyr.maskMode||"add"} opts={MASK_BMODES}
+                  fn={function(v){props.onChange({maskMode:v})}}/>
+                <Sl l="amount" v={lyr.maskAmount==null?100:lyr.maskAmount} mn={0} mx={100} st={1}
                   fmt={function(v){return Math.round(v)+"%"}}
-                  fn={function(v){props.onChange({maskOpacity:v})}}/>
+                  fn={function(v){props.onChange({maskAmount:v})}}/>
               </div>
             )}
           </div>
