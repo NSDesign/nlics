@@ -163,6 +163,7 @@ function StyleInjector() {
 
 /* ─── CONSTANTS ─────────────────────────────────────────── */
 var BMODES = ["normal","add","subtract","multiply","screen","overlay","soft-light","hard-light","difference","exclusion","darken","lighten","color-burn","color-dodge","divide"]
+var MASK_BMODES = ["add","normal","multiply","subtract","screen"]  // matte blend modes
 // Blend modes whose RGB output is identical regardless of input order.
 // With uniform alpha in both inputs, swapping them produces the same pixels.
 // Used to show a hint when the user toggles 'A over B' with such a mode.
@@ -268,9 +269,9 @@ function mkEfx(t) {
   return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[] }
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
-function mkSlot() { return { refId:null, effectStack:[], maskStack:[] } }
+function mkSlot() { return { refId:null, effectStack:[], maskStack:[], maskBlendMode:"add", maskOpacity:100 } }
 function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"normal", amount:100, switched:false, outEfx:[], outMask:[] } }
-function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled:true, effectStack:[], maskStack:[], blendMode:"normal", opacity:100 } }
+function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled:true, effectStack:[], maskStack:[], blendMode:"normal", opacity:100, maskBlendMode:"add", maskOpacity:100 } }
 function mkLayerComp() { return { id:uid(), name:"Layer Comp "+(_uid-100), type:"layers", section:2, enabled:true, layers:[mkLayer(),mkLayer()], outEfx:[], outMask:[] } }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
 
@@ -1025,6 +1026,30 @@ function maskToAlpha(ctx,stack,cmap,cache,iC,w,h,vis) {
   for(var i=0;i<w*h;i++)id.data[i*4+3]=Math.round(id.data[i*4+3]*mv[i])
   ctx.putImageData(id,0,0)
 }
+// Compute effective matte: source_alpha × mask_value (both 0-1)
+// Returns Float32Array length w*h, or null if no source canvas.
+// When maskStack is empty/null, effective = source alpha channel alone.
+// When source is null but maskStack exists, effective = mask values alone.
+// Empty mask stack = fully opaque = 1.0 (white — no mask means no restriction)
+function effectiveMatte(sourceCv,maskStack,cmap,cache,iC,w,h,vis){
+  var mv=maskStack&&maskStack.length>0
+    ? compMasks(maskStack,cmap,cache,iC,w,h,new Set(vis))
+    : null
+  var out=new Float32Array(w*h)
+  if(sourceCv){
+    var id=sourceCv.getContext("2d").getImageData(0,0,w,h)
+    for(var i=0;i<w*h;i++){
+      var sa=id.data[i*4+3]/255
+      out[i]=mv ? sa*mv[i] : sa
+    }
+  } else if(mv){
+    for(var j=0;j<w*h;j++) out[j]=mv[j]
+  } else {
+    // No source, no mask — fully opaque (white)
+    for(var k=0;k<w*h;k++) out[k]=1
+  }
+  return out
+}
 function resolveSlot(slot,cmap,cache,iC,w,h,vis) {
   if(!slot||!slot.refId||vis.has(slot.refId))return null
   if(slot.enabled===false)return null
@@ -1034,15 +1059,52 @@ function resolveSlot(slot,cmap,cache,iC,w,h,vis) {
   if(slot.maskStack&&slot.maskStack.length>0)maskToAlpha(ctx,slot.maskStack,cmap,cache,iC,w,h,new Set(vis))
   return cv
 }
-function blendCv(ctx,srcCv,mode,amount,w,h) {
+// Blend modes for the alpha/matte channel (separate from pixel blend)
+var ALPHA_BM={
+  "add":    function(a,b,f){return Math.min(1,a+b*f)},
+  "normal": function(a,b,f){return a*(1-f)+b*f},       // Over — B over A
+  "multiply":function(a,b,f){return a*(1-(1-b)*f)},    // intersection
+  "subtract":function(a,b,f){return Math.max(0,a-b*f)},
+  "screen": function(a,b,f){return 1-(1-a)*(1-b*f)},
+}
+function blendCv(ctx,srcCv,mode,amount,w,h,maskMode,maskAmount) {
+  // maskMode/maskAmount: how the source alpha composites onto the dest alpha
+  // defaults: add blend, 100% opacity (union of mattes)
+  var mf=(maskAmount==null?100:maskAmount)/100
+  var mblend=ALPHA_BM[maskMode||"add"]||ALPHA_BM["add"]
   if(mode==="subtract"||mode==="divide"){
-    var base=ctx.getImageData(0,0,w,h),src=clCv(srcCv,w,h).getContext("2d").getImageData(0,0,w,h).data,B=base.data,f=amount/100
+    var base=ctx.getImageData(0,0,w,h)
+    var srcD=clCv(srcCv,w,h).getContext("2d").getImageData(0,0,w,h).data
+    var B=base.data,f=amount/100
     for(var i=0;i<B.length;i+=4){
-      if(mode==="subtract"){B[i]=Math.max(0,B[i]-src[i]*f);B[i+1]=Math.max(0,B[i+1]-src[i+1]*f);B[i+2]=Math.max(0,B[i+2]-src[i+2]*f)}
-      else{B[i]=src[i]>0?Math.min(255,B[i]/(src[i]/255)*f+B[i]*(1-f)):B[i];B[i+1]=src[i+1]>0?Math.min(255,B[i+1]/(src[i+1]/255)*f+B[i+1]*(1-f)):B[i+1];B[i+2]=src[i+2]>0?Math.min(255,B[i+2]/(src[i+2]/255)*f+B[i+2]*(1-f)):B[i+2]}
+      if(mode==="subtract"){
+        B[i]=Math.max(0,B[i]-srcD[i]*f)
+        B[i+1]=Math.max(0,B[i+1]-srcD[i+1]*f)
+        B[i+2]=Math.max(0,B[i+2]-srcD[i+2]*f)
+      } else {
+        B[i]=srcD[i]>0?Math.min(255,B[i]/(srcD[i]/255)*f+B[i]*(1-f)):B[i]
+        B[i+1]=srcD[i+1]>0?Math.min(255,B[i+1]/(srcD[i+1]/255)*f+B[i+1]*(1-f)):B[i+1]
+        B[i+2]=srcD[i+2]>0?Math.min(255,B[i+2]/(srcD[i+2]/255)*f+B[i+2]*(1-f)):B[i+2]
+      }
+      // Alpha: independent matte blend
+      B[i+3]=Math.round(mblend(B[i+3]/255,srcD[i+3]/255,mf)*255)
     }
     ctx.putImageData(base,0,0)
-  }else{ctx.save();ctx.globalAlpha=amount/100;ctx.globalCompositeOperation=BM[mode]||"source-over";ctx.drawImage(srcCv,0,0);ctx.restore()}
+  } else {
+    // Pixel colour blend via globalCompositeOperation
+    ctx.save();ctx.globalAlpha=amount/100
+    ctx.globalCompositeOperation=BM[mode]||"source-over"
+    ctx.drawImage(srcCv,0,0);ctx.restore()
+    // Alpha blend independently if mask mode differs from pixel mode
+    if(maskMode&&maskMode!=="normal"){
+      var ad=ctx.getImageData(0,0,w,h)
+      var sd=clCv(srcCv,w,h).getContext("2d").getImageData(0,0,w,h).data
+      for(var j=0;j<w*h;j++){
+        ad.data[j*4+3]=Math.round(mblend(ad.data[j*4+3]/255,sd[j*4+3]/255,mf)*255)
+      }
+      ctx.putImageData(ad,0,0)
+    }
+  }
 }
 // Partially evaluate an effect stack up to and including a given effect id.
 // withSub: if true, also apply that effect's own maskStack (for promoted taps that include the masked result).
@@ -1222,7 +1284,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       var lCv=clCv(lBase,w,h),lCtx=lCv.getContext("2d")
       if(lyr.effectStack&&lyr.effectStack.length>0) applyEfxStk(lCtx,lyr.effectStack,cmap,cache,iC,w,h,lVis)
       if(lyr.maskStack&&lyr.maskStack.length>0) maskToAlpha(lCtx,lyr.maskStack,cmap,cache,iC,w,h,lVis)
-      blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h)
+      blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h,lyr.maskBlendMode||"add",lyr.maskOpacity==null?100:lyr.maskOpacity)
     }
     if(n.outEfx&&n.outEfx.length>0) applyEfxStk(lctx,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
     if(n.outMask&&n.outMask.length>0) maskToAlpha(lctx,n.outMask,cmap,cache,iC,w,h,new Set(vis))
@@ -1252,63 +1314,89 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
     if(dispSlot){
       // Display a specific input slot — pixels or mask
       var dsNode=cmap.get(dispSlot.nodeId)
-      var dsSlot=dsNode&&(dispSlot.slot==="inputA"?dsNode.inputA:dsNode.inputB)
-      if(dsSlot&&dsSlot.refId){
-        if(dispSlot.mode==="mask"){
-          // Render that slot's mask stack as greyscale
-          var dsMv=dsSlot.maskStack&&dsSlot.maskStack.length>0
-            ? compMasks(dsSlot.maskStack,cmap,new Map(),iC,w,h,new Set())
-            : null
-          ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
-          if(dsMv){
-            var dsGid=ctx.createImageData(w,h)
-            for(var dsi=0;dsi<w*h;dsi++){var dsv=Math.round(dsMv[dsi]*255);dsGid.data[dsi*4]=dsv;dsGid.data[dsi*4+1]=dsv;dsGid.data[dsi*4+2]=dsv;dsGid.data[dsi*4+3]=255}
-            ctx.putImageData(dsGid,0,0)
-          } else {
-            ctx.fillStyle="var(--bd)"; ctx.fillRect(0,0,w,h)
-            ctx.fillStyle="#040412"; ctx.font="12px 'IBM Plex Mono',monospace"
-            ctx.textAlign="center"; ctx.fillText("no mask on "+dispSlot.slot,w/2,h/2)
-          }
+      function renderMaskGrey(stack,fallbackLabel){
+        var mv2=stack&&stack.length>0?compMasks(stack,cmap,new Map(),iC,w,h,new Set()):null
+        ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
+        if(mv2){
+          var gd=ctx.createImageData(w,h)
+          for(var dsi=0;dsi<w*h;dsi++){var dv=Math.round(mv2[dsi]*255);gd.data[dsi*4]=dv;gd.data[dsi*4+1]=dv;gd.data[dsi*4+2]=dv;gd.data[dsi*4+3]=255}
+          ctx.putImageData(gd,0,0)
         } else {
-          // Render the slot's pixel source with its effects applied
-          var dsRes=resolveSlot(dsSlot,cmap,new Map(),iC,w,h,new Set())
-          if(dsRes) ctx.drawImage(dsRes,0,0)
+          ctx.fillStyle="var(--bd)"; ctx.fillRect(0,0,w,h)
+          ctx.fillStyle="#8090c0"; ctx.font="11px 'IBM Plex Mono',monospace"
+          ctx.textAlign="center"; ctx.fillText(fallbackLabel||"no mask",w/2,h/2)
+        }
+      }
+      if(dispSlot.slot==="output"&&dsNode){
+        // Output slot — show composite pixels or outMask greyscale
+        if(dispSlot.mode==="mask"){
+          renderMaskGrey(dsNode.outMask,"no output mask")
+        } else {
+          var outRes=compAny(dispSlot.nodeId,cmap,new Map(),iC,w,h,new Set())
+          if(outRes) ctx.drawImage(outRes,0,0)
           else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
         }
-      } else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
+      } else {
+        var dsSlot=dsNode&&(dispSlot.slot==="inputA"?dsNode.inputA:dsNode.inputB)
+        if(dsSlot&&dsSlot.refId){
+          if(dispSlot.mode==="mask"){
+            // Show effective matte: source_alpha × mask_value
+            var dsSrc=dsSlot.refId?compAny(dsSlot.refId,cmap,new Map(),iC,w,h,new Set()):null
+            var em=effectiveMatte(dsSrc,dsSlot.maskStack,cmap,new Map(),iC,w,h,new Set())
+            ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
+            var emGid=ctx.createImageData(w,h)
+            for(var emi=0;emi<w*h;emi++){var emv=Math.round(em[emi]*255);emGid.data[emi*4]=emv;emGid.data[emi*4+1]=emv;emGid.data[emi*4+2]=emv;emGid.data[emi*4+3]=255}
+            ctx.putImageData(emGid,0,0)
+          } else {
+            var dsRes=resolveSlot(dsSlot,cmap,new Map(),iC,w,h,new Set())
+            if(dsRes) ctx.drawImage(dsRes,0,0)
+            else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
+          }
+        } else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
+      }
     } else if(dispMask){
-      // Render mask as greyscale — fallback chain:
-      // outMask → inputA.maskStack → inputB.maskStack → layers[*].maskStack → "no mask"
+      // Top-level ◈ — show effective matte (source_alpha × mask) using fallback chain.
+      // Undefined outMask = fully opaque (white). Falls back through inputs/layers.
       var mn=cmap.get(dispId)
-      var mv=null, mvLabel="no mask configured"
+      var em2=null, emLabel="no mask configured"
       if(mn){
         if(mn.outMask&&mn.outMask.length>0){
-          mv=compMasks(mn.outMask,cmap,new Map(),iC,w,h,new Set()); mvLabel="output mask"
-        } else if(mn.inputA&&mn.inputA.maskStack&&mn.inputA.maskStack.length>0){
-          mv=compMasks(mn.inputA.maskStack,cmap,new Map(),iC,w,h,new Set()); mvLabel="input A mask"
-        } else if(mn.inputB&&mn.inputB.maskStack&&mn.inputB.maskStack.length>0){
-          mv=compMasks(mn.inputB.maskStack,cmap,new Map(),iC,w,h,new Set()); mvLabel="input B mask"
-        } else if(mn.layers){
-          // Layer comp: find first layer with a mask stack
+          // Output mask defined — show it (no source alpha to multiply, it's an output matte)
+          em2=compMasks(mn.outMask,cmap,new Map(),iC,w,h,new Set()); emLabel="output mask"
+        } else if(mn.outMask&&mn.outMask.length===0){
+          // No outMask defined — white (fully opaque default)
+          em2=new Float32Array(w*h); for(var wi=0;wi<w*h;wi++) em2[wi]=1; emLabel="output (no mask = white)"
+        }
+        if(!em2&&mn.inputA&&mn.inputA.refId){
+          var iaS=compAny(mn.inputA.refId,cmap,new Map(),iC,w,h,new Set())
+          em2=effectiveMatte(iaS,mn.inputA.maskStack,cmap,new Map(),iC,w,h,new Set())
+          emLabel="input A effective matte"
+        }
+        if(!em2&&mn.inputB&&mn.inputB.refId){
+          var ibS=compAny(mn.inputB.refId,cmap,new Map(),iC,w,h,new Set())
+          em2=effectiveMatte(ibS,mn.inputB.maskStack,cmap,new Map(),iC,w,h,new Set())
+          emLabel="input B effective matte"
+        }
+        if(!em2&&mn.layers){
           for(var mli=0;mli<mn.layers.length;mli++){
             var mll=mn.layers[mli]
-            if(mll.maskStack&&mll.maskStack.length>0){
-              mv=compMasks(mll.maskStack,cmap,new Map(),iC,w,h,new Set())
-              mvLabel="layer "+(mli+1)+" mask"
-              if(mv) break
+            if(mll.refId||mll.maskStack&&mll.maskStack.length>0){
+              var lls=mll.refId?compAny(mll.refId,cmap,new Map(),iC,w,h,new Set()):null
+              em2=effectiveMatte(lls,mll.maskStack,cmap,new Map(),iC,w,h,new Set())
+              emLabel="layer "+(mli+1)+" effective matte"; break
             }
           }
         }
       }
       ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
-      if(mv){
+      if(em2){
         var gid=ctx.createImageData(w,h)
-        for(var gi=0;gi<w*h;gi++){var gv=Math.round(mv[gi]*255);gid.data[gi*4]=gv;gid.data[gi*4+1]=gv;gid.data[gi*4+2]=gv;gid.data[gi*4+3]=255}
+        for(var gi=0;gi<w*h;gi++){var gv=Math.round(em2[gi]*255);gid.data[gi*4]=gv;gid.data[gi*4+1]=gv;gid.data[gi*4+2]=gv;gid.data[gi*4+3]=255}
         ctx.putImageData(gid,0,0)
       } else {
         ctx.fillStyle="var(--bd)"; ctx.fillRect(0,0,w,h)
         ctx.fillStyle="#8090c0"; ctx.font="11px 'IBM Plex Mono',monospace"
-        ctx.textAlign="center"; ctx.fillText(mvLabel,w/2,h/2)
+        ctx.textAlign="center"; ctx.fillText(emLabel,w/2,h/2)
       }
     } else {
       var result=compAny(dispId,cmap,new Map(),iC,w,h,new Set())
@@ -2951,7 +3039,9 @@ function BlenderProps(props) {
     )
   }
   function renderBlend(headless){
-    var body = (
+    var blendTabSt=useState("pixels"); var blendTab=blendTabSt[0], setBlendTab=blendTabSt[1]
+    var blendTabs=[{id:"pixels",label:"Pixels"},{id:"masks",label:"Masks"}]
+    var pixelsBody=(
       <div className="card-body">
         <Se l="mode" v={node.mode} opts={BMODES} fn={function(v){onChange(Object.assign({},node,{mode:v}))}}/>
         <Sl l="amount" v={node.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){onChange(Object.assign({},node,{amount:v}))}}/>
@@ -2967,6 +3057,24 @@ function BlenderProps(props) {
         )}
       </div>
     )
+    var masksBody=(
+      <div className="card-body">
+        <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 8px 84px",fontStyle:"italic",lineHeight:1.5}}>
+          Controls how the effective mattes (source alpha × mask) of Input A and B combine.
+        </div>
+        <Se l="A matte" v={node.inputA&&node.inputA.maskBlendMode||"add"} opts={MASK_BMODES}
+          fn={function(v){onChange(Object.assign({},node,{inputA:Object.assign({},node.inputA,{maskBlendMode:v})}))}}/>
+        <Sl l="A opacity" v={node.inputA&&node.inputA.maskOpacity==null?100:node.inputA.maskOpacity} mn={0} mx={100} st={1}
+          fmt={function(v){return Math.round(v)+"%"}}
+          fn={function(v){onChange(Object.assign({},node,{inputA:Object.assign({},node.inputA,{maskOpacity:v})}))}}/>
+        <Se l="B matte" v={node.inputB&&node.inputB.maskBlendMode||"add"} opts={MASK_BMODES}
+          fn={function(v){onChange(Object.assign({},node,{inputB:Object.assign({},node.inputB,{maskBlendMode:v})}))}}/>
+        <Sl l="B opacity" v={node.inputB&&node.inputB.maskOpacity==null?100:node.inputB.maskOpacity} mn={0} mx={100} st={1}
+          fmt={function(v){return Math.round(v)+"%"}}
+          fn={function(v){onChange(Object.assign({},node,{inputB:Object.assign({},node.inputB,{maskOpacity:v})}))}}/>
+      </div>
+    )
+    var body=(<div><TabBar tabs={blendTabs} active={blendTab} onChange={setBlendTab}/>{blendTab==="pixels"?pixelsBody:masksBody}</div>)
     if(headless) return body
     return (
       <div className="card" style={{marginBottom:10}}>
@@ -3021,14 +3129,15 @@ function BlenderProps(props) {
       <div className="card">
         <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
-          {props.onDsp&&(function(){
-            var isDsp=props.dispId===node.id, isMask=isDsp&&props.dispMask
+          {props.dspSlot&&(function(){
+            var ds=props.dispSlot
+            var isThis=ds&&ds.nodeId===node.id&&ds.slot==="output"
+            var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
+            var col=!isThis?"var(--mu)":"var(--lv)"
+            var tip=!isThis?"Preview output":ds.mode==="pixels"?"output pixels · tap for mask":"output mask · tap to stop"
             return <button className="icon-btn sm"
-              onClick={function(e){e.stopPropagation();props.onDsp(node.id)}}
-              style={{color:isDsp?"var(--lv)":"var(--mu)",fontSize:18}}
-              title={isDsp?(isMask?"mask view · tap to stop":"composite · tap for mask"):"Preview output"}>
-              {isDsp?(isMask?"◈":"◉"):"◎"}
-            </button>
+              onClick={function(e){e.stopPropagation();props.dspSlot(node.id,"output")}}
+              style={{color:col,fontSize:18}} title={tip}>{icon}</button>
           })()}
         </div>
         {body}
@@ -3602,20 +3711,40 @@ function LayerCard(props) {
             onChange={function(ms){props.onChange({maskStack:ms})}}/>
         </div>
       )}
-      {layerTab==="layer" && (
-        <div className="card-body">
-          <Se l="blend" v={lyr.blendMode||"normal"} opts={BMODES}
-            fn={function(v){props.onChange({blendMode:v})}}/>
-          <Sl l="opacity" v={lyr.opacity==null?100:lyr.opacity} mn={0} mx={100} st={1}
-            fmt={function(v){return Math.round(v)+"%"}}
-            fn={function(v){props.onChange({opacity:v})}}/>
-          {COMMUTATIVE_MODES[lyr.blendMode] && (
-            <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",fontStyle:"italic"}}>
-              order has no effect in {lyr.blendMode} mode
-            </div>
-          )}
-        </div>
-      )}
+      {layerTab==="layer" && (function(){
+        var lyBlendTabSt=useState("pixels"); var lyBT=lyBlendTabSt[0], setLyBT=lyBlendTabSt[1]
+        var lyBTabs=[{id:"pixels",label:"Pixels"},{id:"masks",label:"Masks"}]
+        return (
+          <div>
+            <TabBar tabs={lyBTabs} active={lyBT} onChange={setLyBT}/>
+            {lyBT==="pixels"?(
+              <div className="card-body">
+                <Se l="blend" v={lyr.blendMode||"normal"} opts={BMODES}
+                  fn={function(v){props.onChange({blendMode:v})}}/>
+                <Sl l="opacity" v={lyr.opacity==null?100:lyr.opacity} mn={0} mx={100} st={1}
+                  fmt={function(v){return Math.round(v)+"%"}}
+                  fn={function(v){props.onChange({opacity:v})}}/>
+                {COMMUTATIVE_MODES[lyr.blendMode] && (
+                  <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",fontStyle:"italic"}}>
+                    order has no effect in {lyr.blendMode} mode
+                  </div>
+                )}
+              </div>
+            ):(
+              <div className="card-body">
+                <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 8px 84px",fontStyle:"italic",lineHeight:1.5}}>
+                  How this layer's matte (source alpha × mask) composites over layers below.
+                </div>
+                <Se l="matte" v={lyr.maskBlendMode||"add"} opts={MASK_BMODES}
+                  fn={function(v){props.onChange({maskBlendMode:v})}}/>
+                <Sl l="opacity" v={lyr.maskOpacity==null?100:lyr.maskOpacity} mn={0} mx={100} st={1}
+                  fmt={function(v){return Math.round(v)+"%"}}
+                  fn={function(v){props.onChange({maskOpacity:v})}}/>
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -4304,29 +4433,45 @@ function App() {
   }
   function ren(id,name){pushHistory({nodes:nodes});setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{name:name}):n})})}
   function tog(id){setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{enabled:!n.enabled}):n})})}
-  function dsp(id){
-    // If a sub-flag is active for this node, tapping top-level takes control:
-    // clear dispSlot and go straight to composite mode rather than cycling from current sub state
-    var subActive = dispSlot&&dispSlot.nodeId===id
-    setDispSlot(null)
-    if(subActive){
-      // Sub was driving — switch to top-level composite
-      setDispId(id); setDispMask(false)
-    } else if(dispId===id){
-      if(!dispMask){setDispMask(true)}
-      else{setDispId(null);setDispMask(false)}
-    } else {
-      setDispId(id); setDispMask(false)
+  // Single display-state setter — mutual exclusivity enforced here.
+  // All display changes go through this. Clears everything else first.
+  function setDisplay(state){
+    // state: null | {type:"node",id,mask:bool} | {type:"slot",nodeId,slot,mode}
+    if(!state){
+      setDispId(null); setDispMask(false); setDispSlot(null)
+      return
+    }
+    if(state.type==="node"){
+      setDispSlot(null)                    // clear any slot flag
+      setDispId(state.id)
+      setDispMask(state.mask||false)
+    } else if(state.type==="slot"){
+      setDispMask(false)                   // clear node mask mode
+      setDispId(state.nodeId)              // keep node lit in the list
+      setDispSlot({nodeId:state.nodeId,slot:state.slot,mode:state.mode})
     }
   }
-  function dspSlot(nodeId,slot){
-    // Cycle: off → pixels → mask → off for a specific blender input slot
-    if(dispSlot&&dispSlot.nodeId===nodeId&&dispSlot.slot===slot){
-      if(dispSlot.mode==="pixels") setDispSlot({nodeId:nodeId,slot:slot,mode:"mask"})
-      else setDispSlot(null)
+  // Top-level node display button — cycles: off → composite → mask → off
+  // If a sub-flag is driving, first tap takes top-level control (composite).
+  function dsp(id){
+    var subActive=dispSlot&&dispSlot.nodeId===id
+    if(subActive){
+      setDisplay({type:"node",id:id,mask:false})
+    } else if(dispId===id){
+      if(!dispMask) setDisplay({type:"node",id:id,mask:true})
+      else setDisplay(null)
     } else {
-      setDispId(nodeId); setDispMask(false)  // keep node highlighted in list
-      setDispSlot({nodeId:nodeId,slot:slot,mode:"pixels"})
+      setDisplay({type:"node",id:id,mask:false})
+    }
+  }
+  // Sub-flag (slot) display button — cycles: off → pixels → mask → off
+  // Clearing all other flags is handled by setDisplay.
+  function dspSlot(nodeId,slot){
+    if(dispSlot&&dispSlot.nodeId===nodeId&&dispSlot.slot===slot){
+      if(dispSlot.mode==="pixels") setDisplay({type:"slot",nodeId:nodeId,slot:slot,mode:"mask"})
+      else setDisplay(null)
+    } else {
+      setDisplay({type:"slot",nodeId:nodeId,slot:slot,mode:"pixels"})
     }
   }
   function sel(id){setSelId(function(p){return p===id?null:id})}
