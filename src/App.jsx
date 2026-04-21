@@ -72,7 +72,8 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .plbl{color:var(--mu);font-size:10.5px;min-width:72px;text-align:right;flex-shrink:0;line-height:1.3;}
 .pval{color:var(--ac);font-size:10.5px;min-width:38px;text-align:right;font-family:'IBM Plex Mono',monospace;flex-shrink:0;}
 .breadcrumb{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;overflow-x:auto;white-space:nowrap;}
-.bc-item{font-size:10px;color:var(--di);font-family:'IBM Plex Mono',monospace;}
+.bc-item{font-size:10px;color:var(--di);font-family:'IBM Plex Mono',monospace;cursor:pointer;text-decoration:underline;text-underline-offset:3px;white-space:nowrap;flex-shrink:0;}
+.bc-item.cur{color:var(--tx);text-decoration:none;cursor:default;}
 .bc-item.cur{color:var(--tx);}
 .mask-card{display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg);border:1px solid rgba(176,96,240,.22);border-radius:8px;margin-bottom:8px;}
 .shdr{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--pn);border-bottom:1px solid var(--bd);user-select:none;flex-shrink:0;min-height:var(--tap);}
@@ -2753,14 +2754,10 @@ function EfxStack(props) {
               var curEfx=props.stack.find(function(e){return e.id===efx.id})||efx
               var targetMask=(curEfx.maskStack||[])[mi]
               if(!targetMask)return
-              props.navPush({
-                label:efx.type+" / mask "+(mi+1),
-                slotKey:props.basePath.slotKey,
-                steps:(props.basePath.steps||[]).concat([
-                  {kind:"effect",id:efx.id},
-                  {kind:"mask",id:targetMask.id},
-                ])
-              })
+              props.navPush({label:efx.name||efx.type,kind:"effect",id:efx.id,
+                slotKey:props.basePath.slotKey,parentSteps:props.basePath.steps||[]})
+              props.navPush({label:targetMask.name||targetMask.channel||"mask",kind:"mask",id:targetMask.id,
+                slotKey:props.basePath.slotKey,parentSteps:(props.basePath.steps||[]).concat([{kind:"effect",id:efx.id}])})
             }}
           />
         )
@@ -2852,11 +2849,8 @@ function MaskStackPanel(props) {
             onPromote={props.onPromote ? function(){props.onPromote({slot:props.basePath&&props.basePath.slotKey,afterId:mk.id,withSub:true,stackType:"mask"})} : null}
             onEditEffects={function(){
               if(!props.navPush||!props.basePath)return
-              props.navPush({
-                label:"mask "+(mi+1)+" / effects",
-                slotKey:props.basePath.slotKey,
-                steps:(props.basePath.steps||[]).concat([{kind:"mask",id:mk.id}])
-              })
+              props.navPush({label:mk.name||mk.channel||"mask",kind:"mask",id:mk.id,
+                slotKey:props.basePath.slotKey,parentSteps:props.basePath.steps||[]})
             }}
           />
         )
@@ -2982,31 +2976,42 @@ function BlenderProps(props) {
 
   if(navStack.length>0){
     var top=navStack[navStack.length-1]
-    // Resolve target mask from CURRENT node state — not a stale closure
-    var drillMask=resolvePath(node,top.slotKey,top.steps)
-    // Stale path (target was deleted)? Pop back to root cleanly.
-    if(!drillMask){
+    // Reconstruct full steps from the last entry: parentSteps + [{kind,id}]
+    var topSteps=(top.parentSteps||[]).concat(top.kind?[{kind:top.kind,id:top.id}]:top.steps||[])
+    // Resolve target from CURRENT node state
+    var drillTarget=resolvePath(node,top.slotKey,topSteps)
+    if(!drillTarget){
       setTimeout(function(){setNavStack([])},0)
       return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target no longer exists — returning…</div>
     }
-    // Clickable breadcrumb — truncate navStack to jump to any level
     function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx+1)})}
+    // Build basePath for child components so they push correctly
+    var childBasePath={slotKey:top.slotKey,steps:topSteps}
     return (
       <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
         <div className="breadcrumb">
-          <button className="ghost" style={{fontSize:13,padding:"0 6px 0 0",minHeight:32}} onClick={navPop}>
-            Back
-          </button>
-          <span className="bc-item" onClick={function(){setNavStack([])}}
-            style={{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>Blender</span>
+          <span className="bc-item" onClick={function(){setNavStack([])}}>{node.name||"Blender"}</span>
+          {(function(){
+            var sk=navStack[0]&&navStack[0].slotKey||""
+            var ctx=sk.indexOf("inputA")>=0?"Input A":sk.indexOf("inputB")>=0?"Input B":
+              sk==="outEfx"||sk==="outMask"?"Output":
+              sk.indexOf("layers[")>=0?("Layer "+(parseInt((sk.match(/layers\[(\d+)\]/)||[,"?"])[1])+1)):
+              sk==="effectStack"?"Effects":sk==="maskStack"?"Masks":null
+            if(!ctx) return null
+            return (<span style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+              <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
+              <span className="bc-item" onClick={function(){setNavStack([])}} style={{color:"var(--di)"}}>
+                {ctx}
+              </span>
+            </span>)
+          })()}
           {navStack.map(function(n,i){
             var isCur=i===navStack.length-1
             return (
-              <span key={i} style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{color:"var(--mu)"}}>›</span>
+              <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
                 <span className={"bc-item"+(isCur?" cur":"")}
-                  onClick={isCur?null:function(){jumpTo(i)}}
-                  style={isCur?null:{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>
+                  onClick={isCur?null:function(){jumpTo(i)}}>
                   {n.label}
                 </span>
               </span>
@@ -3015,12 +3020,8 @@ function BlenderProps(props) {
         </div>
         <div style={{flex:1,overflowY:"auto",padding:10}}>
           {(function(){
-            // Last step determines what we're drilling into:
-            // kind="mask" → editing that mask's effectStack
-            // kind="effect" → editing that effect's maskStack (rendered as EfxStack drilling into masks)
-            var lastStep=top.steps[top.steps.length-1]
-            var isEffectDrill=lastStep&&lastStep.kind==="effect"
-            var stackToShow=isEffectDrill?(drillMask.maskStack||[]):(drillMask.effectStack||[])
+            var isEffectDrill=top.kind==="effect"
+            var stackToShow=isEffectDrill?(drillTarget.maskStack||[]):(drillTarget.effectStack||[])
             var stackLabel=isEffectDrill?"masks on effect":"effects on mask"
             if(isEffectDrill){
               return (<div>
@@ -3029,11 +3030,11 @@ function BlenderProps(props) {
                   key={stackToShow.map(function(m){return m.id}).join(",")}
                   stack={stackToShow} nodes={nodes} selfId={node.id}
                   navPush={navPush} iC={props.iC}
-                  basePath={{slotKey:top.slotKey,steps:top.steps}}
+                  basePath={childBasePath}
                   onNavigate={props.onNavigate}
                   onPromote={wrappedPromote}
                   onChange={function(ms){
-                    var newNode=updatePath(node,top.slotKey,top.steps,function(efx){
+                    var newNode=updatePath(node,top.slotKey,topSteps,function(efx){
                       return Object.assign({},efx,{maskStack:ms})
                     })
                     onChange(newNode)
@@ -3047,7 +3048,7 @@ function BlenderProps(props) {
                 stack={stackToShow}
                 nodes={nodes} selfId={node.id}
                 navPush={navPush}
-                basePath={{slotKey:top.slotKey,steps:top.steps}}
+                basePath={childBasePath}
                 onNavigate={props.onNavigate}
                 onPromote={wrappedPromote}
                 onChange={function(es){
@@ -3817,26 +3818,41 @@ function LayerCompProps(props) {
   // Drill-down into layer effectStack → mask effects chain
   if(navStack.length>0){
     var top=navStack[navStack.length-1]
-    var drillMask=resolvePath(node, top.slotKey, top.steps)
-    if(!drillMask){
+    var topSteps=(top.parentSteps||[]).concat(top.kind?[{kind:top.kind,id:top.id}]:top.steps||[])
+    var drillTarget=resolvePath(node, top.slotKey, topSteps)
+    if(!drillTarget){
       setTimeout(function(){setNavStack([])},0)
       return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target gone — returning…</div>
     }
     function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx+1)})}
+    var childBasePath={slotKey:top.slotKey,steps:topSteps}
+    var isEffectDrill=top.kind==="effect"
+    var stackToShow=isEffectDrill?(drillTarget.maskStack||[]):(drillTarget.effectStack||[])
     return (
       <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
         <div className="breadcrumb">
-          <button className="ghost" style={{fontSize:13,padding:"0 6px 0 0",minHeight:32}} onClick={navPop}>Back</button>
-          <span className="bc-item" onClick={function(){setNavStack([])}}
-            style={{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>{node.name}</span>
+          <span className="bc-item" onClick={function(){setNavStack([])}}>{node.name}</span>
+          {(function(){
+            var sk=navStack[0]&&navStack[0].slotKey||""
+            var ctx=sk.indexOf("inputA")>=0?"Input A":sk.indexOf("inputB")>=0?"Input B":
+              sk==="outEfx"||sk==="outMask"?"Output":
+              sk.indexOf("layers[")>=0?("Layer "+(parseInt((sk.match(/layers\[(\d+)\]/)||[,"?"])[1])+1)):
+              sk==="effectStack"?"Effects":sk==="maskStack"?"Masks":null
+            if(!ctx) return null
+            return (<span style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+              <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
+              <span className="bc-item" onClick={function(){setNavStack([])}} style={{color:"var(--di)"}}>
+                {ctx}
+              </span>
+            </span>)
+          })()}
           {navStack.map(function(n,i){
             var isCur=i===navStack.length-1
             return (
-              <span key={i} style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{color:"var(--mu)"}}>›</span>
+              <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
                 <span className={"bc-item"+(isCur?" cur":"")}
-                  onClick={isCur?null:function(){jumpTo(i)}}
-                  style={isCur?null:{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>
+                  onClick={isCur?null:function(){jumpTo(i)}}>
                   {n.label}
                 </span>
               </span>
@@ -3844,20 +3860,36 @@ function LayerCompProps(props) {
           })}
         </div>
         <div style={{flex:1,overflowY:"auto",padding:10}}>
-          <div className="stack-lbl">effects on mask</div>
-          <EfxStack
-            key={(drillMask.effectStack||[]).map(function(e){return e.id}).join(",")}
-            stack={drillMask.effectStack||[]}
-            nodes={nodes} selfId={node.id}
-            navPush={navPush}
-            basePath={{slotKey:top.slotKey, steps:top.steps}}
-            onNavigate={props.onNavigate}
-            onChange={function(es){
-              var newNode=updatePath(node, top.slotKey, top.steps, function(mask){
-                return Object.assign({},mask,{effectStack:es})
-              })
-              onChange(newNode)
-            }}/>
+          {isEffectDrill?(
+            <MaskStackPanel
+              key={stackToShow.map(function(m){return m.id}).join(",")}
+              stack={stackToShow} nodes={nodes} selfId={node.id}
+              navPush={navPush} iC={props.iC}
+              basePath={childBasePath}
+              onNavigate={props.onNavigate}
+              onPromote={wrappedPromote}
+              onChange={function(ms){
+                var newNode=updatePath(node,top.slotKey,topSteps,function(efx){
+                  return Object.assign({},efx,{maskStack:ms})
+                })
+                onChange(newNode)
+              }}/>
+          ):(
+            <EfxStack
+              key={stackToShow.map(function(e){return e.id}).join(",")}
+              stack={stackToShow}
+              nodes={nodes} selfId={node.id}
+              navPush={navPush} iC={props.iC}
+              basePath={childBasePath}
+              onNavigate={props.onNavigate}
+              onPromote={wrappedPromote}
+              onChange={function(es){
+                var newNode=updatePath(node, top.slotKey, topSteps, function(mask){
+                  return Object.assign({},mask,{effectStack:es})
+                })
+                onChange(newNode)
+              }}/>
+          )}
         </div>
       </div>
     )
@@ -4079,7 +4111,7 @@ function StackProps(props) {
             onNavigate={props.onNavigate}
             onPromote={wrappedPromote}
             onChange={function(es){
-              var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
+              var newNode=updatePath(node,top.slotKey,topSteps,function(mask){
                 return Object.assign({},mask,{effectStack:es})
               })
               onChange(newNode)
