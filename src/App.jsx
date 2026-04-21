@@ -3067,7 +3067,6 @@ function BlenderProps(props) {
     )
   }
   function renderBlend(headless){
-    var blendTabSt=useState("pixels"); var blendTab=blendTabSt[0], setBlendTab=blendTabSt[1]
     var blendTabs=[{id:"pixels",label:"Pixels"},{id:"masks",label:"Masks"}]
     var pixelsBody=(
       <div className="card-body">
@@ -3672,6 +3671,8 @@ function SettingsSheet(props) {
 function LayerCard(props) {
   var lyr=props.lyr, li=props.li
   var tabSt=useState("source"); var layerTab=tabSt[0], setLayerTab=tabSt[1]
+  // Hoist ALL hooks including nested tab state — can't use useState inside conditionals/IIFEs
+  var lyBTSt=useState("pixels"); var lyBT=lyBTSt[0], setLyBT=lyBTSt[1]
   var nEfx=(lyr.effectStack||[]).length, nMask=(lyr.maskStack||[]).length
   var lyrTabs=[
     {id:"source",  label:"Source"},
@@ -3731,12 +3732,9 @@ function LayerCard(props) {
             onChange={function(ms){props.onChange({maskStack:ms})}}/>
         </div>
       )}
-      {layerTab==="layer" && (function(){
-        var lyBlendTabSt=useState("pixels"); var lyBT=lyBlendTabSt[0], setLyBT=lyBlendTabSt[1]
-        var lyBTabs=[{id:"pixels",label:"Pixels"},{id:"masks",label:"Masks"}]
-        return (
+      {layerTab==="layer" && (
           <div>
-            <TabBar tabs={lyBTabs} active={lyBT} onChange={setLyBT}/>
+            <TabBar tabs={[{id:"pixels",label:"Pixels"},{id:"masks",label:"Masks"}]} active={lyBT} onChange={setLyBT}/>
             {lyBT==="pixels"?(
               <div className="card-body">
                 <Se l="blend" v={lyr.blendMode||"normal"} opts={BMODES}
@@ -3763,8 +3761,7 @@ function LayerCard(props) {
               </div>
             )}
           </div>
-        )
-      })()}
+      )}
     </div>
   )
 }
@@ -3774,8 +3771,9 @@ function LayerCompProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
   var wrappedPromote=props.onPromote?function(tp){props.onPromote(Object.assign({nodeId:node.id},tp))}:null
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
-  // Hoist ALL hooks above any early return — Rules of Hooks
+  // ALL hooks must be above any early return — Rules of Hooks
   var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  var blendTabSt=useState("pixels"); var blendTab=blendTabSt[0], setBlendTab=blendTabSt[1]
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
   function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
 
