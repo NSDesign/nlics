@@ -1158,15 +1158,29 @@ function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
     var mk=stack[mi];if(mk.enabled===false||!mk.refId||vis.has(mk.refId))continue
     var cv=compAny(mk.refId,cmap,cache,iC,w,h,new Set(vis));if(!cv)continue;any=true
     var useSub = withSub || mk.id!==afterId
-    if(useSub&&mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,new Set(vis))}
-    var src=clCv(cv,w,h).getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
+    var chU=mk.channel||"luminosity"
+    if(useSub&&mk.effectStack&&mk.effectStack.length>0){
+      if(chU!=="A"){
+        var rawU=cv.getContext("2d").getImageData(0,0,w,h).data
+        var gcvU=mkCv(w,h),gctxU=gcvU.getContext("2d"),gidU=gctxU.createImageData(w,h)
+        for(var giu=0;giu<w*h;giu++){
+          var gpu=giu*4,gvu
+          if(chU==="R")gvu=rawU[gpu];else if(chU==="G")gvu=rawU[gpu+1];else if(chU==="B")gvu=rawU[gpu+2]
+          else gvu=Math.round(.299*rawU[gpu]+.587*rawU[gpu+1]+.114*rawU[gpu+2])
+          gidU.data[gpu]=gvu;gidU.data[gpu+1]=gvu;gidU.data[gpu+2]=gvu;gidU.data[gpu+3]=255
+        }
+        gctxU.putImageData(gidU,0,0)
+        applyEfxStk(gctxU,mk.effectStack,cmap,cache,iC,w,h,new Set(vis))
+        cv=gcvU
+      } else {
+        cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,new Set(vis))
+      }
+    }
+    var src=cv.getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
     for(var ii=0;ii<w*h;ii++){
       var pi=ii*4,v
-      if(mk.channel==="R")v=src[pi]/255
-      else if(mk.channel==="G")v=src[pi+1]/255
-      else if(mk.channel==="B")v=src[pi+2]/255
-      else if(mk.channel==="A")v=src[pi+3]/255
-      else v=(.299*src[pi]+.587*src[pi+1]+.114*src[pi+2])/255
+      if(chU==="A")v=src[pi+3]/255
+      else v=src[pi]/255
       var mv2=(mk.invert?1-v:v)*(mk.strength==null?1:mk.strength)*f
       if(mk.blendMode==="screen")out[ii]=1-(1-out[ii])*(1-mv2)
       else if(mk.blendMode==="add")out[ii]=Math.min(1,out[ii]+mv2)
