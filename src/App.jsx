@@ -947,16 +947,39 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
     // Pre-adding caused compAny's vis.has(id) guard to always fire, returning null.
     var visMk=new Set(vis)
     var cv=compAny(mk.refId,cmap,cache,iC,w,h,visMk);if(!cv)continue;any=true
-    visMk.add(mk.refId) // now safe to mark visited for effectStack processing below
-    if(mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,visMk)}
-    var src=clCv(cv,w,h).getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
+    visMk.add(mk.refId)
+    // Extract channel to greyscale BEFORE applying effectStack.
+    // Applying effects (e.g. blur) to RGBA then extracting causes bleed/expansion
+    // because blur spreads colour into transparent areas — those areas then have
+    // high luminosity/R/G/B values even though they're transparent, making the
+    // extracted mask expand. Solution: work in the mask's own greyscale space.
+    var rawId=cv.getContext("2d").getImageData(0,0,w,h).data
+    var ch=mk.channel||"luminosity"
+    if(ch!=="A"){
+      // Convert to greyscale canvas in the chosen channel, then apply effects to that
+      var gcv=mkCv(w,h),gctx=gcv.getContext("2d")
+      var gid=gctx.createImageData(w,h)
+      for(var gi=0;gi<w*h;gi++){
+        var gpi=gi*4,gv
+        if(ch==="R")gv=rawId[gpi]
+        else if(ch==="G")gv=rawId[gpi+1]
+        else if(ch==="B")gv=rawId[gpi+2]
+        else gv=Math.round(.299*rawId[gpi]+.587*rawId[gpi+1]+.114*rawId[gpi+2])
+        gid.data[gpi]=gv; gid.data[gpi+1]=gv; gid.data[gpi+2]=gv
+        gid.data[gpi+3]=255  // fully opaque so effects operate on the grey values
+      }
+      gctx.putImageData(gid,0,0)
+      if(mk.effectStack&&mk.effectStack.length>0) applyEfxStk(gctx,mk.effectStack,cmap,cache,iC,w,h,visMk)
+      cv=gcv
+    } else {
+      // Alpha channel — effects can operate directly on the RGBA source
+      if(mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,visMk)}
+    }
+    var src=cv.getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
     for(var ii=0;ii<w*h;ii++){
       var pi=ii*4,v
-      if(mk.channel==="R")v=src[pi]/255
-      else if(mk.channel==="G")v=src[pi+1]/255
-      else if(mk.channel==="B")v=src[pi+2]/255
-      else if(mk.channel==="A")v=src[pi+3]/255
-      else v=(.299*src[pi]+.587*src[pi+1]+.114*src[pi+2])/255
+      if(ch==="A")v=src[pi+3]/255
+      else v=src[pi]/255  // greyscale canvas: all channels equal, just read R
       var mv2=(mk.invert?1-v:v)*(mk.strength==null?1:mk.strength)*f
       if(mk.blendMode==="screen")out[ii]=1-(1-out[ii])*(1-mv2)
       else if(mk.blendMode==="add")out[ii]=Math.min(1,out[ii]+mv2)
