@@ -2930,6 +2930,7 @@ function BlenderProps(props) {
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
   // All hooks must be declared before any early return to satisfy Rules of Hooks
   var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  var blendTabSt=useState("pixels"); var blendTab=blendTabSt[0], setBlendTab=blendTabSt[1]
   // Layout mode state — MUST be declared here, not below the conditional early
   // return. Previous placement caused React error #300 (changing hook count)
   // whenever the drill-down was entered/exited.
@@ -3773,7 +3774,6 @@ function LayerCompProps(props) {
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
   // ALL hooks must be above any early return — Rules of Hooks
   var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
-  var blendTabSt=useState("pixels"); var blendTab=blendTabSt[0], setBlendTab=blendTabSt[1]
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
   function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
 
