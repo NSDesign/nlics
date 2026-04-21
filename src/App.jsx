@@ -2596,6 +2596,14 @@ function EfxCard(props) {
           {(efx.maskStack||[]).map(function(mk,mi){
             return (
               <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+                isFirst={mi===0} isLast={mi===(efx.maskStack||[]).length-1}
+                onMove={function(dir){
+                  var ms=(efx.maskStack||[]).slice()
+                  var ni=Math.max(0,Math.min(ms.length-1,mi+dir))
+                  if(ni===mi) return
+                  var tmp=ms[mi]; ms[mi]=ms[ni]; ms[ni]=tmp
+                  props.onChange(Object.assign({},efx,{maskStack:ms}))
+                }}
                 onChange={function(nw){
                   var ms=(efx.maskStack||[]).map(function(x,xi){return xi===mi?nw:x})
                   props.onChange(Object.assign({},efx,{maskStack:ms}))
@@ -3011,7 +3019,7 @@ function BlenderProps(props) {
               <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                 <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
                 <span className={"bc-item"+(isCur?" cur":"")}
-                  onClick={isCur?null:function(){jumpTo(i)}}>
+                  onClick={function(){jumpTo(i)}}>
                   {n.label}
                 </span>
               </span>
@@ -3852,7 +3860,7 @@ function LayerCompProps(props) {
               <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                 <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
                 <span className={"bc-item"+(isCur?" cur":"")}
-                  onClick={isCur?null:function(){jumpTo(i)}}>
+                  onClick={function(){jumpTo(i)}}>
                   {n.label}
                 </span>
               </span>
