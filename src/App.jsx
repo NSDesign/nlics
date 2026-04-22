@@ -2991,7 +2991,7 @@ function BlenderProps(props) {
       setTimeout(function(){setNavStack([])},0)
       return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target no longer exists — returning…</div>
     }
-    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx+1)})}
+    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx)})}
     // Build basePath for child components so they push correctly
     var childBasePath={slotKey:top.slotKey,steps:topSteps}
     return (
@@ -3018,7 +3018,7 @@ function BlenderProps(props) {
               <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                 <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
                 <span className={"bc-item"+(isCur?" cur":"")}
-                  onClick={isCur?navPop:function(){jumpTo(i)}}>
+                  onClick={function(){jumpTo(i)}}>
                   {n.label}
                 </span>
               </span>
@@ -3831,7 +3831,7 @@ function LayerCompProps(props) {
       setTimeout(function(){setNavStack([])},0)
       return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target gone — returning…</div>
     }
-    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx+1)})}
+    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx)})}
     var childBasePath={slotKey:top.slotKey,steps:topSteps}
     var isEffectDrill=top.kind==="effect"
     var stackToShow=isEffectDrill?(drillTarget.maskStack||[]):(drillTarget.effectStack||[])
@@ -3859,7 +3859,7 @@ function LayerCompProps(props) {
               <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                 <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
                 <span className={"bc-item"+(isCur?" cur":"")}
-                  onClick={isCur?navPop:function(){jumpTo(i)}}>
+                  onClick={function(){jumpTo(i)}}>
                   {n.label}
                 </span>
               </span>
@@ -4088,7 +4088,7 @@ function StackProps(props) {
       setTimeout(function(){setNavStack([])},0)
       return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target no longer exists — returning…</div>
     }
-    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx+1)})}
+    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx)})}
     return (
       <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
         <div className="breadcrumb">
