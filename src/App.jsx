@@ -3018,7 +3018,7 @@ function BlenderProps(props) {
               <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                 <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
                 <span className={"bc-item"+(isCur?" cur":"")}
-                  onClick={function(){jumpTo(i)}}>
+                  onClick={isCur?navPop:function(){jumpTo(i)}}>
                   {n.label}
                 </span>
               </span>
@@ -3859,7 +3859,7 @@ function LayerCompProps(props) {
               <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                 <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
                 <span className={"bc-item"+(isCur?" cur":"")}
-                  onClick={function(){jumpTo(i)}}>
+                  onClick={isCur?navPop:function(){jumpTo(i)}}>
                   {n.label}
                 </span>
               </span>
