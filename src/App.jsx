@@ -116,7 +116,7 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 /* Promoted group in node list */
 .prom-group-hdr{display:flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(220,180,40,.06);border-top:1px solid rgba(220,180,40,.18);border-bottom:1px solid rgba(220,180,40,.18);}
 /* ── Settings sheet ── */
-.sheet-scrim{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:700;display:flex;flex-direction:column;justify-content:flex-end;}
+.sheet-scrim{position:fixed;inset:0;z-index:700;display:flex;flex-direction:column;justify-content:flex-end;pointer-events:none;}
 .sheet-scrim.top{justify-content:flex-start;}
 .sheet-body{background:var(--pn);border-radius:18px 18px 0 0;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
 .sheet-grip{width:40px;height:4px;background:var(--bd);border-radius:2px;margin:10px auto 6px;flex-shrink:0;}
@@ -145,7 +145,7 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 /* sticky section headers in unified mode */
 .shdr.sticky{position:sticky;top:0;z-index:20;}
 /* ── Node detail sheet (panel style = sheet) ── */
-.node-sheet{position:fixed;bottom:0;left:0;right:0;z-index:600;background:var(--pn);border-radius:18px 18px 0 0;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 -8px 40px rgba(0,0,0,.6);}
+.node-sheet{position:fixed;bottom:0;left:0;right:0;z-index:800;background:var(--pn);border-radius:18px 18px 0 0;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 -8px 40px rgba(0,0,0,.6);pointer-events:auto;}
 .node-sheet-hdr{display:flex;align-items:center;padding:12px 16px 8px;flex-shrink:0;border-bottom:1px solid var(--bd);}
 .node-sheet-scroll{flex:1;overflow-y:auto;}
 `
@@ -4784,13 +4784,18 @@ function App() {
             }
             {flipped&&isVert
               ? <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport}/>
-              : <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+              : <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",position:"relative"}}>
                   <Section sec={1} title="§1 · Pixel Creators" {...sp}
                     collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
                     stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
                   <Section sec={2} title="§2 · Compositors" {...sp}
                     collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}}
                     stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
+                  {settings.panelStyle==="sheet"&&sheetNode&&(
+                    <div style={{position:"absolute",inset:0,background:"rgba(4,4,18,.65)",
+                      zIndex:650,pointerEvents:"auto"}}
+                      onClick={function(){setSheetNode(null);setSelId(null)}}/>
+                  )}
                 </div>
             }
           </div>
@@ -4803,13 +4808,18 @@ function App() {
               : <PreviewBar/>
             }
             {flipped&&isVert
-              ? <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+              ? <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",position:"relative"}}>
                   <Section sec={1} title="§1 · Pixel Creators" {...sp}
                     collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
                     stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
                   <Section sec={2} title="§2 · Compositors" {...sp}
                     collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}}
                     stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
+                  {settings.panelStyle==="sheet"&&sheetNode&&(
+                    <div style={{position:"absolute",inset:0,background:"rgba(4,4,18,.65)",
+                      zIndex:650,pointerEvents:"auto"}}
+                      onClick={function(){setSheetNode(null);setSelId(null)}}/>
+                  )}
                 </div>
               : <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport}/>
             }
