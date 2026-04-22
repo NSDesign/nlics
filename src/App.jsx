@@ -943,43 +943,74 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
       continue
     }
     if(!mk.refId||vis.has(mk.refId))continue
-    // Do NOT pre-add mk.refId to vis. compAny adds/removes its own id internally.
-    // Pre-adding caused compAny's vis.has(id) guard to always fire, returning null.
     var visMk=new Set(vis)
-    var cv=compAny(mk.refId,cmap,cache,iC,w,h,visMk);if(!cv)continue;any=true
-    visMk.add(mk.refId)
+    var cv
+    if(mk.refId.indexOf("__sibling__:")===0){
+      // Synthetic sibling ref: "__sibling__:nodeId:effectId:maskId"
+      var sibParts=mk.refId.split(":")
+      var sibNode=cmap.get(sibParts[1]),sibCv2=null
+      if(sibNode){
+        var allEfxStacks=[]
+        if(sibNode.outEfx) allEfxStacks=allEfxStacks.concat(sibNode.outEfx)
+        if(sibNode.inputA&&sibNode.inputA.effectStack) allEfxStacks=allEfxStacks.concat(sibNode.inputA.effectStack)
+        if(sibNode.inputB&&sibNode.inputB.effectStack) allEfxStacks=allEfxStacks.concat(sibNode.inputB.effectStack)
+        if(sibNode.layers) sibNode.layers.forEach(function(l){if(l.effectStack)allEfxStacks=allEfxStacks.concat(l.effectStack)})
+        var sibEfx2=allEfxStacks.find(function(e){return e.id===sibParts[2]})
+        var sibMk2=sibEfx2&&(sibEfx2.maskStack||[]).find(function(m){return m.id===sibParts[3]})
+        if(sibMk2&&sibMk2.refId&&!vis.has(sibMk2.refId)){
+          var sibBase2=compAny(sibMk2.refId,cmap,cache,iC,w,h,visMk)
+          if(sibBase2){
+            var sibCh2=sibMk2.channel||"luminosity"
+            if(sibCh2!=="A"){
+              var sibRaw2=sibBase2.getContext("2d").getImageData(0,0,w,h).data
+              var sibGcv2=mkCv(w,h),sibGctx2=sibGcv2.getContext("2d"),sibGid2=sibGctx2.createImageData(w,h)
+              for(var sg2=0;sg2<w*h;sg2++){var sgp2=sg2*4,sgv2;if(sibCh2==="R")sgv2=sibRaw2[sgp2];else if(sibCh2==="G")sgv2=sibRaw2[sgp2+1];else if(sibCh2==="B")sgv2=sibRaw2[sgp2+2];else sgv2=Math.round(.299*sibRaw2[sgp2]+.587*sibRaw2[sgp2+1]+.114*sibRaw2[sgp2+2]);sibGid2.data[sgp2]=sgv2;sibGid2.data[sgp2+1]=sgv2;sibGid2.data[sgp2+2]=sgv2;sibGid2.data[sgp2+3]=255}
+              sibGctx2.putImageData(sibGid2,0,0)
+              if(sibMk2.effectStack&&sibMk2.effectStack.length>0) applyEfxStk(sibGctx2,sibMk2.effectStack,cmap,cache,iC,w,h,visMk)
+              sibCv2=sibGcv2
+            } else {
+              sibCv2=clCv(sibBase2,w,h)
+              if(sibMk2.effectStack&&sibMk2.effectStack.length>0) applyEfxStk(sibCv2.getContext("2d"),sibMk2.effectStack,cmap,cache,iC,w,h,visMk)
+            }
+          }
+        }
+      }
+      cv=sibCv2; if(!cv)continue; any=true
+    } else {
+      // Do NOT pre-add mk.refId to vis — compAny handles its own circular check
+      cv=compAny(mk.refId,cmap,cache,iC,w,h,visMk);if(!cv)continue;any=true
+      visMk.add(mk.refId)
+    }
     // Extract channel to greyscale BEFORE applying effectStack.
     // Applying effects (e.g. blur) to RGBA then extracting causes bleed/expansion
     // because blur spreads colour into transparent areas — those areas then have
     // high luminosity/R/G/B values even though they're transparent, making the
     // extracted mask expand. Solution: work in the mask's own greyscale space.
-    var rawId=cv.getContext("2d").getImageData(0,0,w,h).data
-    var ch=mk.channel||"luminosity"
-    if(ch!=="A"){
-      // Convert to greyscale canvas in the chosen channel, then apply effects to that
-      var gcv=mkCv(w,h),gctx=gcv.getContext("2d")
-      var gid=gctx.createImageData(w,h)
-      for(var gi=0;gi<w*h;gi++){
-        var gpi=gi*4,gv
-        if(ch==="R")gv=rawId[gpi]
-        else if(ch==="G")gv=rawId[gpi+1]
-        else if(ch==="B")gv=rawId[gpi+2]
-        else gv=Math.round(.299*rawId[gpi]+.587*rawId[gpi+1]+.114*rawId[gpi+2])
-        gid.data[gpi]=gv; gid.data[gpi+1]=gv; gid.data[gpi+2]=gv
-        gid.data[gpi+3]=255  // fully opaque so effects operate on the grey values
+    // For sibling refs, cv is already processed greyscale — skip extraction+effects
+    if(mk.refId.indexOf("__sibling__:")!==0){
+      var rawId=cv.getContext("2d").getImageData(0,0,w,h).data
+      var ch=mk.channel||"luminosity"
+      if(ch!=="A"){
+        var gcv=mkCv(w,h),gctx=gcv.getContext("2d")
+        var gid=gctx.createImageData(w,h)
+        for(var gi=0;gi<w*h;gi++){
+          var gpi=gi*4,gv
+          if(ch==="R")gv=rawId[gpi];else if(ch==="G")gv=rawId[gpi+1];else if(ch==="B")gv=rawId[gpi+2]
+          else gv=Math.round(.299*rawId[gpi]+.587*rawId[gpi+1]+.114*rawId[gpi+2])
+          gid.data[gpi]=gv;gid.data[gpi+1]=gv;gid.data[gpi+2]=gv;gid.data[gpi+3]=255
+        }
+        gctx.putImageData(gid,0,0)
+        if(mk.effectStack&&mk.effectStack.length>0) applyEfxStk(gctx,mk.effectStack,cmap,cache,iC,w,h,visMk)
+        cv=gcv
+      } else {
+        if(mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,visMk)}
       }
-      gctx.putImageData(gid,0,0)
-      if(mk.effectStack&&mk.effectStack.length>0) applyEfxStk(gctx,mk.effectStack,cmap,cache,iC,w,h,visMk)
-      cv=gcv
-    } else {
-      // Alpha channel — effects can operate directly on the RGBA source
-      if(mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,visMk)}
     }
     var src=cv.getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
     for(var ii=0;ii<w*h;ii++){
       var pi=ii*4,v
-      if(ch==="A")v=src[pi+3]/255
-      else v=src[pi]/255  // greyscale canvas: all channels equal, just read R
+      if(mk.refId.indexOf("__sibling__:")===0){v=src[pi]/255}  // already greyscale
+      else{var chR=mk.channel||"luminosity";if(chR==="A")v=src[pi+3]/255;else v=src[pi]/255}
       var mv2=(mk.invert?1-v:v)*(mk.strength==null?1:mk.strength)*f
       if(mk.blendMode==="screen")out[ii]=1-(1-out[ii])*(1-mv2)
       else if(mk.blendMode==="add")out[ii]=Math.min(1,out[ii]+mv2)
@@ -2631,6 +2662,7 @@ function EfxCard(props) {
           {(efx.maskStack||[]).map(function(mk,mi){
             return (
               <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+                siblingEffects={props.siblingEffects} ownerNodeId={props.ownerNodeId}
                 isFirst={mi===0} isLast={mi===(efx.maskStack||[]).length-1}
                 onMove={function(dir){
                   var ms=(efx.maskStack||[]).slice()
