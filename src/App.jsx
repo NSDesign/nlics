@@ -1681,6 +1681,82 @@ function NRef(props) {
           </div>
         </div>
       )}
+      {(function(){
+        // Phase 2: Other Stacks — masks from effect stacks on other nodes
+        var otherMasks=[]
+        ;(props.nodes||[]).forEach(function(n){
+          if(n.id===props.selfId) return
+          function collectFromStack(stack, slotLabel){
+            if(!stack||!stack.length) return
+            stack.forEach(function(efx){
+              if(efx.type==="__stackref__") return
+              var efxMasks=(efx.maskStack||[]).filter(function(m){return m.refId&&m.refId.length>0})
+              efxMasks.forEach(function(m){
+                otherMasks.push({
+                  nodeId:n.id, nodeName:n.name||n.type,
+                  effectId:efx.id, effectLabel:efx.name||efx.type,
+                  slotLabel:slotLabel,
+                  maskId:m.id, maskLabel:m.name||m.channel||"mask",
+                  synId:"__sibling__:"+n.id+":"+efx.id+":"+m.id
+                })
+              })
+            })
+          }
+          if(n.outEfx) collectFromStack(n.outEfx,"output")
+          if(n.inputA&&n.inputA.effectStack) collectFromStack(n.inputA.effectStack,"input A")
+          if(n.inputB&&n.inputB.effectStack) collectFromStack(n.inputB.effectStack,"input B")
+          if(n.layers) n.layers.forEach(function(l,li){
+            collectFromStack(l.effectStack,(l.name||"layer "+(li+1)))
+          })
+          if(n.effectStack) collectFromStack(n.effectStack,"")
+        })
+        // Exclude masks already shown in Same Stack group
+        var sibIds=new Set((props.siblingEffects||[]).map(function(e){
+          return (e.maskStack||[]).map(function(m){return e.id+":"+m.id})
+        }).reduce(function(a,b){return a.concat(b)},[]))
+        otherMasks=otherMasks.filter(function(om){
+          return !sibIds.has(om.effectId+":"+om.maskId)
+        })
+        if(!otherMasks.length) return null
+        return (
+          <div style={{marginBottom:8}}>
+            <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
+              letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
+              Other Stacks
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {otherMasks.map(function(om){
+                var lbl=om.nodeName+(om.slotLabel?" · "+om.slotLabel:"")+" › "+om.effectLabel+" › "+om.maskLabel
+                var isActive=props.v===om.synId
+                return (
+                  <div key={om.synId} onClick={function(){pick(om.synId)}}
+                    style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
+                      padding:"6px 4px",borderRadius:6,
+                      background:isActive?"var(--sl)":"none",
+                      border:isActive?"1px solid var(--lv)":"1px solid transparent",
+                      minWidth:THUMB_PX+16}}>
+                    <div style={{width:THUMB_PX,height:THUMB_PX,borderRadius:4,overflow:"hidden",
+                      background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",
+                      boxShadow:"0 0 0 1px "+(isActive?"var(--lv)":"var(--bd)")}}>
+                      <span style={{fontSize:7,color:"var(--mu)",textAlign:"center",padding:2,lineHeight:1.3}}>mask</span>
+                    </div>
+                    <span style={{fontSize:8,color:isActive?"var(--lv)":"var(--mu)",textAlign:"center",
+                      fontFamily:"'IBM Plex Mono',monospace",maxWidth:THUMB_PX+8,
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2}}
+                      title={lbl}>
+                      {om.effectLabel+" › "+om.maskLabel}
+                    </span>
+                    <span style={{fontSize:7,color:"var(--mu)",textAlign:"center",
+                      maxWidth:THUMB_PX+8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {om.nodeName}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
       {creators.length>0&&(
         <div>
           <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
