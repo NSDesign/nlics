@@ -1615,6 +1615,41 @@ function NRef(props) {
         style={{padding:"6px 10px",fontSize:11,color:"var(--mu)",cursor:"pointer",
           borderRadius:5,marginBottom:6,border:"1px solid "+(props.v==null?"var(--bd)":"transparent"),
           background:props.v==null?"var(--sl)":"none"}}>— none —</div>
+      {props.siblingEffects&&props.siblingEffects.length>0&&(
+        <div>
+          <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
+            letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
+            Same Stack
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+            {props.siblingEffects.map(function(sibEfx){
+              return (sibEfx.maskStack||[]).map(function(sibMk){
+                var synId="__sibling__:"+(props.ownerNodeId||"?")+":"+sibEfx.id+":"+sibMk.id
+                var lbl=(sibEfx.name||sibEfx.type)+" › "+(sibMk.name||sibMk.channel||"mask")
+                return (
+                  <div key={synId} onClick={function(){pick(synId)}}
+                    style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
+                      padding:"6px 4px",borderRadius:6,
+                      background:props.v===synId?"var(--sl)":"none",
+                      border:props.v===synId?"1px solid var(--lv)":"1px solid transparent",
+                      minWidth:THUMB_PX+16}}>
+                    <div style={{width:THUMB_PX,height:THUMB_PX,borderRadius:4,overflow:"hidden",
+                      background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",
+                      boxShadow:"0 0 0 1px "+(props.v===synId?"var(--lv)":"var(--bd)")}}>
+                      <span style={{fontSize:8,color:"var(--mu)",textAlign:"center",padding:2}}>mask</span>
+                    </div>
+                    <span style={{fontSize:8,color:props.v===synId?"var(--lv)":"var(--mu)",textAlign:"center",
+                      fontFamily:"'IBM Plex Mono',monospace",maxWidth:THUMB_PX+8,
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2}}>
+                      {lbl}
+                    </span>
+                  </div>
+                )
+              })
+            })}
+          </div>
+        </div>
+      )}
       {creators.length>0&&(
         <div>
           <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
@@ -2277,6 +2312,7 @@ function MaskCard(props) {
           )}
           <NRef l="source" v={mk.refId} nodes={props.nodes} selfId={props.selfId}
             iC={props.iC} mode="source"
+            siblingEffects={props.siblingEffects} ownerNodeId={props.ownerNodeId}
             fn={function(v){props.onChange(Object.assign({},mk,{refId:v}))}}/>
           <Se l="channel" v={mk.channel}
             opts={MCH}
@@ -2751,6 +2787,8 @@ function EfxStack(props) {
         )
         return (
           <EfxCard key={efx.id} efx={efx} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+            siblingEffects={props.stack.filter(function(s){return s.id!==efx.id&&s.maskStack&&s.maskStack.length>0})}
+            ownerNodeId={props.selfId}
             isFirst={i===0} isLast={i===props.stack.length-1}
             onChange={function(nw){upd(efx.id,nw)}}
             onDel={function(){del(efx.id)}}
@@ -2849,6 +2887,7 @@ function MaskStackPanel(props) {
         )
         return (
           <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+            siblingEffects={props.siblingEffects} ownerNodeId={props.ownerNodeId}
             isFirst={mi===0} isLast={mi===props.stack.length-1}
             onMove={function(dir){move(mi,dir)}}
             onChange={function(nw){upd(mk.id,nw)}}
