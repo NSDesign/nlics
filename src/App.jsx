@@ -3540,6 +3540,13 @@ function BlenderProps(props) {
       <div className="card-body">
         <Se l="mode" v={node.mode} opts={BMODES} fn={function(v){onChange(Object.assign({},node,{mode:v}))}}/>
         <Sl l="amount" v={node.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){onChange(Object.assign({},node,{amount:v}))}}/>
+        <PR l="order">
+          <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}}
+            className={node.switched?"ac":""}
+            style={{minHeight:36,padding:"0 14px"}}>
+            {node.switched?"B over A":"A over B"}
+          </button>
+        </PR>
         {COMMUTATIVE_MODES[node.mode] && (
           <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",lineHeight:1.5,fontStyle:"italic"}}>
             order has no effect in {node.mode} mode
@@ -3562,11 +3569,7 @@ function BlenderProps(props) {
       <div className="card" style={{marginBottom:10}}>
         <div className="card-hdr">
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--di)"}}>Blend</span>
-          <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}}
-            className={node.switched?"ac":"ghost"}
-            style={{fontSize:10,padding:"0 10px",minHeight:28}}>
-            {node.switched?"B over A":"A over B"}
-          </button>
+
         </div>
         {body}
       </div>
