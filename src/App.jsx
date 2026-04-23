@@ -1010,14 +1010,21 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
         if(mk.effectStack&&mk.effectStack.length>0) applyEfxStk(gctx,mk.effectStack,cmap,cache,iC,w,h,visMk)
         cv=gcv
       } else {
-        if(mk.effectStack&&mk.effectStack.length>0){cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,visMk)}
+        // Alpha channel — greyscale-first so effectStack effects (invert, blur etc.)
+        // operate on the alpha values directly and work correctly
+        var rawAc=cv.getContext("2d").getImageData(0,0,w,h).data
+        var gcvAc=mkCv(w,h),gctxAc=gcvAc.getContext("2d"),gidAc=gctxAc.createImageData(w,h)
+        for(var gaci=0;gaci<w*h;gaci++){var gacv=rawAc[gaci*4+3];gidAc.data[gaci*4]=gacv;gidAc.data[gaci*4+1]=gacv;gidAc.data[gaci*4+2]=gacv;gidAc.data[gaci*4+3]=255}
+        gctxAc.putImageData(gidAc,0,0)
+        if(mk.effectStack&&mk.effectStack.length>0) applyEfxStk(gctxAc,mk.effectStack,cmap,cache,iC,w,h,visMk)
+        cv=gcvAc
       }
     }
+    // All channel paths now produce a greyscale canvas — read R uniformly
     var src=cv.getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
     for(var ii=0;ii<w*h;ii++){
       var pi=ii*4,v
-      if(mk.refId.indexOf("__sibling__:")===0){v=src[pi]/255}  // already greyscale
-      else{var chR=mk.channel||"luminosity";if(chR==="A")v=src[pi+3]/255;else v=src[pi]/255}
+      v=src[pi]/255  // greyscale canvas: R=G=B for all channel types
       var mv2=(mk.invert?1-v:v)*(mk.strength==null?1:mk.strength)*f
       if(mk.blendMode==="screen")out[ii]=1-(1-out[ii])*(1-mv2)
       else if(mk.blendMode==="add")out[ii]=Math.min(1,out[ii]+mv2)
@@ -1120,6 +1127,33 @@ function resolveSlot(slot,cmap,cache,iC,w,h,vis) {
   if(slot.maskStack&&slot.maskStack.length>0)maskToAlpha(ctx,slot.maskStack,cmap,cache,iC,w,h,new Set(vis))
   return cv
 }
+// Like resolveSlot but WITHOUT applying maskToAlpha — pixels+effects only.
+// Used by blender/layer comp to get source pixels for visual blend while
+// computing matte separately via slotEffectiveMatte.
+function resolveSlotBase(slot,cmap,cache,iC,w,h,vis) {
+  if(!slot||!slot.refId||vis.has(slot.refId))return null
+  if(slot.enabled===false)return null
+  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis));if(!base)return null
+  var cv=clCv(base,w,h),ctx=cv.getContext("2d")
+  if(slot.effectStack&&slot.effectStack.length>0)applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis))
+  return cv
+}
+// Compute effective matte for a slot: source_alpha × maskStack result.
+// Returns Float32Array[w*h]. If no refId, returns null (no contribution).
+// If refId but no maskStack, returns source alpha channel.
+function slotEffectiveMatte(slot,baseCv,cmap,cache,iC,w,h,vis){
+  if(!slot||!slot.refId) return null
+  var mv=slot.maskStack&&slot.maskStack.length>0
+    ? compMasks(slot.maskStack,cmap,cache,iC,w,h,new Set(vis)) : null
+  var out=new Float32Array(w*h)
+  if(baseCv){
+    var bd=baseCv.getContext("2d").getImageData(0,0,w,h).data
+    for(var i=0;i<w*h;i++){var sa=bd[i*4+3]/255; out[i]=mv?sa*mv[i]:sa}
+  } else if(mv){
+    for(var j=0;j<w*h;j++) out[j]=mv[j]
+  }
+  return out
+}
 // Blend modes for the alpha/matte channel (separate from pixel blend)
 var ALPHA_BM={
   "add":    function(a,b,f){return Math.min(1,a+b*f)},
@@ -1128,11 +1162,9 @@ var ALPHA_BM={
   "subtract":function(a,b,f){return Math.max(0,a-b*f)},
   "screen": function(a,b,f){return 1-(1-a)*(1-b*f)},
 }
+// Blend pixel colours only — matte/alpha is handled separately by the caller.
+// maskMode/maskAmount params kept for API compat but no longer used here.
 function blendCv(ctx,srcCv,mode,amount,w,h,maskMode,maskAmount) {
-  // maskMode/maskAmount: how the source alpha composites onto the dest alpha
-  // defaults: add blend, 100% opacity (union of mattes)
-  var mf=(maskAmount==null?100:maskAmount)/100
-  var mblend=ALPHA_BM[maskMode||"add"]||ALPHA_BM["add"]
   if(mode==="subtract"||mode==="divide"){
     var base=ctx.getImageData(0,0,w,h)
     var srcD=clCv(srcCv,w,h).getContext("2d").getImageData(0,0,w,h).data
@@ -1147,24 +1179,13 @@ function blendCv(ctx,srcCv,mode,amount,w,h,maskMode,maskAmount) {
         B[i+1]=srcD[i+1]>0?Math.min(255,B[i+1]/(srcD[i+1]/255)*f+B[i+1]*(1-f)):B[i+1]
         B[i+2]=srcD[i+2]>0?Math.min(255,B[i+2]/(srcD[i+2]/255)*f+B[i+2]*(1-f)):B[i+2]
       }
-      // Alpha: independent matte blend
-      B[i+3]=Math.round(mblend(B[i+3]/255,srcD[i+3]/255,mf)*255)
+      // Alpha: preserve dest alpha — caller sets the matte explicitly
     }
     ctx.putImageData(base,0,0)
   } else {
-    // Pixel colour blend via globalCompositeOperation
     ctx.save();ctx.globalAlpha=amount/100
     ctx.globalCompositeOperation=BM[mode]||"source-over"
     ctx.drawImage(srcCv,0,0);ctx.restore()
-    // Alpha blend independently if mask mode differs from pixel mode
-    if(maskMode&&maskMode!=="normal"){
-      var ad=ctx.getImageData(0,0,w,h)
-      var sd=clCv(srcCv,w,h).getContext("2d").getImageData(0,0,w,h).data
-      for(var j=0;j<w*h;j++){
-        ad.data[j*4+3]=Math.round(mblend(ad.data[j*4+3]/255,sd[j*4+3]/255,mf)*255)
-      }
-      ctx.putImageData(ad,0,0)
-    }
   }
 }
 // Partially evaluate an effect stack up to and including a given effect id.
@@ -1212,14 +1233,19 @@ function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
         applyEfxStk(gctxU,mk.effectStack,cmap,cache,iC,w,h,new Set(vis))
         cv=gcvU
       } else {
-        cv=clCv(cv,w,h);applyEfxStk(cv.getContext("2d"),mk.effectStack,cmap,cache,iC,w,h,new Set(vis))
+        // Alpha channel — greyscale-first so effects work on alpha values
+        var rawAU=cv.getContext("2d").getImageData(0,0,w,h).data
+        var gcvAU=mkCv(w,h),gctxAU=gcvAU.getContext("2d"),gidAU=gctxAU.createImageData(w,h)
+        for(var gauI=0;gauI<w*h;gauI++){var gauV=rawAU[gauI*4+3];gidAU.data[gauI*4]=gauV;gidAU.data[gauI*4+1]=gauV;gidAU.data[gauI*4+2]=gauV;gidAU.data[gauI*4+3]=255}
+        gctxAU.putImageData(gidAU,0,0)
+        if(mk.effectStack&&mk.effectStack.length>0) applyEfxStk(gctxAU,mk.effectStack,cmap,cache,iC,w,h,new Set(vis))
+        cv=gcvAU
       }
     }
     var src=cv.getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
     for(var ii=0;ii<w*h;ii++){
       var pi=ii*4,v
-      if(chU==="A")v=src[pi+3]/255
-      else v=src[pi]/255
+      v=src[pi]/255  // all channels: greyscale canvas
       var mv2=(mk.invert?1-v:v)*(mk.strength==null?1:mk.strength)*f
       if(mk.blendMode==="screen")out[ii]=1-(1-out[ii])*(1-mv2)
       else if(mk.blendMode==="add")out[ii]=Math.min(1,out[ii]+mv2)
@@ -1356,6 +1382,8 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   // ── Layer compositor ──────────────────────────────────────
   if(n.type==="layers"){
     var lcv=mkCv(w,h),lctx=lcv.getContext("2d")
+    // Running matte — starts fully transparent (no layers = nothing visible)
+    var runMatte=new Float32Array(w*h)
     var layers=n.layers||[]
     // Iterate bottom-to-top (last in array = top layer)
     for(var li=layers.length-1;li>=0;li--){
@@ -1367,24 +1395,69 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       if(!lBase) continue
       var lCv=clCv(lBase,w,h),lCtx=lCv.getContext("2d")
       if(lyr.effectStack&&lyr.effectStack.length>0) applyEfxStk(lCtx,lyr.effectStack,cmap,cache,iC,w,h,lVis)
-      if(lyr.maskStack&&lyr.maskStack.length>0) maskToAlpha(lCtx,lyr.maskStack,cmap,cache,iC,w,h,lVis)
-      blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h,lyr.maskMode||"add",lyr.maskAmount==null?100:lyr.maskAmount)
+      // Compute layer effective matte (source_alpha × maskStack)
+      var lyrMatte=slotEffectiveMatte(
+        {refId:lyr.refId,maskStack:lyr.maskStack},lCv,cmap,cache,iC,w,h,lVis)
+      // Apply matte to layer alpha for visual pixel blend
+      if(lyrMatte){
+        var lid2=lCtx.getImageData(0,0,w,h)
+        for(var lmi=0;lmi<w*h;lmi++) lid2.data[lmi*4+3]=Math.round(lyrMatte[lmi]*255)
+        lCtx.putImageData(lid2,0,0)
+      } else {
+        if(lyr.maskStack&&lyr.maskStack.length>0) maskToAlpha(lCtx,lyr.maskStack,cmap,cache,iC,w,h,lVis)
+      }
+      blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h)
+      // Accumulate matte using layer's maskMode
+      var lmf=(lyr.maskAmount==null?100:lyr.maskAmount)/100
+      var lmblend=ALPHA_BM[lyr.maskMode||"add"]||ALPHA_BM["add"]
+      var lyrMv=lyrMatte||(function(){
+        // No explicit mask — use source alpha
+        var ld=lBase.getContext("2d").getImageData(0,0,w,h).data
+        var m=new Float32Array(w*h); for(var x=0;x<w*h;x++) m[x]=ld[x*4+3]/255; return m
+      })()
+      for(var lri=0;lri<w*h;lri++) runMatte[lri]=lmblend(runMatte[lri],lyrMv[lri],lmf)
     }
+    // Override alpha with accumulated matte
+    var lOutImg=lctx.getImageData(0,0,w,h)
+    for(var loi=0;loi<w*h;loi++) lOutImg.data[loi*4+3]=Math.round(runMatte[loi]*255)
+    lctx.putImageData(lOutImg,0,0)
     if(n.outEfx&&n.outEfx.length>0) applyEfxStk(lctx,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
     if(n.outMask&&n.outMask.length>0) maskToAlpha(lctx,n.outMask,cmap,cache,iC,w,h,new Set(vis))
     cache.set(id,lcv);vis.delete(id);return lcv
   }
 
   // ── Blender compositor ───────────────────────────────────
+  // Pixel blend and matte composition are computed independently.
+  // resolveSlotBase: pixels+effects, no mask on alpha.
+  // slotEffectiveMatte: source_alpha × maskStack → the input's matte.
   var cv2=mkCv(w,h),ctx2=cv2.getContext("2d")
-  // Label semantics: "A over B" (switched=false) means A on top of B.
-  // Canvas draws bottom-first: draw B, then blend A over it.
-  // "B over A" (switched=true) reverses that: draw A, blend B over.
-  var cA=resolveSlot(n.inputA,cmap,cache,iC,w,h,new Set(vis))
-  var cB=resolveSlot(n.inputB,cmap,cache,iC,w,h,new Set(vis))
-  var bottom=n.switched?cA:cB, top=n.switched?cB:cA
+  var cAb=resolveSlotBase(n.inputA,cmap,cache,iC,w,h,new Set(vis))
+  var cBb=resolveSlotBase(n.inputB,cmap,cache,iC,w,h,new Set(vis))
+  var mA=slotEffectiveMatte(n.inputA,cAb,cmap,cache,iC,w,h,new Set(vis))
+  var mB=slotEffectiveMatte(n.inputB,cBb,cmap,cache,iC,w,h,new Set(vis))
+  // Apply mattes to pixel alpha for visual compositing
+  function applyMatte(baseCv, matte){
+    if(!baseCv) return null
+    var cv=clCv(baseCv,w,h),id2=cv.getContext("2d").getImageData(0,0,w,h)
+    for(var i=0;i<w*h;i++) id2.data[i*4+3]=matte?Math.round(matte[i]*255):id2.data[i*4+3]
+    cv.getContext("2d").putImageData(id2,0,0); return cv
+  }
+  var cA=applyMatte(cAb,mA), cB=applyMatte(cBb,mB)
+  // Pixel blend (switched controls draw order = A over B or B over A)
+  var bottom=n.switched?cA:cB, topC=n.switched?cB:cA
   if(bottom)ctx2.drawImage(bottom,0,0)
-  if(top)blendCv(ctx2,top,n.mode,n.amount,w,h,n.maskMode||"add",n.maskAmount==null?100:n.maskAmount)
+  if(topC)blendCv(ctx2,topC,n.mode,n.amount,w,h)
+  // Matte combination — switched also affects matte order
+  var botM=n.switched?mA:mB, topM=n.switched?mB:mA
+  var mf=(n.maskAmount==null?100:n.maskAmount)/100
+  var mblend=ALPHA_BM[n.maskMode||"add"]||ALPHA_BM["add"]
+  var outImg=ctx2.getImageData(0,0,w,h)
+  for(var mi=0;mi<w*h;mi++){
+    var bv=botM?botM[mi]:(n.switched?(n.inputA.refId?1:0):(n.inputB.refId?1:0))
+    var tv=topM?topM[mi]:(n.switched?(n.inputB.refId?1:0):(n.inputA.refId?1:0))
+    outImg.data[mi*4+3]=Math.round(mblend(bv,tv,mf)*255)
+  }
+  ctx2.putImageData(outImg,0,0)
   if(n.outEfx&&n.outEfx.length>0)applyEfxStk(ctx2,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
   if(n.outMask&&n.outMask.length>0)maskToAlpha(ctx2,n.outMask,cmap,cache,iC,w,h,new Set(vis))
   cache.set(id,cv2);vis.delete(id);return cv2
@@ -1580,17 +1653,15 @@ function renderThumb(canvas, nodeId, nodes, iC, asMask) {
     var result=compAny(nodeId,cmap,new Map(),iC||new Map(),THUMB_PX,THUMB_PX,new Set())
     if(result){
       if(asMask){
-        // Render as greyscale luminance — mask thumbnails always show as matte
+        // Show alpha channel directly as the matte boundary.
+        // Alpha IS the matte — using luminance would show the fill colour
+        // (e.g. a blue circle would appear dark grey instead of white).
         var rId=result.getContext("2d").getImageData(0,0,THUMB_PX,THUMB_PX)
         var gId=ctx.createImageData(THUMB_PX,THUMB_PX)
         for(var ri=0;ri<THUMB_PX*THUMB_PX;ri++){
           var rp=ri*4
-          // If canvas is already greyscale (promoted mask tap), just use R channel
-          // Otherwise compute luminance
-          var lv=Math.round(.299*rId.data[rp]+.587*rId.data[rp+1]+.114*rId.data[rp+2])
-          // Weight by alpha so transparent areas show dark
-          var la=Math.round(lv*(rId.data[rp+3]/255))
-          gId.data[rp]=la;gId.data[rp+1]=la;gId.data[rp+2]=la;gId.data[rp+3]=255
+          var av=rId.data[rp+3]  // alpha channel = matte value
+          gId.data[rp]=av;gId.data[rp+1]=av;gId.data[rp+2]=av;gId.data[rp+3]=255
         }
         ctx.putImageData(gId,0,0)
       } else {
@@ -4560,7 +4631,7 @@ function Section(props) {
             var isSel = props.selId===node.id
             var isDsp = props.dispId===node.id
             return (
-              <div key={node.id}>
+              <div key={node.id} id={"ni-"+node.id}>
                 <NodeItem node={node} isSel={isSel} isDsp={isDsp}
                   isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
                   dispSlot={props.dispSlot}
@@ -4596,7 +4667,7 @@ function Section(props) {
                 var isSel = props.selId===node.id
                 var isDsp = props.dispId===node.id
                 return (
-                  <div key={node.id}>
+                  <div key={node.id} id={"ni-"+node.id}>
                     <NodeItem node={node} isSel={isSel} isDsp={isDsp}
                       isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
                       dispSlot={props.dispSlot}
@@ -4999,9 +5070,13 @@ function App() {
     if (!node) return
     setSelId(id)
     if (settings.panelStyle === "sheet") setSheetNode({node: node, sec: node.section})
-    // Make sure the section containing the node is expanded
     if (node.section === 1) setS1Col(false)
     else setS2Col(false)
+    // Scroll to the node in the list after state has updated and panel has expanded
+    setTimeout(function(){
+      var el=document.getElementById("ni-"+id)
+      if(el) el.scrollIntoView({behavior:"smooth",block:"nearest"})
+    }, 120)
   }
 
   var sp={nodes:nodes,selId:selId,dispId:dispId,dispMask:dispMask,dispSlot:dispSlot,dspSlot:dspSlot,
