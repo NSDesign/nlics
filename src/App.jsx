@@ -1520,10 +1520,8 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
         if(mn.outMask&&mn.outMask.length>0){
           // Output mask defined — show it (no source alpha to multiply, it's an output matte)
           em2=compMasks(mn.outMask,cmap,new Map(),iC,w,h,new Set()); emLabel="output mask"
-        } else if(mn.outMask&&mn.outMask.length===0){
-          // No outMask defined — white (fully opaque default)
-          em2=new Float32Array(w*h); for(var wi=0;wi<w*h;wi++) em2[wi]=1; emLabel="output (no mask = white)"
         }
+        // Empty outMask = no restriction — fall through to input/layer mattes
         if(!em2&&mn.inputA&&mn.inputA.refId){
           var iaS=compAny(mn.inputA.refId,cmap,new Map(),iC,w,h,new Set())
           em2=effectiveMatte(iaS,mn.inputA.maskStack,cmap,new Map(),iC,w,h,new Set())
