@@ -113,6 +113,8 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 /* Promote button */
 .promote-btn{background:rgba(220,180,40,.1);border:1px solid rgba(220,180,40,.3);color:#e8c840;font-size:9px;padding:2px 8px;border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;min-height:28px;}
 .promote-btn:hover{background:rgba(220,180,40,.22);color:#fff;}
+.promote-btn.tapped{background:rgba(36,204,168,.12);border:1px solid rgba(36,204,168,.4);color:var(--ac);}
+.promote-btn.tapped:hover{background:rgba(36,204,168,.22);}
 /* Promoted group in node list */
 .prom-group-hdr{display:flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(220,180,40,.06);border-top:1px solid rgba(220,180,40,.18);border-bottom:1px solid rgba(220,180,40,.18);}
 /* ── Settings sheet ── */
@@ -1271,8 +1273,16 @@ function compPromoted(n,cmap,cache,iC,w,h,vis){
   if(tp.stackType==="effect"&&slot.effectStack&&slot.effectStack.length>0){
     applyEfxStkUpTo(ctx2,slot.effectStack,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
   }else if(tp.stackType==="mask"&&slot.maskStack&&slot.maskStack.length>0){
+    // Return greyscale matte canvas — NOT RGBA with alpha applied.
+    // Applying matte to alpha then reading luminance later gives wrong results
+    // because the source's colour values bleed into the matte reading.
     var mv2=compMasksUpTo(slot.maskStack,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
-    if(mv2){var id2=ctx2.getImageData(0,0,w,h);for(var j=0;j<w*h;j++)id2.data[j*4+3]=Math.round(id2.data[j*4+3]*mv2[j]);ctx2.putImageData(id2,0,0)}
+    if(mv2){
+      var grCv=mkCv(w,h),grCtx=grCv.getContext("2d"),grId=grCtx.createImageData(w,h)
+      for(var j=0;j<w*h;j++){var gv=Math.round(mv2[j]*255);grId.data[j*4]=gv;grId.data[j*4+1]=gv;grId.data[j*4+2]=gv;grId.data[j*4+3]=255}
+      grCtx.putImageData(grId,0,0)
+      return grCv
+    }
   }
   return cv2
 }
@@ -1533,7 +1543,7 @@ function Se(props) {
 // Thumb size for the picker grid items
 var THUMB_PX = 48
 // Render a single thumbnail onto a canvas element — called once per item on open
-function renderThumb(canvas, nodeId, nodes, iC) {
+function renderThumb(canvas, nodeId, nodes, iC, asMask) {
   if(!canvas||!nodeId) return
   var ctx=canvas.getContext("2d"); ctx.clearRect(0,0,THUMB_PX,THUMB_PX)
   var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
@@ -1562,8 +1572,25 @@ function renderThumb(canvas, nodeId, nodes, iC) {
   }
   try {
     var result=compAny(nodeId,cmap,new Map(),iC||new Map(),THUMB_PX,THUMB_PX,new Set())
-    if(result) ctx.drawImage(result,0,0,THUMB_PX,THUMB_PX)
-    else { ctx.fillStyle="#0d0d22"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX); drawThumbLabel(ctx,"no preview",THUMB_PX) }
+    if(result){
+      if(asMask){
+        // Render as greyscale luminance — mask thumbnails always show as matte
+        var rId=result.getContext("2d").getImageData(0,0,THUMB_PX,THUMB_PX)
+        var gId=ctx.createImageData(THUMB_PX,THUMB_PX)
+        for(var ri=0;ri<THUMB_PX*THUMB_PX;ri++){
+          var rp=ri*4
+          // If canvas is already greyscale (promoted mask tap), just use R channel
+          // Otherwise compute luminance
+          var lv=Math.round(.299*rId.data[rp]+.587*rId.data[rp+1]+.114*rId.data[rp+2])
+          // Weight by alpha so transparent areas show dark
+          var la=Math.round(lv*(rId.data[rp+3]/255))
+          gId.data[rp]=la;gId.data[rp+1]=la;gId.data[rp+2]=la;gId.data[rp+3]=255
+        }
+        ctx.putImageData(gId,0,0)
+      } else {
+        ctx.drawImage(result,0,0,THUMB_PX,THUMB_PX)
+      }
+    } else { ctx.fillStyle="#0d0d22"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX); drawThumbLabel(ctx,"no preview",THUMB_PX) }
   } catch(_) { ctx.fillStyle="#0d0d22"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX) }
 }
 function drawThumbLabel(ctx, text, sz) {
@@ -1576,14 +1603,12 @@ function ThumbItem(props) {
   var cvRef=useRef(null)
   useEffect(function(){
     if(!cvRef.current||!props.iC) return
-    // Defer render to next idle period so opening the picker stays snappy.
-    // Index staggers thumbnails so they paint sequentially rather than all at once.
     var delay = (props.index||0) * 18
     var t = setTimeout(function(){
-      renderThumb(cvRef.current, props.nodeId, props.nodes, props.iC.current||props.iC)
+      renderThumb(cvRef.current, props.nodeId, props.nodes, props.iC.current||props.iC, props.asMask)
     }, delay)
     return function(){ clearTimeout(t) }
-  },[props.nodeId, props.index])
+  },[props.nodeId, props.index, props.asMask])
   return (
     <div onClick={props.onClick}
       style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
@@ -1606,6 +1631,7 @@ function ThumbItem(props) {
 }
 function NRef(props) {
   var mode = props.mode || "all"
+  var asMask = props.asMask || false  // render thumbnails as greyscale matte
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
   var anchorRef=useRef(null)
   var menuRef=useRef(null)
@@ -1766,7 +1792,7 @@ function NRef(props) {
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
             {creators.map(function(n,ci){
               return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
-                label={n.name} active={props.v===n.id} index={ci} onClick={function(){pick(n.id)}}/>
+                label={n.name} active={props.v===n.id} index={ci} asMask={asMask} onClick={function(){pick(n.id)}}/>
             })}
           </div>
         </div>
@@ -1780,7 +1806,7 @@ function NRef(props) {
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
             {comps.map(function(n,ci){
               return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
-                label={n.name} active={props.v===n.id} index={creators.length+ci} onClick={function(){pick(n.id)}}/>
+                label={n.name} active={props.v===n.id} index={creators.length+ci} asMask={asMask} onClick={function(){pick(n.id)}}/>
             })}
           </div>
         </div>
@@ -2401,7 +2427,71 @@ function MaskCard(props) {
           onChange={function(nw){props.onChange(Object.assign({},mk,{name:nw}))}}
           labelStyle={{fontSize:12,color:mk.enabled===false?"var(--mu)":"var(--lv)",
             fontFamily:"'IBM Plex Mono',monospace",fontWeight:500,padding:"2px 0"}}/>
-        {props.onPromote&&<button className="promote-btn" onClick={props.onPromote} title="Promote: capture mask state here as a reusable tap point">↗ tap</button>}
+        {props.onPromote&&(function(){
+          var taps=(props.nodes||[]).filter(function(pn){
+            return pn.type==="promoted"&&pn.tapPath&&pn.tapPath.afterId===mk.id
+          })
+          var isTapped=taps.length>0
+          var mTapSt=useState(false); var mTapPop=mTapSt[0], setMTapPop=mTapSt[1]
+          var mTapRef=useRef(null), mMenuRef=useRef(null)
+          var mTapPos=usePopoverPosition(mTapRef,mTapPop,"above")
+          useEffect(function(){
+            if(!mTapPop) return
+            function h(e){
+              if(mTapRef.current&&mTapRef.current.contains(e.target))return
+              if(mMenuRef.current&&mMenuRef.current.contains(e.target))return
+              setMTapPop(false)
+            }
+            document.addEventListener("mousedown",h)
+            return function(){document.removeEventListener("mousedown",h)}
+          },[mTapPop])
+          return (
+            <div style={{position:"relative",display:"inline-flex"}}>
+              <button ref={mTapRef}
+                className={"promote-btn"+(isTapped?" tapped":"")}
+                onClick={function(){isTapped?setMTapPop(!mTapPop):props.onPromote()}}
+                title={isTapped?"Tapped — click to see references":"Promote mask tap point"}>
+                {isTapped?"● tapped":"↗ tap"}
+              </button>
+              {isTapped&&!mTapPop&&<span style={{position:"absolute",bottom:-2,right:-2,width:6,height:6,borderRadius:"50%",background:"var(--ac)"}}/>}
+              {mTapPop&&mTapPos&&createPortal(
+                <div ref={mMenuRef} style={Object.assign({},mTapPos,{
+                  position:"fixed",zIndex:9100,background:"var(--pn)",
+                  border:"1px solid var(--bd)",borderRadius:10,
+                  boxShadow:"0 -6px 24px rgba(0,0,0,.7)",minWidth:180,padding:"8px 0"})}>
+                  <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",
+                    padding:"2px 12px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>Promoted taps</div>
+                  {taps.map(function(tap){
+                    var refs=(props.nodes||[]).filter(function(rn){
+                      return rn.id!==tap.id&&JSON.stringify(rn).indexOf(tap.id)>=0
+                    })
+                    return (
+                      <div key={tap.id}>
+                        <div onClick={function(){setMTapPop(false);props.onNavigate&&props.onNavigate(tap.id)}}
+                          style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",cursor:"pointer",
+                            color:"var(--ac)",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}
+                          className="drop-item">
+                          ◈ {tap.name}
+                        </div>
+                        {refs.map(function(ref){
+                          return (
+                            <div key={ref.id} onClick={function(){setMTapPop(false);props.onNavigate&&props.onNavigate(ref.id)}}
+                              style={{display:"flex",alignItems:"center",gap:8,padding:"4px 14px 4px 28px",
+                                cursor:"pointer",color:"var(--di)",fontSize:10}}
+                              className="drop-item">
+                              ↳ {ref.name||ref.type}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>,
+                document.body
+              )}
+            </div>
+          )
+        })()}
         <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,
           background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",
           color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
@@ -2418,7 +2508,7 @@ function MaskCard(props) {
             </div>
           )}
           <NRef l="source" v={mk.refId} nodes={props.nodes} selfId={props.selfId}
-            iC={props.iC} mode="source"
+            iC={props.iC} mode="source" asMask={true}
             siblingEffects={props.siblingEffects} ownerNodeId={props.ownerNodeId}
             fn={function(v){props.onChange(Object.assign({},mk,{refId:v}))}}/>
           <Se l="channel" v={mk.channel}
@@ -2715,7 +2805,80 @@ function EfxCard(props) {
           </div>,
           document.body
         )}
-        {props.onPromote&&<button className="promote-btn" onClick={function(e){e.stopPropagation();props.onPromote()}} title="Promote: capture pipeline state here as a reusable tap point">↗ tap</button>}
+        {props.onPromote&&(function(){
+          // Find any promoted nodes that tap this exact effect
+          var taps=(props.nodes||[]).filter(function(pn){
+            return pn.type==="promoted"&&pn.tapPath&&pn.tapPath.afterId===efx.id
+          })
+          var isTapped=taps.length>0
+          var tapBtnSt=useState(false); var tapPop=tapBtnSt[0], setTapPop=tapBtnSt[1]
+          var tapAnchorRef=useRef(null)
+          var tapMenuRef=useRef(null)
+          useEffect(function(){
+            if(!tapPop) return
+            function h(e){
+              if(tapAnchorRef.current&&tapAnchorRef.current.contains(e.target))return
+              if(tapMenuRef.current&&tapMenuRef.current.contains(e.target))return
+              setTapPop(false)
+            }
+            document.addEventListener("mousedown",h)
+            return function(){document.removeEventListener("mousedown",h)}
+          },[tapPop])
+          var tapPos=usePopoverPosition(tapAnchorRef,tapPop,"above")
+          return (
+            <div style={{position:"relative",display:"inline-flex"}}>
+              <button ref={tapAnchorRef}
+                className={"promote-btn"+(isTapped?" tapped":"")}
+                onClick={function(e){
+                  e.stopPropagation()
+                  if(isTapped) setTapPop(!tapPop)
+                  else props.onPromote()
+                }}
+                title={isTapped?"Tapped — click to see references":"Promote: capture pipeline state here"}>
+                {isTapped?"● tapped":"↗ tap"}
+              </button>
+              {isTapped&&!tapPop&&<span style={{position:"absolute",bottom:-2,right:-2,width:6,height:6,borderRadius:"50%",background:"var(--ac)"}}/>}
+              {tapPop&&tapPos&&createPortal(
+                <div ref={tapMenuRef} style={Object.assign({},tapPos,{
+                  position:"fixed",zIndex:9100,background:"var(--pn)",
+                  border:"1px solid var(--bd)",borderRadius:10,
+                  boxShadow:"0 -6px 24px rgba(0,0,0,.7)",minWidth:180,padding:"8px 0"})}>
+                  <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",
+                    padding:"2px 12px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>Promoted taps</div>
+                  {taps.map(function(tap){
+                    // Find nodes that reference this tap as a source
+                    var refs=(props.nodes||[]).filter(function(rn){
+                      if(rn.id===tap.id) return false
+                      var str=JSON.stringify(rn)
+                      return str.indexOf(tap.id)>=0
+                    })
+                    return (
+                      <div key={tap.id}>
+                        <div onClick={function(){setTapPop(false);props.onNavigate&&props.onNavigate(tap.id)}}
+                          style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",cursor:"pointer",
+                            color:"var(--ac)",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}
+                          className="drop-item">
+                          ◈ {tap.name}
+                        </div>
+                        {refs.length>0&&refs.map(function(ref){
+                          return (
+                            <div key={ref.id} onClick={function(){setTapPop(false);props.onNavigate&&props.onNavigate(ref.id)}}
+                              style={{display:"flex",alignItems:"center",gap:8,padding:"4px 14px 4px 28px",
+                                cursor:"pointer",color:"var(--di)",fontSize:10}}
+                              className="drop-item">
+                              ↳ {ref.name||ref.type}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>,
+                document.body
+              )}
+            </div>
+          )
+        })()}
         <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
           {armed?"confirm x":"x"}
         </button>
@@ -2895,6 +3058,7 @@ function EfxStack(props) {
         )
         return (
           <EfxCard key={efx.id} efx={efx} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+            onNavigate={props.onNavigate}
             siblingEffects={props.stack.filter(function(s){return s.id!==efx.id&&s.maskStack&&s.maskStack.length>0})}
             ownerNodeId={props.selfId}
             isFirst={i===0} isLast={i===props.stack.length-1}
