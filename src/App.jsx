@@ -3875,7 +3875,7 @@ function NodeItem(props) {
           style={{color:col,fontSize:20}} title={tip}>{icon}</button>
       })()}
       <button onClick={handleDel} style={{minHeight:32,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?56:32}}>
-        {armed?"sure?":"×"}
+        {armed?"confirm ×":"×"}
       </button>
     </div>
   )
@@ -4170,7 +4170,7 @@ function LayerCard(props) {
             border:delArmed?"1px solid var(--dng)":"none",
             borderRadius:6,minWidth:delArmed?56:32,
             cursor:props.totalLayers<=1?"default":"pointer",transition:"all .15s"}}>
-          {props.totalLayers<=1?"×":delArmed?"sure?":"×"}
+          {props.totalLayers<=1?"×":delArmed?"confirm ×":"×"}
         </button>
       </div>
       {!isCollapsed && <TabBar tabs={lyrTabs} active={layerTab} onChange={setLayerTab}/>}
