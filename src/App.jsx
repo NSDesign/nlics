@@ -4141,9 +4141,9 @@ function LayerCard(props) {
       <div className="card-hdr" style={{background:"rgba(224,104,40,.06)",
         borderBottom:isCollapsed?"none":"1px solid var(--bd)",
         borderRadius:isCollapsed?8:"8px 8px 0 0"}}>
-        <button className={"bp-chevron"+(isCollapsed?"":" open")}
+        <span className={"bp-chevron"+(isCollapsed?"":" open")}
           onClick={props.onToggleCollapse}
-          style={{color:"#e06828",flexShrink:0}}>›</button>
+          style={{color:"#e06828",flexShrink:0}}>›</span>
         <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
           <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
           <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
