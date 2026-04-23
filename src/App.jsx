@@ -3580,7 +3580,11 @@ function BlenderProps(props) {
       <div className="card" style={{marginBottom:10}}>
         <div className="card-hdr">
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--di)"}}>Blend</span>
-
+          <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}}
+            className={node.switched?"ac":"ghost"}
+            style={{fontSize:10,padding:"0 10px",minHeight:28}}>
+            {node.switched?"B over A":"A over B"}
+          </button>
         </div>
         {body}
       </div>
