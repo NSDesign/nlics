@@ -4136,6 +4136,7 @@ function LayerCard(props) {
     {id:"layer",   label:"Layer"},
   ]
   var isCollapsed = props.collapsed || false
+  var delArmedSt=useState(false); var delArmed=delArmedSt[0], setDelArmed=delArmedSt[1]
   return (
     <div className="card" style={{marginBottom:8}}>
       <div className="card-hdr" style={{background:"rgba(224,104,40,.06)",
@@ -4143,7 +4144,7 @@ function LayerCard(props) {
         borderRadius:isCollapsed?8:"8px 8px 0 0"}}>
         <span className={"bp-chevron"+(isCollapsed?"":" open")}
           onClick={props.onToggleCollapse}
-          style={{color:"#e06828",flexShrink:0}}>›</span>
+          style={{color:"#e06828",flexShrink:0,fontSize:18}}>›</span>
         <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
           <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
           <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
@@ -4155,11 +4156,21 @@ function LayerCard(props) {
         <InlineRename value={lyr.name} fallback={"layer "+(props.totalLayers-li)}
           onChange={function(nw){props.onChange({name:nw})}}
           labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
-        <button onClick={props.onDel} disabled={props.totalLayers<=1}
-          style={{minHeight:32,padding:"0 10px",fontSize:14,
-            color:props.totalLayers<=1?"var(--bd)":"var(--mu)",background:"none",border:"none",
-            cursor:props.totalLayers<=1?"default":"pointer"}}>
-          ×
+        <button
+          onClick={function(){
+            if(props.totalLayers<=1) return
+            if(delArmed){props.onDel();setDelArmed(false)}
+            else setDelArmed(true)
+          }}
+          onBlur={function(){setDelArmed(false)}}
+          disabled={props.totalLayers<=1}
+          style={{minHeight:32,padding:"0 8px",fontSize:delArmed?9:14,
+            color:props.totalLayers<=1?"var(--bd)":delArmed?"var(--dng)":"var(--mu)",
+            background:delArmed?"rgba(224,48,96,.12)":"none",
+            border:delArmed?"1px solid var(--dng)":"none",
+            borderRadius:6,minWidth:delArmed?56:32,
+            cursor:props.totalLayers<=1?"default":"pointer",transition:"all .15s"}}>
+          {props.totalLayers<=1?"×":delArmed?"sure?":"×"}
         </button>
       </div>
       {!isCollapsed && <TabBar tabs={lyrTabs} active={layerTab} onChange={setLayerTab}/>}
