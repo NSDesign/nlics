@@ -1522,12 +1522,31 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
           em2=compMasks(mn.outMask,cmap,new Map(),iC,w,h,new Set()); emLabel="output mask"
         }
         // Empty outMask = no restriction — fall through to input/layer mattes
-        if(!em2&&mn.inputA&&mn.inputA.refId){
+        if(!em2&&(mn.type==="blender")&&(mn.inputA||mn.inputB)){
+          // For blender: compute combined matte same as engine (both inputs combined)
+          var dispCvA=mn.inputA&&mn.inputA.refId?compAny(mn.inputA.refId,cmap,new Map(),iC,w,h,new Set()):null
+          var dispCvB=mn.inputB&&mn.inputB.refId?compAny(mn.inputB.refId,cmap,new Map(),iC,w,h,new Set()):null
+          var dispMA=dispCvA?slotEffectiveMatte(mn.inputA,dispCvA,cmap,new Map(),iC,w,h,new Set()):null
+          var dispMB=dispCvB?slotEffectiveMatte(mn.inputB,dispCvB,cmap,new Map(),iC,w,h,new Set()):null
+          if(dispMA||dispMB){
+            var dispMf=(mn.maskAmount==null?100:mn.maskAmount)/100
+            var dispMblend=ALPHA_BM[mn.maskMode||"add"]||ALPHA_BM["add"]
+            var dispBotM=mn.switched?dispMA:dispMB, dispTopM=mn.switched?dispMB:dispMA
+            em2=new Float32Array(w*h)
+            for(var dmi=0;dmi<w*h;dmi++){
+              var dbv=dispBotM?dispBotM[dmi]:(mn.switched?(mn.inputA.refId?1:0):(mn.inputB.refId?1:0))
+              var dtv=dispTopM?dispTopM[dmi]:(mn.switched?(mn.inputB.refId?1:0):(mn.inputA.refId?1:0))
+              em2[dmi]=dispMblend(dbv,dtv,dispMf)
+            }
+            emLabel="blender combined matte"
+          }
+        }
+        if(!em2&&mn.inputA&&mn.inputA.refId&&mn.type!=="blender"){
           var iaS=compAny(mn.inputA.refId,cmap,new Map(),iC,w,h,new Set())
           em2=effectiveMatte(iaS,mn.inputA.maskStack,cmap,new Map(),iC,w,h,new Set())
           emLabel="input A effective matte"
         }
-        if(!em2&&mn.inputB&&mn.inputB.refId){
+        if(!em2&&mn.inputB&&mn.inputB.refId&&mn.type!=="blender"){
           var ibS=compAny(mn.inputB.refId,cmap,new Map(),iC,w,h,new Set())
           em2=effectiveMatte(ibS,mn.inputB.maskStack,cmap,new Map(),iC,w,h,new Set())
           emLabel="input B effective matte"
@@ -3538,13 +3557,7 @@ function BlenderProps(props) {
       <div className="card-body">
         <Se l="mode" v={node.mode} opts={BMODES} fn={function(v){onChange(Object.assign({},node,{mode:v}))}}/>
         <Sl l="amount" v={node.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){onChange(Object.assign({},node,{amount:v}))}}/>
-        <PR l="order">
-          <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}}
-            className={node.switched?"ac":""}
-            style={{minHeight:36,padding:"0 14px"}}>
-            {node.switched?"B over A":"A over B"}
-          </button>
-        </PR>
+
         {COMMUTATIVE_MODES[node.mode] && (
           <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",lineHeight:1.5,fontStyle:"italic"}}>
             order has no effect in {node.mode} mode
@@ -3636,21 +3649,29 @@ function BlenderProps(props) {
   // Accordion wrapper: header is the section title with chevron, body flows
   // directly beneath as part of the same rounded box (no duplicated title,
   // no double borders). Matches card radius exactly.
-  function Acc(sKey, label, accent, headerBg, renderFn){
+  // extra: optional JSX rendered right-aligned in the header (e.g. A over B toggle)
+  // Uses a wrapper div so the extra element can stopPropagation without nesting buttons
+  function Acc(sKey, label, accent, headerBg, renderFn, extra){
     var isCollapsed = !!collapsed[sKey]
     return (
       <div key={sKey} className="card" style={{marginBottom:10}}>
-        <button onClick={function(){toggleCollapse(sKey)}}
-          style={{width:"100%",display:"flex",alignItems:"center",gap:8,
-            padding:"0 10px",background:headerBg||"var(--sf)",border:"none",
-            borderBottom:isCollapsed?"none":"1px solid var(--bd)",
-            color:accent||"var(--tx)",cursor:"pointer",minHeight:"var(--tap)",
-            fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
-            textTransform:"uppercase",letterSpacing:".1em",textAlign:"left",
-            borderRadius:isCollapsed?8:"8px 8px 0 0"}}>
-          <span className={"bp-chevron"+(isCollapsed?"":" open")} style={{color:accent||"var(--mu)"}}>›</span>
-          <span style={{flex:1}}>{label}</span>
-        </button>
+        <div style={{display:"flex",alignItems:"center",
+          background:headerBg||"var(--sf)",
+          borderBottom:isCollapsed?"none":"1px solid var(--bd)",
+          borderRadius:isCollapsed?8:"8px 8px 0 0",minHeight:"var(--tap)"}}>
+          <button onClick={function(){toggleCollapse(sKey)}}
+            style={{flex:1,display:"flex",alignItems:"center",gap:8,
+              padding:"0 10px",background:"none",border:"none",
+              color:accent||"var(--tx)",cursor:"pointer",minHeight:"var(--tap)",
+              fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+              textTransform:"uppercase",letterSpacing:".1em",textAlign:"left"}}>
+            <span className={"bp-chevron"+(isCollapsed?"":" open")} style={{color:accent||"var(--mu)"}}>›</span>
+            <span style={{flex:1}}>{label}</span>
+          </button>
+          {extra&&(<div onClick={function(e){e.stopPropagation()}} style={{paddingRight:8,flexShrink:0}}>
+            {extra}
+          </div>)}
+        </div>
         {!isCollapsed && renderFn(true)}
       </div>
     )
@@ -3702,7 +3723,12 @@ function BlenderProps(props) {
       ) : (
         <div style={{padding:"0 10px 10px"}}>
           {Acc("inputA","Input A","var(--ac)","rgba(36,204,168,.06)",renderInputA)}
-          {Acc("blend", "Blend",  "var(--di)",null,                  renderBlend)}
+          {Acc("blend", "Blend",  "var(--di)",null, renderBlend,
+            <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}}
+              className={node.switched?"ac":"ghost"}
+              style={{fontSize:10,padding:"0 10px",minHeight:28}}>
+              {node.switched?"B over A":"A over B"}
+            </button>)}
           {Acc("inputB","Input B","var(--co)","rgba(208,72,152,.06)",renderInputB)}
           {Acc("output","Output", "var(--lv)","rgba(176,96,240,.06)",renderOutput)}
         </div>
