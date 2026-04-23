@@ -4138,32 +4138,30 @@ function LayerCard(props) {
   var isCollapsed = props.collapsed || false
   return (
     <div className="card" style={{marginBottom:8}}>
-      <button onClick={props.onToggleCollapse}
-        style={{width:"100%",display:"flex",alignItems:"center",gap:8,
-          padding:"0 4px 0 8px",background:"rgba(224,104,40,.06)",border:"none",
-          borderBottom:isCollapsed?"none":"1px solid var(--bd)",
-          cursor:"pointer",minHeight:"var(--tap)",
-          borderRadius:isCollapsed?8:"8px 8px 0 0"}}>
-        <span className={"bp-chevron"+(isCollapsed?"":" open")} style={{color:"#e06828",fontSize:10}}>›</span>
+      <div className="card-hdr" style={{background:"rgba(224,104,40,.06)",
+        borderBottom:isCollapsed?"none":"1px solid var(--bd)",
+        borderRadius:isCollapsed?8:"8px 8px 0 0"}}>
+        <button className={"bp-chevron"+(isCollapsed?"":" open")}
+          onClick={props.onToggleCollapse}
+          style={{color:"#e06828",flexShrink:0}}>›</button>
         <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
-          <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
-          <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
+          <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
+          <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
         </div>
-        <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onChange({enabled:lyr.enabled===false})}}
+        <button className="icon-btn sm" onClick={function(){props.onChange({enabled:lyr.enabled===false})}}
           style={{color:lyr.enabled===false?"var(--mu)":"#e06828",fontSize:18}}>
           {lyr.enabled===false?"○":"●"}
         </button>
         <InlineRename value={lyr.name} fallback={"layer "+(props.totalLayers-li)}
           onChange={function(nw){props.onChange({name:nw})}}
-          labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}
-          onClick={function(e){e.stopPropagation()}}/>
-        <button onClick={function(e){e.stopPropagation();props.onDel()}} disabled={props.totalLayers<=1}
+          labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
+        <button onClick={props.onDel} disabled={props.totalLayers<=1}
           style={{minHeight:32,padding:"0 10px",fontSize:14,
             color:props.totalLayers<=1?"var(--bd)":"var(--mu)",background:"none",border:"none",
             cursor:props.totalLayers<=1?"default":"pointer"}}>
           ×
         </button>
-      </button>
+      </div>
       {!isCollapsed && <TabBar tabs={lyrTabs} active={layerTab} onChange={setLayerTab}/>}
       {!isCollapsed && layerTab==="source" && (
         <div className="card-body">
