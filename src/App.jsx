@@ -1708,7 +1708,7 @@ function ThumbItem(props) {
 }
 function NRef(props) {
   var mode = props.mode || "all"
-  var asMask = props.asMask || false  // render thumbnails as greyscale matte
+  var asMaskSt=useState(props.asMask||false); var asMask=asMaskSt[0], setAsMask=asMaskSt[1]
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
   var anchorRef=useRef(null)
   var menuRef=useRef(null)
@@ -1744,6 +1744,27 @@ function NRef(props) {
 
   var menuContent = (
     <div style={{padding:8,maxHeight:"50vh",overflowY:"auto",userSelect:"none"}}>
+      {/* Source/Matte toggle — only shown in mask context */}
+      {props.asMask&&(
+        <div style={{display:"flex",gap:4,marginBottom:8}}>
+          <button onClick={function(){setAsMask(false)}}
+            style={{flex:1,padding:"4px 0",fontSize:9,borderRadius:4,cursor:"pointer",
+              fontFamily:"'IBM Plex Mono',monospace",
+              background:!asMask?"var(--ac)":"var(--el)",
+              color:!asMask?"var(--bg)":"var(--mu)",
+              border:"1px solid "+(!asMask?"var(--ac)":"var(--bd)")}}>
+            ◉ source
+          </button>
+          <button onClick={function(){setAsMask(true)}}
+            style={{flex:1,padding:"4px 0",fontSize:9,borderRadius:4,cursor:"pointer",
+              fontFamily:"'IBM Plex Mono',monospace",
+              background:asMask?"var(--lv)":"var(--el)",
+              color:asMask?"#fff":"var(--mu)",
+              border:"1px solid "+(asMask?"var(--lv)":"var(--bd)")}}>
+            ◈ matte
+          </button>
+        </div>
+      )}
       {/* None option */}
       <div onClick={function(){pick(null)}}
         style={{padding:"6px 10px",fontSize:11,color:"var(--mu)",cursor:"pointer",
