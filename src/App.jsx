@@ -3381,7 +3381,7 @@ function BlenderProps(props) {
   // Layout mode state — MUST be declared here, not below the conditional early
   // return. Previous placement caused React error #300 (changing hook count)
   // whenever the drill-down was entered/exited.
-  var BP_LAYOUT_KEY = "nlics:bp-layout:v1"
+  var BP_LAYOUT_KEY = "nlics:bp-layout:v2"  // v2: default accordion, resets v1 tabs pref
   var layoutSt=useState(function(){
     try{var v=localStorage.getItem(BP_LAYOUT_KEY);return v||"accordion"}catch(e){return "accordion"}
   })
@@ -4135,35 +4135,43 @@ function LayerCard(props) {
     {id:"masks",   label:"Mask"+(nMask>0?" ("+nMask+")":""), color:"lv"},
     {id:"layer",   label:"Layer"},
   ]
+  var isCollapsed = props.collapsed || false
   return (
     <div className="card" style={{marginBottom:8}}>
-      <div className="card-hdr" style={{background:"rgba(224,104,40,.06)"}}>
+      <button onClick={props.onToggleCollapse}
+        style={{width:"100%",display:"flex",alignItems:"center",gap:8,
+          padding:"0 4px 0 8px",background:"rgba(224,104,40,.06)",border:"none",
+          borderBottom:isCollapsed?"none":"1px solid var(--bd)",
+          cursor:"pointer",minHeight:"var(--tap)",
+          borderRadius:isCollapsed?8:"8px 8px 0 0"}}>
+        <span className={"bp-chevron"+(isCollapsed?"":" open")} style={{color:"#e06828",fontSize:10}}>›</span>
         <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
-          <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
-          <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
+          <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
+          <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
         </div>
-        <button className="icon-btn sm" onClick={function(){props.onChange({enabled:lyr.enabled===false})}}
+        <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onChange({enabled:lyr.enabled===false})}}
           style={{color:lyr.enabled===false?"var(--mu)":"#e06828",fontSize:18}}>
           {lyr.enabled===false?"○":"●"}
         </button>
         <InlineRename value={lyr.name} fallback={"layer "+(props.totalLayers-li)}
           onChange={function(nw){props.onChange({name:nw})}}
-          labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
-        <button onClick={props.onDel} disabled={props.totalLayers<=1}
+          labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}
+          onClick={function(e){e.stopPropagation()}}/>
+        <button onClick={function(e){e.stopPropagation();props.onDel()}} disabled={props.totalLayers<=1}
           style={{minHeight:32,padding:"0 10px",fontSize:14,
             color:props.totalLayers<=1?"var(--bd)":"var(--mu)",background:"none",border:"none",
             cursor:props.totalLayers<=1?"default":"pointer"}}>
           ×
         </button>
-      </div>
-      <TabBar tabs={lyrTabs} active={layerTab} onChange={setLayerTab}/>
-      {layerTab==="source" && (
+      </button>
+      {!isCollapsed && <TabBar tabs={lyrTabs} active={layerTab} onChange={setLayerTab}/>}
+      {!isCollapsed && layerTab==="source" && (
         <div className="card-body">
           <NRef l="source" v={lyr.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC} mode="source"
             fn={function(v){props.onChange({refId:v})}}/>
         </div>
       )}
-      {layerTab==="effects" && (
+      {!isCollapsed && layerTab==="effects" && (
         <div style={{padding:10}}>
           <EfxStack
             key={(lyr.effectStack||[]).map(function(e){return e.id}).join(",")}
@@ -4175,7 +4183,7 @@ function LayerCard(props) {
             onChange={function(es){props.onChange({effectStack:es})}}/>
         </div>
       )}
-      {layerTab==="masks" && (
+      {!isCollapsed && layerTab==="masks" && (
         <div style={{padding:10}}>
           <MaskStackPanel
             key={(lyr.maskStack||[]).map(function(m){return m.id}).join(",")}
@@ -4187,7 +4195,7 @@ function LayerCard(props) {
             onChange={function(ms){props.onChange({maskStack:ms})}}/>
         </div>
       )}
-      {layerTab==="layer" && (
+      {!isCollapsed && layerTab==="layer" && (
           <div>
             <TabBar tabs={[{id:"pixels",label:"Pixels"},{id:"masks",label:"Masks"}]} active={lyBT} onChange={setLyBT}/>
             {lyBT==="pixels"?(
@@ -4312,9 +4320,17 @@ function LayerCompProps(props) {
   }
 
   var layers = node.layers || []
+  // Accordion collapse state per layer — lives in node._ui.layerCollapsed
+  var lcpUi = node._ui || {}
+  function setLcpUi(patch){ onChange(Object.assign({},node,{_ui:Object.assign({},lcpUi,patch)})) }
+  var layerCollapsed = lcpUi.layerCollapsed || {}
+  function toggleLayerCollapse(lid){
+    var nc=Object.assign({},layerCollapsed); nc[lid]=!nc[lid]
+    setLcpUi({layerCollapsed:nc})
+  }
   function updLayer(idx, patch){
     var nl=layers.map(function(l,i){return i===idx?Object.assign({},l,patch):l})
-    onChange(Object.assign({},node,{layers:nl}))
+    onChange(Object.assign({},node,{layers:nl,_ui:lcpUi}))
   }
   function addLayer(){
     onChange(Object.assign({},node,{layers:[mkLayer()].concat(layers)}))
@@ -4347,6 +4363,8 @@ function LayerCompProps(props) {
             <LayerCard key={lyr.id} lyr={lyr} li={li}
               isFirst={li===0} isLast={li===layers.length-1}
               totalLayers={layers.length}
+              collapsed={!!layerCollapsed[lyr.id]}
+              onToggleCollapse={function(){toggleLayerCollapse(lyr.id)}}
               nodes={nodes} selfId={node.id} iC={props.iC}
               navPush={navPush} onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
