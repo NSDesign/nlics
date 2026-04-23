@@ -4400,7 +4400,8 @@ function StackProps(props) {
   // Drill-down for mask → effect editing (path-based, no stale closures)
   if(navStack.length>0){
     var top=navStack[navStack.length-1]
-    var drillMask=resolvePath(node,top.slotKey,top.steps)
+    var topStepsS=(top.parentSteps||[]).concat(top.kind?[{kind:top.kind,id:top.id}]:top.steps||[])
+    var drillMask=resolvePath(node,top.slotKey,topStepsS)
     if(!drillMask){
       setTimeout(function(){setNavStack([])},0)
       return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target no longer exists — returning…</div>
@@ -4431,7 +4432,7 @@ function StackProps(props) {
             key={(drillMask.effectStack||[]).map(function(e){return e.id}).join(",")}
             stack={drillMask.effectStack||[]} nodes={nodes} selfId={node.id}
             navPush={navPush}
-            basePath={{slotKey:top.slotKey,steps:top.steps}}
+            basePath={{slotKey:top.slotKey,steps:topStepsS}}
             onNavigate={props.onNavigate}
             onPromote={wrappedPromote}
             onChange={function(es){
