@@ -999,6 +999,11 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
           var gpi=gi*4,gv
           if(ch==="R")gv=rawId[gpi];else if(ch==="G")gv=rawId[gpi+1];else if(ch==="B")gv=rawId[gpi+2]
           else gv=Math.round(.299*rawId[gpi]+.587*rawId[gpi+1]+.114*rawId[gpi+2])
+          // Multiply by source alpha — isolates shape from any composited background.
+          // Without this, a composited source (blender, layer comp) leaks background
+          // colour into the mask value for pixels where the foreground is transparent.
+          var ga=rawId[gpi+3]/255
+          gv=Math.round(gv*ga)
           gid.data[gpi]=gv;gid.data[gpi+1]=gv;gid.data[gpi+2]=gv;gid.data[gpi+3]=255
         }
         gctx.putImageData(gid,0,0)
@@ -1200,6 +1205,7 @@ function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
           var gpu=giu*4,gvu
           if(chU==="R")gvu=rawU[gpu];else if(chU==="G")gvu=rawU[gpu+1];else if(chU==="B")gvu=rawU[gpu+2]
           else gvu=Math.round(.299*rawU[gpu]+.587*rawU[gpu+1]+.114*rawU[gpu+2])
+          var gaU=rawU[gpu+3]/255; gvu=Math.round(gvu*gaU)
           gidU.data[gpu]=gvu;gidU.data[gpu+1]=gvu;gidU.data[gpu+2]=gvu;gidU.data[gpu+3]=255
         }
         gctxU.putImageData(gidU,0,0)
@@ -3370,7 +3376,7 @@ function BlenderProps(props) {
                 onNavigate={props.onNavigate}
                 onPromote={wrappedPromote}
                 onChange={function(es){
-                  var newNode=updatePath(node,top.slotKey,top.steps,function(mask){
+                  var newNode=updatePath(node,top.slotKey,topSteps,function(mask){
                     return Object.assign({},mask,{effectStack:es})
                   })
                   onChange(newNode)
