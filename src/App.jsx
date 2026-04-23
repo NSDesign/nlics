@@ -1622,7 +1622,7 @@ function Se(props) {
 // Thumb size for the picker grid items
 var THUMB_PX = 48
 // Render a single thumbnail onto a canvas element — called once per item on open
-function renderThumb(canvas, nodeId, nodes, iC, asMask) {
+function renderThumb(canvas, nodeId, nodes, iC, asMask, greySource) {
   if(!canvas||!nodeId) return
   var ctx=canvas.getContext("2d"); ctx.clearRect(0,0,THUMB_PX,THUMB_PX)
   var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
@@ -1653,18 +1653,29 @@ function renderThumb(canvas, nodeId, nodes, iC, asMask) {
     var result=compAny(nodeId,cmap,new Map(),iC||new Map(),THUMB_PX,THUMB_PX,new Set())
     if(result){
       if(asMask){
-        // Show alpha channel directly as the matte boundary.
-        // Alpha IS the matte — using luminance would show the fill colour
-        // (e.g. a blue circle would appear dark grey instead of white).
+        // ◈ matte — alpha channel as greyscale (mask boundary)
         var rId=result.getContext("2d").getImageData(0,0,THUMB_PX,THUMB_PX)
         var gId=ctx.createImageData(THUMB_PX,THUMB_PX)
         for(var ri=0;ri<THUMB_PX*THUMB_PX;ri++){
           var rp=ri*4
-          var av=rId.data[rp+3]  // alpha channel = matte value
+          var av=rId.data[rp+3]
           gId.data[rp]=av;gId.data[rp+1]=av;gId.data[rp+2]=av;gId.data[rp+3]=255
         }
         ctx.putImageData(gId,0,0)
+      } else if(greySource){
+        // ◉ source in mask context — luminance greyscale for identification
+        // (masks are always read as greyscale so colour is misleading)
+        var rsId=result.getContext("2d").getImageData(0,0,THUMB_PX,THUMB_PX)
+        var gsId=ctx.createImageData(THUMB_PX,THUMB_PX)
+        for(var gsi=0;gsi<THUMB_PX*THUMB_PX;gsi++){
+          var gsp=gsi*4
+          var lv=Math.round(.299*rsId.data[gsp]+.587*rsId.data[gsp+1]+.114*rsId.data[gsp+2])
+          var la=Math.round(lv*(rsId.data[gsp+3]/255))
+          gsId.data[gsp]=la;gsId.data[gsp+1]=la;gsId.data[gsp+2]=la;gsId.data[gsp+3]=255
+        }
+        ctx.putImageData(gsId,0,0)
       } else {
+        // Full RGBA colour — normal source picker context
         ctx.drawImage(result,0,0,THUMB_PX,THUMB_PX)
       }
     } else { ctx.fillStyle="#0d0d22"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX); drawThumbLabel(ctx,"no preview",THUMB_PX) }
@@ -1682,10 +1693,10 @@ function ThumbItem(props) {
     if(!cvRef.current||!props.iC) return
     var delay = (props.index||0) * 18
     var t = setTimeout(function(){
-      renderThumb(cvRef.current, props.nodeId, props.nodes, props.iC.current||props.iC, props.asMask)
+      renderThumb(cvRef.current, props.nodeId, props.nodes, props.iC.current||props.iC, props.asMask, props.greySource)
     }, delay)
     return function(){ clearTimeout(t) }
-  },[props.nodeId, props.index, props.asMask])
+  },[props.nodeId, props.index, props.asMask, props.greySource])
   return (
     <div onClick={props.onClick}
       style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
@@ -1890,7 +1901,8 @@ function NRef(props) {
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
             {creators.map(function(n,ci){
               return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
-                label={n.name} active={props.v===n.id} index={ci} asMask={asMask} onClick={function(){pick(n.id)}}/>
+                label={n.name} active={props.v===n.id} index={ci} asMask={asMask}
+                greySource={!asMask&&!!props.asMask} onClick={function(){pick(n.id)}}/>
             })}
           </div>
         </div>
@@ -1904,7 +1916,8 @@ function NRef(props) {
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
             {comps.map(function(n,ci){
               return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
-                label={n.name} active={props.v===n.id} index={creators.length+ci} asMask={asMask} onClick={function(){pick(n.id)}}/>
+                label={n.name} active={props.v===n.id} index={creators.length+ci} asMask={asMask}
+                greySource={!asMask&&!!props.asMask} onClick={function(){pick(n.id)}}/>
             })}
           </div>
         </div>
