@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, Component } from "react"
 import { createPortal } from "react-dom"
+import noUiSlider from "nouislider"
+import "nouislider/dist/nouislider.css"
 
 
 /* ─── CSS ─────────────────────────────────────────────────── */
@@ -73,6 +75,14 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .pval{color:var(--ac);font-size:10.5px;min-width:38px;text-align:right;font-family:'IBM Plex Mono',monospace;flex-shrink:0;}
 .breadcrumb{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;overflow-x:auto;white-space:nowrap;}
 .bc-item{font-size:10px;color:var(--di);font-family:'IBM Plex Mono',monospace;cursor:pointer;text-decoration:underline;text-underline-offset:3px;white-space:nowrap;flex-shrink:0;}
+.blend-if-slider .noUi-target{background:var(--el);border:1px solid var(--bd);border-radius:4px;box-shadow:none;height:6px;}
+.blend-if-slider .noUi-connects{border-radius:4px;}
+.blend-if-slider .noUi-connect:nth-child(1){background:rgba(176,96,240,.4);}
+.blend-if-slider .noUi-connect:nth-child(2){background:rgba(255,255,255,.18);}
+.blend-if-slider .noUi-connect:nth-child(3){background:rgba(176,96,240,.4);}
+.blend-if-slider .noUi-handle{width:12px;height:18px;right:-6px;top:-7px;border-radius:3px;background:var(--tx);border:1px solid var(--bd);box-shadow:none;cursor:ew-resize;}
+.blend-if-slider .noUi-handle::before,.blend-if-slider .noUi-handle::after{display:none;}
+.blend-if-slider .noUi-handle:focus{outline:none;border-color:var(--lv);}
 .bc-item.cur{color:var(--tx);}
 .mask-card{display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg);border:1px solid rgba(176,96,240,.22);border-radius:8px;margin-bottom:8px;}
 .shdr{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--pn);border-bottom:1px solid var(--bd);user-select:none;flex-shrink:0;min-height:var(--tap);}
@@ -166,6 +176,90 @@ function StyleInjector() {
 /* ─── CONSTANTS ─────────────────────────────────────────── */
 var BMODES = ["normal","add","subtract","multiply","screen","overlay","soft-light","hard-light","difference","exclusion","darken","lighten","color-burn","color-dodge","divide"]
 var MASK_BMODES = ["add","normal","multiply","subtract","screen"]  // matte blend modes
+
+// Blend If per-pixel multiplier: luminosity 0-255, stops 0-255
+function blendIfMult(lum, s0, s1, h1, h0) {
+  if(s1 <= s0) s1 = s0  // collapsed = hard edge
+  if(h0 <= h1) h0 = h1
+  var sMult = lum <= s0 ? 0 : lum >= s1 ? 1 : (lum - s0) / (s1 - s0)
+  var hMult = lum >= h0 ? 0 : lum <= h1 ? 1 : (h0 - lum) / (h0 - h1)
+  return Math.min(sMult, hMult)
+}
+
+// BlendIfSlider: four-handle noUiSlider with gradient visualiser
+function BlendIfSlider(props) {
+  // props: label, values {s0,s1,h1,h0}, onChange({s0,s1,h1,h0})
+  var sliderRef = useRef(null)
+  var canvasRef = useRef(null)
+  var sliderInst = useRef(null)
+
+  function drawGradient(s0, s1, h1, h0) {
+    var cv = canvasRef.current; if(!cv) return
+    var ctx = cv.getContext("2d"); var W = cv.width
+    var id = ctx.createImageData(W, 1)
+    for(var x = 0; x < W; x++) {
+      var lum = x / (W - 1) * 255
+      var m = blendIfMult(lum, s0, s1, h1, h0)
+      var v = Math.round(m * 255)
+      id.data[x*4]=v; id.data[x*4+1]=v; id.data[x*4+2]=v; id.data[x*4+3]=255
+    }
+    ctx.putImageData(id, 0, 0)
+    // Scale to full height
+    ctx.drawImage(cv, 0, 0, W, 1, 0, 0, W, cv.height)
+  }
+
+  useEffect(function() {
+    if(!sliderRef.current) return
+    var v = props.values
+    var inst = noUiSlider.create(sliderRef.current, {
+      start: [v.s0, v.s1, v.h1, v.h0],
+      range: { min: 0, max: 255 },
+      step: 1,
+      margin: 0,
+      connect: [false, true, false, true, false],
+      behaviour: "drag"
+    })
+    sliderInst.current = inst
+    drawGradient(v.s0, v.s1, v.h1, v.h0)
+    inst.on("update", function(vals) {
+      var s0=Math.round(+vals[0]), s1=Math.round(+vals[1])
+      var h1=Math.round(+vals[2]), h0=Math.round(+vals[3])
+      drawGradient(s0, s1, h1, h0)
+    })
+    inst.on("change", function(vals) {
+      props.onChange({
+        s0:Math.round(+vals[0]), s1:Math.round(+vals[1]),
+        h1:Math.round(+vals[2]), h0:Math.round(+vals[3])
+      })
+    })
+    return function() { try { inst.destroy() } catch(e) {} }
+  }, [])
+
+  // Sync external changes
+  useEffect(function() {
+    if(!sliderInst.current) return
+    var v = props.values
+    sliderInst.current.set([v.s0, v.s1, v.h1, v.h0], false)
+    drawGradient(v.s0, v.s1, v.h1, v.h0)
+  }, [props.values.s0, props.values.s1, props.values.h1, props.values.h0])
+
+  var v = props.values
+  return (
+    <div style={{marginBottom:10}}>
+      <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".08em",
+        fontFamily:"'IBM Plex Mono',monospace",marginBottom:4}}>{props.label}</div>
+      <canvas ref={canvasRef} width={256} height={12}
+        style={{width:"100%",height:12,display:"block",borderRadius:2,marginBottom:4,
+          imageRendering:"pixelated"}}/>
+      <div className="blend-if-slider" ref={sliderRef} style={{margin:"0 6px 4px"}}/>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"var(--mu)",
+        fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
+        <span>{v.s0}{v.s1>v.s0?"·"+v.s1:""}</span>
+        <span>{v.h1<255||v.h0<255?(v.h1<v.h0?v.h1+"·":"")+v.h0:""}</span>
+      </div>
+    </div>
+  )
+}
 // Blend modes whose RGB output is identical regardless of input order.
 // With uniform alpha in both inputs, swapping them produces the same pixels.
 // Used to show a hint when the user toggles 'A over B' with such a mode.
@@ -273,7 +367,10 @@ function mkEfx(t) {
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[] } }
 function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"normal", amount:100, switched:false, maskMode:"add", maskAmount:100, outEfx:[], outMask:[] } }
-function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled:true, effectStack:[], maskStack:[], blendMode:"normal", opacity:100, maskMode:"add", maskAmount:100 } }
+function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled:true,
+  effectStack:[], maskStack:[], blendMode:"normal", opacity:100, maskMode:"add", maskAmount:100,
+  fillOpacity:100, blendChannels:{R:true,G:true,B:true,A:true},
+  blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} } }
 function mkLayerComp() { return { id:uid(), name:"Layer Comp "+(_uid-100), type:"layers", section:2, enabled:true, layers:[mkLayer(),mkLayer()], outEfx:[], outMask:[] } }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
 
@@ -1394,6 +1491,13 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       var lBase=compAny(lyr.refId,cmap,cache,iC,w,h,lVis)
       if(!lBase) continue
       var lCv=clCv(lBase,w,h),lCtx=lCv.getContext("2d")
+      // Fill opacity: applied before effectStack (doesn't affect effects like glows)
+      if(lyr.fillOpacity!=null&&lyr.fillOpacity<100){
+        var fid=lCtx.getImageData(0,0,w,h)
+        var ff=lyr.fillOpacity/100
+        for(var fi=0;fi<w*h;fi++) fid.data[fi*4+3]=Math.round(fid.data[fi*4+3]*ff)
+        lCtx.putImageData(fid,0,0)
+      }
       if(lyr.effectStack&&lyr.effectStack.length>0) applyEfxStk(lCtx,lyr.effectStack,cmap,cache,iC,w,h,lVis)
       // Compute layer effective matte (source_alpha × maskStack)
       var lyrMatte=slotEffectiveMatte(
@@ -1406,7 +1510,43 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       } else {
         if(lyr.maskStack&&lyr.maskStack.length>0) maskToAlpha(lCtx,lyr.maskStack,cmap,cache,iC,w,h,lVis)
       }
+      // Capture pre-blend dest pixels for blendChannels restore + underlying blendIf
+      var preBlend=null
+      var bi=lyr.blendIf
+      var hasBlendIf=bi&&(bi.thisLayer||bi.underlyingLayer)
+      var hasChRestrict=lyr.blendChannels&&(!lyr.blendChannels.R||!lyr.blendChannels.G||!lyr.blendChannels.B||!lyr.blendChannels.A)
+      if(hasChRestrict||hasBlendIf) preBlend=lctx.getImageData(0,0,w,h)
+
       blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h)
+
+      // Blend If + channel restrict — per-pixel fixup after blend
+      if(hasChRestrict||hasBlendIf){
+        var postBlend=lctx.getImageData(0,0,w,h)
+        var lyrData=lCv.getContext("2d").getImageData(0,0,w,h).data
+        var ch=lyr.blendChannels||{R:true,G:true,B:true,A:true}
+        var biThis=bi&&bi.thisLayer||{s0:0,s1:0,h1:255,h0:255}
+        var biUnder=bi&&bi.underlyingLayer||{s0:0,s1:0,h1:255,h0:255}
+        for(var bii=0;bii<w*h;bii++){
+          var bp=bii*4
+          // BlendIf: compute multiplier for this layer pixel and underlying pixel
+          var biMult=1
+          if(hasBlendIf){
+            var thisLum=Math.round(.299*lyrData[bp]+.587*lyrData[bp+1]+.114*lyrData[bp+2])
+            var underLum=preBlend?Math.round(.299*preBlend.data[bp]+.587*preBlend.data[bp+1]+.114*preBlend.data[bp+2]):128
+            var tMult=blendIfMult(thisLum,biThis.s0,biThis.s1,biThis.h1,biThis.h0)
+            var uMult=blendIfMult(underLum,biUnder.s0,biUnder.s1,biUnder.h1,biUnder.h0)
+            biMult=tMult*uMult
+          }
+          // Apply channel restrictions: restore disabled channels from pre-blend
+          if(!ch.R) postBlend.data[bp]  =preBlend?preBlend.data[bp]  :postBlend.data[bp]
+          if(!ch.G) postBlend.data[bp+1]=preBlend?preBlend.data[bp+1]:postBlend.data[bp+1]
+          if(!ch.B) postBlend.data[bp+2]=preBlend?preBlend.data[bp+2]:postBlend.data[bp+2]
+          // Apply blendIf multiplier to alpha
+          if(hasBlendIf) postBlend.data[bp+3]=Math.round(postBlend.data[bp+3]*biMult)
+          if(!ch.A) postBlend.data[bp+3]=preBlend?preBlend.data[bp+3]:postBlend.data[bp+3]
+        }
+        lctx.putImageData(postBlend,0,0)
+      }
       // Accumulate matte using layer's maskMode
       var lmf=(lyr.maskAmount==null?100:lyr.maskAmount)/100
       var lmblend=ALPHA_BM[lyr.maskMode||"add"]||ALPHA_BM["add"]
@@ -4314,6 +4454,49 @@ function LayerCard(props) {
             )}
           </div>
       )}
+      {!isCollapsed && layerTab==="blend" && (
+        <div className="card-body">
+          {/* Channel selection */}
+          <PR l="channels">
+            <div style={{display:"flex",gap:4}}>
+              {["R","G","B","A"].map(function(ch){
+                var on=(lyr.blendChannels||{R:true,G:true,B:true,A:true})[ch]!==false
+                var cols={R:"#e05050",G:"#50d050",B:"#5080f0",A:"var(--mu)"}
+                return <button key={ch}
+                  onClick={function(){
+                    var bc=Object.assign({R:true,G:true,B:true,A:true},lyr.blendChannels)
+                    bc[ch]=!on; props.onChange({blendChannels:bc})
+                  }}
+                  style={{padding:"4px 10px",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                    cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
+                    background:on?"rgba(255,255,255,.06)":"none",
+                    color:on?cols[ch]:"var(--mu)"}}>
+                  {ch}
+                </button>
+              })}
+            </div>
+          </PR>
+          {/* Fill opacity */}
+          <Sl l="fill" v={lyr.fillOpacity==null?100:lyr.fillOpacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){props.onChange({fillOpacity:v})}}/>
+          {/* Blend If sliders */}
+          <div style={{padding:"8px 0 2px",borderTop:"1px solid var(--bd)",marginTop:6}}>
+            <BlendIfSlider label="This Layer"
+              values={(lyr.blendIf&&lyr.blendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){
+                var bi=Object.assign({},lyr.blendIf||{},{thisLayer:v})
+                props.onChange({blendIf:bi})
+              }}/>
+            <BlendIfSlider label="Underlying Layer"
+              values={(lyr.blendIf&&lyr.blendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){
+                var bi=Object.assign({},lyr.blendIf||{},{underlyingLayer:v})
+                props.onChange({blendIf:bi})
+              }}/>
+          </div>
+        </div>
+      )}}
     </div>
   )
 }
