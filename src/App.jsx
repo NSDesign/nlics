@@ -81,7 +81,7 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .blend-if-slider .noUi-connect:nth-child(1){background:var(--sl);}
 .blend-if-slider .noUi-connect:nth-child(2){background:var(--di);opacity:.35;}
 .blend-if-slider .noUi-connect:nth-child(3){background:var(--sl);}
-.blend-if-slider .noUi-handle{width:10px;height:22px;right:-5px;top:-8px;border-radius:2px;background:var(--bd);border:1px solid var(--di);box-shadow:none;cursor:ew-resize;transition:background .1s,border-color .1s;}
+.blend-if-slider .noUi-handle{width:14px;height:28px;right:-7px;top:-11px;border-radius:3px;background:var(--el);border:1px solid var(--di);box-shadow:none;cursor:ew-resize;transition:background .1s,border-color .1s;touch-action:none;}
 .blend-if-slider .noUi-handle:hover{background:var(--sl);border-color:var(--tx);}
 .blend-if-slider .noUi-handle::before,.blend-if-slider .noUi-handle::after{display:none;}
 .blend-if-slider .noUi-handle:focus{outline:none;border-color:var(--lv);background:var(--sl);}
@@ -190,48 +190,51 @@ function blendIfMult(lum, s0, s1, h1, h0) {
   return Math.min(sMult, hMult)
 }
 
-// BlendIfSlider: four-handle noUiSlider with gradient visualiser
+// BlendIfSlider: four-handle noUiSlider with gradient visualiser + mobile split toggles
+// handles: [s0=shadowOuter, s1=shadowInner, h1=highlightInner, h0=highlightOuter]
+// s0===s1 = hard shadow edge; s0<s1 = soft (feather zone)
+// h0===h1 = hard highlight edge; h0>h1 = soft
+var FEATHER_DEFAULT = 20  // units applied when splitting a hard edge
 function BlendIfSlider(props) {
-  // props: label, values {s0,s1,h1,h0}, onChange({s0,s1,h1,h0})
   var sliderRef = useRef(null)
   var canvasRef = useRef(null)
   var sliderInst = useRef(null)
+  var onChangeCb = useRef(props.onChange)
+  onChangeCb.current = props.onChange  // always latest without re-creating slider
 
   function drawGradient(s0, s1, h1, h0) {
     var cv = canvasRef.current; if(!cv) return
-    var ctx = cv.getContext("2d"); var W = cv.width
-    var id = ctx.createImageData(W, 1)
-    for(var x = 0; x < W; x++) {
-      var lum = x / (W - 1) * 255
+    var ctx = cv.getContext("2d"), W = cv.width, H = cv.height
+    var id = ctx.createImageData(W, H)
+    for(var y=0;y<H;y++) for(var x=0;x<W;x++) {
+      var lum = x / (W-1) * 255
       var m = blendIfMult(lum, s0, s1, h1, h0)
-      var v = Math.round(m * 255)
-      id.data[x*4]=v; id.data[x*4+1]=v; id.data[x*4+2]=v; id.data[x*4+3]=255
+      var v2 = Math.round(m * 255)
+      var idx=(y*W+x)*4
+      id.data[idx]=v2; id.data[idx+1]=v2; id.data[idx+2]=v2; id.data[idx+3]=255
     }
     ctx.putImageData(id, 0, 0)
-    // Scale to full height
-    ctx.drawImage(cv, 0, 0, W, 1, 0, 0, W, cv.height)
   }
 
   useEffect(function() {
     if(!sliderRef.current) return
     var v = props.values
+    // Destroy any previous instance (React StrictMode double-init guard)
+    if(sliderInst.current) { try{sliderInst.current.destroy()}catch(e){} }
     var inst = noUiSlider.create(sliderRef.current, {
       start: [v.s0, v.s1, v.h1, v.h0],
       range: { min: 0, max: 255 },
       step: 1,
-      margin: 0,
       connect: [false, true, false, true, false],
-      behaviour: "drag"
+      behaviour: "tap-drag"   // tap snaps nearest handle, drag moves handle
     })
     sliderInst.current = inst
     drawGradient(v.s0, v.s1, v.h1, v.h0)
     inst.on("update", function(vals) {
-      var s0=Math.round(+vals[0]), s1=Math.round(+vals[1])
-      var h1=Math.round(+vals[2]), h0=Math.round(+vals[3])
-      drawGradient(s0, s1, h1, h0)
+      drawGradient(Math.round(+vals[0]),Math.round(+vals[1]),Math.round(+vals[2]),Math.round(+vals[3]))
     })
     inst.on("change", function(vals) {
-      props.onChange({
+      onChangeCb.current({
         s0:Math.round(+vals[0]), s1:Math.round(+vals[1]),
         h1:Math.round(+vals[2]), h0:Math.round(+vals[3])
       })
@@ -239,7 +242,7 @@ function BlendIfSlider(props) {
     return function() { try { inst.destroy() } catch(e) {} }
   }, [])
 
-  // Sync external changes
+  // Sync when external props change (e.g. switching layers)
   useEffect(function() {
     if(!sliderInst.current) return
     var v = props.values
@@ -248,18 +251,59 @@ function BlendIfSlider(props) {
   }, [props.values.s0, props.values.s1, props.values.h1, props.values.h0])
 
   var v = props.values
+  var shadowSoft = v.s1 > v.s0   // true = feather zone exists on shadow side
+  var highlightSoft = v.h0 > v.h1 // true = feather zone exists on highlight side
+
+  function toggleShadow() {
+    var nv = shadowSoft
+      ? {s0:v.s1, s1:v.s1, h1:v.h1, h0:v.h0}        // collapse → hard edge
+      : {s0:Math.max(0,v.s1-FEATHER_DEFAULT), s1:v.s1, h1:v.h1, h0:v.h0} // split
+    props.onChange(nv)
+  }
+  function toggleHighlight() {
+    var nv = highlightSoft
+      ? {s0:v.s0, s1:v.s1, h1:v.h1, h0:v.h1}          // collapse → hard edge
+      : {s0:v.s0, s1:v.s1, h1:v.h1, h0:Math.min(255,v.h1+FEATHER_DEFAULT)} // split
+    props.onChange(nv)
+  }
+
+  var btnBase = {fontSize:9,fontFamily:"'IBM Plex Mono',monospace",border:"1px solid var(--bd)",
+    borderRadius:3,padding:"1px 6px",cursor:"pointer",lineHeight:1.4,background:"var(--el)",
+    color:"var(--mu)",minWidth:32,textAlign:"center"}
+
   return (
-    <div style={{marginBottom:10}}>
-      <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".08em",
-        fontFamily:"'IBM Plex Mono',monospace",marginBottom:4}}>{props.label}</div>
-      <canvas ref={canvasRef} width={256} height={12}
-        style={{width:"100%",height:12,display:"block",borderRadius:2,marginBottom:4,
-          imageRendering:"pixelated"}}/>
-      <div className="blend-if-slider" ref={sliderRef} style={{margin:"0 6px 4px"}}/>
+    <div style={{marginBottom:12}}>
+      {/* Label row with split toggle buttons at each end */}
+      <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
+        <button onClick={toggleShadow}
+          style={Object.assign({},btnBase,shadowSoft?{color:"var(--lv)",borderColor:"var(--lv)"}:{})}>
+          {shadowSoft?"≈|":"|"}
+        </button>
+        <span style={{flex:1,fontSize:9,color:"var(--mu)",textTransform:"uppercase",
+          letterSpacing:".08em",fontFamily:"'IBM Plex Mono',monospace",textAlign:"center"}}>
+          {props.label}
+        </span>
+        <button onClick={toggleHighlight}
+          style={Object.assign({},btnBase,highlightSoft?{color:"var(--lv)",borderColor:"var(--lv)"}:{})}>
+          {highlightSoft?"|≈":"|"}
+        </button>
+      </div>
+      {/* Gradient visualiser */}
+      <canvas ref={canvasRef} width={256} height={10}
+        style={{width:"100%",height:10,display:"block",borderRadius:2,marginBottom:6}}/>
+      {/* noUiSlider — touch-action:none prevents scroll stealing touch events */}
+      <div style={{touchAction:"none",padding:"0 6px"}}>
+        <div className="blend-if-slider" ref={sliderRef}/>
+      </div>
+      {/* Value readout */}
       <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"var(--mu)",
-        fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
-        <span>{v.s0}{v.s1>v.s0?"·"+v.s1:""}</span>
-        <span>{v.h1<255||v.h0<255?(v.h1<v.h0?v.h1+"·":"")+v.h0:""}</span>
+        fontFamily:"'IBM Plex Mono',monospace",marginTop:3,padding:"0 6px"}}>
+        <span style={{color:shadowSoft?"var(--lv)":"var(--mu)"}}>
+          {shadowSoft?v.s0+"–"+v.s1:v.s1}
+        </span>
+        <span style={{color:highlightSoft?"var(--lv)":"var(--mu)"}}>
+          {highlightSoft?v.h1+"–"+v.h0:v.h1}
+        </span>
       </div>
     </div>
   )
