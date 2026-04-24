@@ -2903,7 +2903,7 @@ function MaskCard(props) {
             <BlendIfSlider label="This Layer"
               values={((mk.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},mk,{blendIf:Object.assign({},mk.blendIf||{},{thisLayer:v})}))}}/>
-            <BlendIfSlider label="Underlying Layer"
+            <BlendIfSlider label="Underlying Layer" hidden={true}
               values={((mk.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},mk,{blendIf:Object.assign({},mk.blendIf||{},{underlyingLayer:v})}))}}/>
           </BlendIfAccordion>
@@ -3284,7 +3284,7 @@ function EfxCard(props) {
             <BlendIfSlider label="This Layer"
               values={((efx.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},efx,{blendIf:Object.assign({},efx.blendIf||{},{thisLayer:v})}))}}/>
-            <BlendIfSlider label="Underlying Layer"
+            <BlendIfSlider label="Underlying Layer" hidden={true}
               values={((efx.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},efx,{blendIf:Object.assign({},efx.blendIf||{},{underlyingLayer:v})}))}}/>
           </BlendIfAccordion>
