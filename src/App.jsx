@@ -175,11 +175,20 @@ var MASK_BMODES = ["add","normal","multiply","subtract","screen"]  // matte blen
 
 // Blend If per-pixel multiplier: luminosity 0-255, stops 0-255
 function blendIfMult(lum, s0, s1, h1, h0) {
-  if(s1 <= s0) s1 = s0  // collapsed = hard edge
+  if(s1 <= s0) s1 = s0
   if(h0 <= h1) h0 = h1
   var sMult = lum <= s0 ? 0 : lum >= s1 ? 1 : (lum - s0) / (s1 - s0)
   var hMult = lum >= h0 ? 0 : lum <= h1 ? 1 : (h0 - lum) / (h0 - h1)
   return Math.min(sMult, hMult)
+}
+// Returns true only when the stops actually restrict any pixels.
+// Default state (s0=s1=0, h1=h0=255) = no restriction = skip blendIf entirely.
+function blendIfActive(stops) {
+  return stops && (stops.s1 > 0 || stops.s0 > 0 || stops.h1 < 255 || stops.h0 < 255)
+}
+// Returns true if the blendIf object has any active restriction on either side
+function blendIfHasEffect(bi) {
+  return bi && (blendIfActive(bi.thisLayer) || blendIfActive(bi.underlyingLayer))
 }
 
 // BlendIfSlider — custom track with per-handle pointer events.
@@ -1087,12 +1096,12 @@ function applyBack(pre,post,mv,opacity,mode,blendChannels,blendIf) {
   var f=(opacity==null?100:opacity)/100
   var ch=blendChannels||null  // null = all channels
   var bi=blendIf||null
-  var biThis=bi&&bi.thisLayer
-  var biUnder=bi&&bi.underlyingLayer
+  var biThis=bi&&blendIfActive(bi.thisLayer)?bi.thisLayer:null
+  var biUnder=bi&&blendIfActive(bi.underlyingLayer)?bi.underlyingLayer:null
   for(var i=0;i<pre.length;i+=4){
     var pi=i/4
     var m=Math.min(1,Math.max(0,(mv?mv[pi]:1)*f))
-    // BlendIf: multiply m by luminosity gate
+    // BlendIf: only compute if stops actually restrict something
     if(biThis||biUnder){
       var postLum=Math.round(.299*post[i]+.587*post[i+1]+.114*post[i+2])
       var preLum =Math.round(.299*pre[i] +.587*pre[i+1] +.114*pre[i+2])
@@ -1362,7 +1371,7 @@ function blendCv(ctx,srcCv,mode,amount,w,h,maskMode,maskAmount,blendChannels,ble
   var ch=blendChannels||null
   var bi=blendIf||null
   var hasRestrict=ch&&(!ch.R||!ch.G||!ch.B||!ch.A)
-  var hasBi=bi&&(bi.thisLayer||bi.underlyingLayer)
+  var hasBi=blendIfHasEffect(bi)
   if(mode==="subtract"||mode==="divide"||hasRestrict||hasBi){
     var base=ctx.getImageData(0,0,w,h)
     var srcD=clCv(srcCv,w,h).getContext("2d").getImageData(0,0,w,h).data
@@ -1387,10 +1396,10 @@ function blendCv(ctx,srcCv,mode,amount,w,h,maskMode,maskAmount,blendChannels,ble
       // BlendIf gate
       var gate=1
       if(hasBi){
-        var srcLum=Math.round(.299*srcD[i]+.587*srcD[i+1]+.114*srcD[i+2])
-        var dstLum=Math.round(.299*B[i]+.587*B[i+1]+.114*B[i+2])
-        if(bi.thisLayer)  gate*=blendIfMult(srcLum,bi.thisLayer.s0,bi.thisLayer.s1,bi.thisLayer.h1,bi.thisLayer.h0)
-        if(bi.underlyingLayer) gate*=blendIfMult(dstLum,bi.underlyingLayer.s0,bi.underlyingLayer.s1,bi.underlyingLayer.h1,bi.underlyingLayer.h0)
+        var biThisA=blendIfActive(bi.thisLayer)?bi.thisLayer:null
+        var biUnderA=blendIfActive(bi.underlyingLayer)?bi.underlyingLayer:null
+        if(biThisA){var srcLum=Math.round(.299*srcD[i]+.587*srcD[i+1]+.114*srcD[i+2]);gate*=blendIfMult(srcLum,biThisA.s0,biThisA.s1,biThisA.h1,biThisA.h0)}
+        if(biUnderA){var dstLum=Math.round(.299*B[i]+.587*B[i+1]+.114*B[i+2]);gate*=blendIfMult(dstLum,biUnderA.s0,biUnderA.s1,biUnderA.h1,biUnderA.h0)}
       }
       var m=gate
       if(!ch||ch.R) B[i]  =Math.round(B[i]  *(1-m)+blended[0]*m)
@@ -1633,7 +1642,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       // Capture pre-blend dest pixels for blendChannels restore + underlying blendIf
       var preBlend=null
       var bi=lyr.blendIf
-      var hasBlendIf=bi&&(bi.thisLayer||bi.underlyingLayer)
+      var hasBlendIf=blendIfHasEffect(bi)
       var hasChRestrict=lyr.blendChannels&&(!lyr.blendChannels.R||!lyr.blendChannels.G||!lyr.blendChannels.B||!lyr.blendChannels.A)
       if(hasChRestrict||hasBlendIf) preBlend=lctx.getImageData(0,0,w,h)
 
