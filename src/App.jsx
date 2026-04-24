@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, Component } from "react"
 import { createPortal } from "react-dom"
-import noUiSlider from "nouislider"
-import "nouislider/dist/nouislider.css"
 
 
 /* ─── CSS ─────────────────────────────────────────────────── */
@@ -75,17 +73,11 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .pval{color:var(--ac);font-size:10.5px;min-width:38px;text-align:right;font-family:'IBM Plex Mono',monospace;flex-shrink:0;}
 .breadcrumb{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;overflow-x:auto;white-space:nowrap;}
 .bc-item{font-size:10px;color:var(--di);font-family:'IBM Plex Mono',monospace;cursor:pointer;text-decoration:underline;text-underline-offset:3px;white-space:nowrap;flex-shrink:0;}
-.blend-if-slider{padding:10px 0 4px;}
 .blend-if-slider .noUi-target{background:var(--bg);border:1px solid var(--bd);border-radius:3px;box-shadow:none;height:8px;}
-.blend-if-slider .noUi-connects{border-radius:2px;overflow:hidden;}
 .blend-if-slider .noUi-connect:nth-child(1){background:var(--sl);}
-.blend-if-slider .noUi-connect:nth-child(2){background:var(--di);opacity:.35;}
 .blend-if-slider .noUi-connect:nth-child(3){background:var(--sl);}
-.blend-if-slider .noUi-handle{width:14px;height:28px;right:-7px;top:-11px;border-radius:3px;background:var(--el);border:1px solid var(--di);box-shadow:none;cursor:ew-resize;transition:background .1s,border-color .1s;touch-action:none;}
 .blend-if-slider .noUi-handle:hover{background:var(--sl);border-color:var(--tx);}
-.blend-if-slider .noUi-handle::before,.blend-if-slider .noUi-handle::after{display:none;}
 .blend-if-slider .noUi-handle:focus{outline:none;border-color:var(--lv);background:var(--sl);}
-.blend-if-slider .noUi-handle:nth-child(3),.blend-if-slider .noUi-handle:nth-child(4){border-color:var(--lv);opacity:.7;}
 .blend-if-slider .noUi-handle:nth-child(3):hover,.blend-if-slider .noUi-handle:nth-child(4):hover{opacity:1;}
 .bc-item.cur{color:var(--tx);}
 .mask-card{display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg);border:1px solid rgba(176,96,240,.22);border-radius:8px;margin-bottom:8px;}
@@ -190,114 +182,132 @@ function blendIfMult(lum, s0, s1, h1, h0) {
   return Math.min(sMult, hMult)
 }
 
-// BlendIfSlider: four-handle noUiSlider with gradient visualiser + mobile split toggles
-// handles: [s0=shadowOuter, s1=shadowInner, h1=highlightInner, h0=highlightOuter]
-// s0===s1 = hard shadow edge; s0<s1 = soft (feather zone)
-// h0===h1 = hard highlight edge; h0>h1 = soft
-var FEATHER_DEFAULT = 20  // units applied when splitting a hard edge
+// BlendIfSlider — custom track with per-handle pointer events.
+// Outer handles (s0, h0) only exist/are interactive when soft mode is active.
+// This avoids the noUiSlider z-index bug where coincident handles overlap unpredictably.
+var FEATHER_DEFAULT = 20
 function BlendIfSlider(props) {
-  var sliderRef = useRef(null)
-  var canvasRef = useRef(null)
-  var sliderInst = useRef(null)
-  var onChangeCb = useRef(props.onChange)
-  onChangeCb.current = props.onChange  // always latest without re-creating slider
-
-  function drawGradient(s0, s1, h1, h0) {
-    var cv = canvasRef.current; if(!cv) return
-    var ctx = cv.getContext("2d"), W = cv.width, H = cv.height
-    var id = ctx.createImageData(W, H)
-    for(var y=0;y<H;y++) for(var x=0;x<W;x++) {
-      var lum = x / (W-1) * 255
-      var m = blendIfMult(lum, s0, s1, h1, h0)
-      var v2 = Math.round(m * 255)
-      var idx=(y*W+x)*4
-      id.data[idx]=v2; id.data[idx+1]=v2; id.data[idx+2]=v2; id.data[idx+3]=255
-    }
-    ctx.putImageData(id, 0, 0)
-  }
-
-  useEffect(function() {
-    if(!sliderRef.current) return
-    var v = props.values
-    // Destroy any previous instance (React StrictMode double-init guard)
-    if(sliderInst.current) { try{sliderInst.current.destroy()}catch(e){} }
-    var inst = noUiSlider.create(sliderRef.current, {
-      start: [v.s0, v.s1, v.h1, v.h0],
-      range: { min: 0, max: 255 },
-      step: 1,
-      connect: [false, true, false, true, false],
-      behaviour: "tap-drag"   // tap snaps nearest handle, drag moves handle
-    })
-    sliderInst.current = inst
-    drawGradient(v.s0, v.s1, v.h1, v.h0)
-    inst.on("update", function(vals) {
-      drawGradient(Math.round(+vals[0]),Math.round(+vals[1]),Math.round(+vals[2]),Math.round(+vals[3]))
-    })
-    inst.on("change", function(vals) {
-      onChangeCb.current({
-        s0:Math.round(+vals[0]), s1:Math.round(+vals[1]),
-        h1:Math.round(+vals[2]), h0:Math.round(+vals[3])
-      })
-    })
-    return function() { try { inst.destroy() } catch(e) {} }
-  }, [])
-
-  // Sync when external props change (e.g. switching layers)
-  useEffect(function() {
-    if(!sliderInst.current) return
-    var v = props.values
-    sliderInst.current.set([v.s0, v.s1, v.h1, v.h0], false)
-    drawGradient(v.s0, v.s1, v.h1, v.h0)
-  }, [props.values.s0, props.values.s1, props.values.h1, props.values.h0])
-
+  var trackRef = useRef(null)
+  var dragging = useRef(null)  // {handle:'s0'|'s1'|'h1'|'h0', startX, startVal}
   var v = props.values
-  var shadowSoft = v.s1 > v.s0   // true = feather zone exists on shadow side
-  var highlightSoft = v.h0 > v.h1 // true = feather zone exists on highlight side
+  var shadowSoft = v.s1 > v.s0
+  var highlightSoft = v.h0 > v.h1
+
+  function pct(val) { return (val/255)*100 + "%" }
 
   function toggleShadow() {
-    var nv = shadowSoft
-      ? {s0:v.s1, s1:v.s1, h1:v.h1, h0:v.h0}        // collapse → hard edge
-      : {s0:Math.max(0,v.s1-FEATHER_DEFAULT), s1:v.s1, h1:v.h1, h0:v.h0} // split
-    props.onChange(nv)
+    props.onChange(shadowSoft
+      ? {s0:v.s1, s1:v.s1, h1:v.h1, h0:v.h0}
+      : {s0:Math.max(0,v.s1-FEATHER_DEFAULT), s1:v.s1, h1:v.h1, h0:v.h0})
   }
   function toggleHighlight() {
-    var nv = highlightSoft
-      ? {s0:v.s0, s1:v.s1, h1:v.h1, h0:v.h1}          // collapse → hard edge
-      : {s0:v.s0, s1:v.s1, h1:v.h1, h0:Math.min(255,v.h1+FEATHER_DEFAULT)} // split
-    props.onChange(nv)
+    props.onChange(highlightSoft
+      ? {s0:v.s0, s1:v.s1, h1:v.h1, h0:v.h1}
+      : {s0:v.s0, s1:v.s1, h1:v.h1, h0:Math.min(255,v.h1+FEATHER_DEFAULT)})
   }
 
-  var btnBase = {fontSize:9,fontFamily:"'IBM Plex Mono',monospace",border:"1px solid var(--bd)",
-    borderRadius:3,padding:"1px 6px",cursor:"pointer",lineHeight:1.4,background:"var(--el)",
-    color:"var(--mu)",minWidth:32,textAlign:"center"}
+  function startDrag(handle, e) {
+    e.preventDefault(); e.stopPropagation()
+    var rect = trackRef.current.getBoundingClientRect()
+    var cx = e.touches ? e.touches[0].clientX : e.clientX
+    dragging.current = {handle:handle, rect:rect, vals:Object.assign({},v)}
+    function onMove(ev) {
+      var cx2 = ev.touches ? ev.touches[0].clientX : ev.clientX
+      var pct2 = Math.max(0, Math.min(1, (cx2 - dragging.current.rect.left) / dragging.current.rect.width))
+      var val = Math.round(pct2 * 255)
+      var nv = Object.assign({}, dragging.current.vals)
+      if(handle==="s0") nv.s0 = Math.min(nv.s1, val)
+      if(handle==="s1") nv.s1 = Math.max(nv.s0, Math.min(nv.h1, val))
+      if(handle==="h1") nv.h1 = Math.max(nv.s1, Math.min(nv.h0, val))
+      if(handle==="h0") nv.h0 = Math.max(nv.h1, val)
+      props.onChange(nv)
+    }
+    function onUp() {
+      dragging.current = null
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("mouseup", onUp)
+      window.removeEventListener("touchmove", onMove)
+      window.removeEventListener("touchend", onUp)
+    }
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+    window.addEventListener("touchmove", onMove, {passive:false})
+    window.addEventListener("touchend", onUp)
+  }
+
+  // Gradient strip colours
+  function gradStyle() {
+    var stops = []
+    for(var i=0;i<=255;i+=4){
+      var m=blendIfMult(i,v.s0,v.s1,v.h1,v.h0)
+      stops.push("rgba("+Math.round(m*255)+","+Math.round(m*255)+","+Math.round(m*255)+",1) "+((i/255)*100).toFixed(1)+"%")
+    }
+    return "linear-gradient(to right,"+stops.join(",")+")"
+  }
+
+  var handleBase = {position:"absolute",top:"50%",transform:"translate(-50%,-50%)",
+    width:22,height:22,borderRadius:"50%",cursor:"ew-resize",touchAction:"none",
+    zIndex:10,display:"flex",alignItems:"center",justifyContent:"center"}
+  var innerHandle = Object.assign({},handleBase,{background:"var(--ac)",
+    boxShadow:"0 2px 8px rgba(36,204,168,.35)",zIndex:12})
+  var outerHandle = Object.assign({},handleBase,{background:"var(--lv)",
+    boxShadow:"0 2px 6px rgba(176,96,240,.4)",width:18,height:18,zIndex:11})
+
+  var btnSq = {width:32,height:32,borderRadius:4,border:"1px solid var(--bd)",
+    background:"var(--el)",cursor:"pointer",display:"flex",alignItems:"center",
+    justifyContent:"center",fontSize:11,color:"var(--mu)",flexShrink:0,padding:0}
+  var btnActive = Object.assign({},btnSq,{borderColor:"var(--lv)",color:"var(--lv)",background:"rgba(176,96,240,.1)"})
 
   return (
-    <div style={{marginBottom:12}}>
-      {/* Label row with split toggle buttons at each end */}
-      <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
-        <button onClick={toggleShadow}
-          style={Object.assign({},btnBase,shadowSoft?{color:"var(--lv)",borderColor:"var(--lv)"}:{})}>
-          {shadowSoft?"≈|":"|"}
+    <div style={{marginBottom:14}}>
+      {/* Label + split buttons row */}
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+        <button onMouseDown={function(e){e.preventDefault()}} onClick={toggleShadow}
+          title={shadowSoft?"Collapse shadow feather":"Split shadow to soft edge"}
+          style={shadowSoft?btnActive:btnSq}>
+          <svg width="14" height="12" viewBox="0 0 14 12" fill="none">
+            <line x1="1" y1="1" x2="1" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <polyline points="4,3 9,6 4,9" fill="currentColor" stroke="none"/>
+          </svg>
         </button>
         <span style={{flex:1,fontSize:9,color:"var(--mu)",textTransform:"uppercase",
           letterSpacing:".08em",fontFamily:"'IBM Plex Mono',monospace",textAlign:"center"}}>
           {props.label}
         </span>
-        <button onClick={toggleHighlight}
-          style={Object.assign({},btnBase,highlightSoft?{color:"var(--lv)",borderColor:"var(--lv)"}:{})}>
-          {highlightSoft?"|≈":"|"}
+        <button onMouseDown={function(e){e.preventDefault()}} onClick={toggleHighlight}
+          title={highlightSoft?"Collapse highlight feather":"Split highlight to soft edge"}
+          style={highlightSoft?btnActive:btnSq}>
+          <svg width="14" height="12" viewBox="0 0 14 12" fill="none">
+            <line x1="13" y1="1" x2="13" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <polyline points="10,3 5,6 10,9" fill="currentColor" stroke="none"/>
+          </svg>
         </button>
       </div>
-      {/* Gradient visualiser */}
-      <canvas ref={canvasRef} width={256} height={10}
-        style={{width:"100%",height:10,display:"block",borderRadius:2,marginBottom:6}}/>
-      {/* noUiSlider — touch-action:none prevents scroll stealing touch events */}
-      <div style={{touchAction:"none",padding:"0 6px"}}>
-        <div className="blend-if-slider" ref={sliderRef}/>
+      {/* Track */}
+      <div ref={trackRef} style={{position:"relative",height:3,borderRadius:2,margin:"18px 11px 18px",
+        background:"var(--bd)"}}>
+        {/* Gradient overlay */}
+        <div style={{position:"absolute",inset:0,borderRadius:2,background:gradStyle()}}/>
+        {/* Shadow outer handle — only when soft */}
+        {shadowSoft&&<div style={Object.assign({},outerHandle,{left:pct(v.s0)})}
+          onMouseDown={function(e){startDrag("s0",e)}}
+          onTouchStart={function(e){startDrag("s0",e)}}/>}
+        {/* Highlight outer handle — only when soft */}
+        {highlightSoft&&<div style={Object.assign({},outerHandle,{left:pct(v.h0)})}
+          onMouseDown={function(e){startDrag("h0",e)}}
+          onTouchStart={function(e){startDrag("h0",e)}}/>}
+        {/* Shadow inner handle — always */}
+        <div style={Object.assign({},innerHandle,{left:pct(v.s1)})}
+          onMouseDown={function(e){startDrag("s1",e)}}
+          onTouchStart={function(e){startDrag("s1",e)}}/>
+        {/* Highlight inner handle — always */}
+        <div style={Object.assign({},innerHandle,{left:pct(v.h1)})}
+          onMouseDown={function(e){startDrag("h1",e)}}
+          onTouchStart={function(e){startDrag("h1",e)}}/>
       </div>
       {/* Value readout */}
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"var(--mu)",
-        fontFamily:"'IBM Plex Mono',monospace",marginTop:3,padding:"0 6px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,
+        fontFamily:"'IBM Plex Mono',monospace",padding:"0 0"}}>
         <span style={{color:shadowSoft?"var(--lv)":"var(--mu)"}}>
           {shadowSoft?v.s0+"–"+v.s1:v.s1}
         </span>
@@ -308,9 +318,6 @@ function BlendIfSlider(props) {
     </div>
   )
 }
-// Blend modes whose RGB output is identical regardless of input order.
-// With uniform alpha in both inputs, swapping them produces the same pixels.
-// Used to show a hint when the user toggles 'A over B' with such a mode.
 var COMMUTATIVE_MODES = {add:1,multiply:1,screen:1,difference:1,exclusion:1,darken:1,lighten:1}
 var EBMS   = ["normal","multiply","screen","overlay","add","subtract","darken","lighten"]
 var MBMS   = ["multiply","screen","add","subtract","normal"]
