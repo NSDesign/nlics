@@ -197,6 +197,7 @@ function blendIfHasEffect(bi) {
 var FEATHER_DEFAULT = 20
 function BlendIfSlider(props) {
   if(props.hidden) return null
+  var disabled = props.disabled || false
   var trackRef = useRef(null)
   var dragging = useRef(null)  // {handle:'s0'|'s1'|'h1'|'h0', startX, startVal}
   var v = props.values
@@ -277,7 +278,7 @@ function BlendIfSlider(props) {
   var btnActive = Object.assign({},btnSq,{borderColor:"var(--lv)",color:"var(--lv)",background:"rgba(176,96,240,.1)"})
 
   return (
-    <div style={{marginBottom:14}}>
+    <div style={{marginBottom:14,opacity:disabled?0.35:1,pointerEvents:disabled?"none":"auto"}}>
       {/* Label + split buttons row */}
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
         <button onMouseDown={function(e){e.preventDefault()}} onClick={toggleShadow}
@@ -353,7 +354,7 @@ function BlendIfAccordion(props) {
           padding:"8px 0",background:"none",border:"none",cursor:"pointer"}}>
         <span className={"bp-chevron"+(open?" open":"")} style={{fontSize:14,color:"var(--lv)"}}>›</span>
         <span style={{fontSize:9,textTransform:"uppercase",letterSpacing:".1em",
-          fontFamily:"'IBM Plex Mono',monospace",color:"var(--di)"}}>Luminosity Range</span>
+          fontFamily:"'IBM Plex Mono',monospace",color:"var(--di)"}}>Tonal Blending</span>
       </button>
       {open&&<div style={{paddingBottom:4}}>{props.children}</div>}
     </div>
@@ -2900,10 +2901,10 @@ function MaskCard(props) {
             fmt={function(v){return Math.round(v)+"%"}}
             fn={function(v){props.onChange(Object.assign({},mk,{opacity:v}))}}/>
 <BlendIfAccordion>
-            <BlendIfSlider label="This Layer"
+            <BlendIfSlider label="This"
               values={((mk.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},mk,{blendIf:Object.assign({},mk.blendIf||{},{thisLayer:v})}))}}/>
-            <BlendIfSlider label="Underlying Layer" hidden={true}
+            <BlendIfSlider label="Below" disabled={true}
               values={((mk.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},mk,{blendIf:Object.assign({},mk.blendIf||{},{underlyingLayer:v})}))}}/>
           </BlendIfAccordion>
@@ -3281,10 +3282,10 @@ function EfxCard(props) {
             </div>
           </PR>
 <BlendIfAccordion>
-            <BlendIfSlider label="This Layer"
+            <BlendIfSlider label="This"
               values={((efx.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},efx,{blendIf:Object.assign({},efx.blendIf||{},{thisLayer:v})}))}}/>
-            <BlendIfSlider label="Underlying Layer" hidden={true}
+            <BlendIfSlider label="Below" disabled={true}
               values={((efx.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},efx,{blendIf:Object.assign({},efx.blendIf||{},{underlyingLayer:v})}))}}/>
           </BlendIfAccordion>
@@ -3851,7 +3852,6 @@ function BlenderProps(props) {
             values={(node.blendIf&&node.blendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{thisLayer:v})}))}}/>
           <BlendIfSlider label={"Input B"+(node.switched?" (top)":"")}
-            hidden={!node.switched}
             values={(node.blendIf&&node.blendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{underlyingLayer:v})}))}}/>
         </BlendIfAccordion>
@@ -3869,7 +3869,6 @@ function BlenderProps(props) {
             values={(node.maskBlendIf&&node.maskBlendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{maskBlendIf:Object.assign({},node.maskBlendIf||{},{thisLayer:v})}))}}/>
           <BlendIfSlider label={"Input B"+(node.switched?" (top)":"")}
-            hidden={!node.switched}
             values={(node.maskBlendIf&&node.maskBlendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{maskBlendIf:Object.assign({},node.maskBlendIf||{},{underlyingLayer:v})}))}}/>
         </BlendIfAccordion>
@@ -4620,10 +4619,10 @@ function LayerCard(props) {
             </div>
           </PR>
 <BlendIfAccordion>
-            <BlendIfSlider label="This Layer"
+            <BlendIfSlider label="This"
               values={((lyr.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange({blendIf:Object.assign({},lyr.blendIf||{},{thisLayer:v})})}}/>
-            <BlendIfSlider label="Underlying Layer"
+            <BlendIfSlider label="Below"
               hidden={props.isLast}
               values={((lyr.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange({blendIf:Object.assign({},lyr.blendIf||{},{underlyingLayer:v})})}}/>
