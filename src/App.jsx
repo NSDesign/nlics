@@ -196,6 +196,7 @@ function blendIfHasEffect(bi) {
 // This avoids the noUiSlider z-index bug where coincident handles overlap unpredictably.
 var FEATHER_DEFAULT = 20
 function BlendIfSlider(props) {
+  if(props.hidden) return null
   var trackRef = useRef(null)
   var dragging = useRef(null)  // {handle:'s0'|'s1'|'h1'|'h0', startX, startVal}
   var v = props.values
@@ -352,7 +353,7 @@ function BlendIfAccordion(props) {
           padding:"8px 0",background:"none",border:"none",cursor:"pointer"}}>
         <span className={"bp-chevron"+(open?" open":"")} style={{fontSize:14,color:"var(--lv)"}}>›</span>
         <span style={{fontSize:9,textTransform:"uppercase",letterSpacing:".1em",
-          fontFamily:"'IBM Plex Mono',monospace",color:"var(--di)"}}>Blend If</span>
+          fontFamily:"'IBM Plex Mono',monospace",color:"var(--di)"}}>Luminosity Range</span>
       </button>
       {open&&<div style={{paddingBottom:4}}>{props.children}</div>}
     </div>
@@ -3850,6 +3851,7 @@ function BlenderProps(props) {
             values={(node.blendIf&&node.blendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{thisLayer:v})}))}}/>
           <BlendIfSlider label={"Input B"+(node.switched?" (top)":"")}
+            hidden={!node.switched}
             values={(node.blendIf&&node.blendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{underlyingLayer:v})}))}}/>
         </BlendIfAccordion>
@@ -3867,6 +3869,7 @@ function BlenderProps(props) {
             values={(node.maskBlendIf&&node.maskBlendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{maskBlendIf:Object.assign({},node.maskBlendIf||{},{thisLayer:v})}))}}/>
           <BlendIfSlider label={"Input B"+(node.switched?" (top)":"")}
+            hidden={!node.switched}
             values={(node.maskBlendIf&&node.maskBlendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{maskBlendIf:Object.assign({},node.maskBlendIf||{},{underlyingLayer:v})}))}}/>
         </BlendIfAccordion>
