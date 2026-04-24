@@ -998,15 +998,27 @@ function pxBl(mode,p,c) {
 // original alpha. Pixels at m=1 get the effect's alpha. Partial m blends both.
 // This means a masked blur only softens where the mask is bright; pixels outside
 // the mask keep their hard alpha edge. That is the correct isolated-effect behaviour.
-function applyBack(pre,post,mv,opacity,mode) {
+function applyBack(pre,post,mv,opacity,mode,blendChannels,blendIf) {
   var f=(opacity==null?100:opacity)/100
+  var ch=blendChannels||null  // null = all channels
+  var bi=blendIf||null
+  var biThis=bi&&bi.thisLayer
+  var biUnder=bi&&bi.underlyingLayer
   for(var i=0;i<pre.length;i+=4){
-    var m=Math.min(1,Math.max(0,(mv?mv[i/4]:1)*f))
+    var pi=i/4
+    var m=Math.min(1,Math.max(0,(mv?mv[pi]:1)*f))
+    // BlendIf: multiply m by luminosity gate
+    if(biThis||biUnder){
+      var postLum=Math.round(.299*post[i]+.587*post[i+1]+.114*post[i+2])
+      var preLum =Math.round(.299*pre[i] +.587*pre[i+1] +.114*pre[i+2])
+      if(biThis)  m*=blendIfMult(postLum,biThis.s0,biThis.s1,biThis.h1,biThis.h0)
+      if(biUnder) m*=blendIfMult(preLum, biUnder.s0,biUnder.s1,biUnder.h1,biUnder.h0)
+    }
     var res=pxBl(mode,[pre[i],pre[i+1],pre[i+2]],[post[i],post[i+1],post[i+2]])
-    pre[i]  =Math.round(pre[i]  *(1-m)+res[0]*m)
-    pre[i+1]=Math.round(pre[i+1]*(1-m)+res[1]*m)
-    pre[i+2]=Math.round(pre[i+2]*(1-m)+res[2]*m)
-    pre[i+3]=Math.round(pre[i+3]*(1-m)+post[i+3]*m)
+    if(!ch||ch.R) pre[i]  =Math.round(pre[i]  *(1-m)+res[0]*m)
+    if(!ch||ch.G) pre[i+1]=Math.round(pre[i+1]*(1-m)+res[1]*m)
+    if(!ch||ch.B) pre[i+2]=Math.round(pre[i+2]*(1-m)+res[2]*m)
+    if(!ch||ch.A) pre[i+3]=Math.round(pre[i+3]*(1-m)+post[i+3]*m)
   }
 }
 function compMasks(stack,cmap,cache,iC,w,h,vis) {
@@ -1162,7 +1174,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
         var postData = ctx.getImageData(0,0,w,h)
         var mv = compMasks(efx.maskStack, cmap, cache, iC, w, h, new Set(vis))
         // applyBack writes the blend into preSnap.data — put preSnap (not postData)
-        applyBack(preSnap.data, postData.data, mv, efx.opacity, efx.blendMode||"normal")
+        applyBack(preSnap.data, postData.data, mv, efx.opacity, efx.blendMode||"normal", efx.blendChannels, efx.blendIf)
         ctx.putImageData(preSnap, 0, 0)
       } else {
         // No mask — apply transform directly, respecting opacity
@@ -1171,7 +1183,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
         if (efx.opacity < 100) {
           var postT = ctx.getImageData(0,0,w,h)
           var blended = new Uint8ClampedArray(preT.data)
-          applyBack(blended, postT.data, null, efx.opacity, efx.blendMode||"normal")
+          applyBack(blended, postT.data, null, efx.opacity, efx.blendMode||"normal", efx.blendChannels, efx.blendIf)
           ctx.putImageData(new ImageData(blended,w,h), 0, 0)
         }
       }
@@ -1181,7 +1193,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
     var pre=ctx.getImageData(0,0,w,h), post=new Uint8ClampedArray(pre.data)
     pxFn(post,w,h,efx.type,efx.params)
     var mv=efx.maskStack&&efx.maskStack.length>0?compMasks(efx.maskStack,cmap,cache,iC,w,h,new Set(vis)):null
-    applyBack(pre.data,post,mv,efx.opacity,efx.blendMode||"normal")
+    applyBack(pre.data,post,mv,efx.opacity,efx.blendMode||"normal",efx.blendChannels,efx.blendIf)
     ctx.putImageData(pre,0,0)
   }
 }
@@ -1259,24 +1271,47 @@ var ALPHA_BM={
   "subtract":function(a,b,f){return Math.max(0,a-b*f)},
   "screen": function(a,b,f){return 1-(1-a)*(1-b*f)},
 }
-// Blend pixel colours only — matte/alpha is handled separately by the caller.
-// maskMode/maskAmount params kept for API compat but no longer used here.
-function blendCv(ctx,srcCv,mode,amount,w,h,maskMode,maskAmount) {
-  if(mode==="subtract"||mode==="divide"){
+// Blend pixel colours. blendChannels restricts which channels are updated.
+// blendIf gates the blend by luminosity (thisLayer=src, underlyingLayer=dest).
+function blendCv(ctx,srcCv,mode,amount,w,h,maskMode,maskAmount,blendChannels,blendIf) {
+  var ch=blendChannels||null
+  var bi=blendIf||null
+  var hasRestrict=ch&&(!ch.R||!ch.G||!ch.B||!ch.A)
+  var hasBi=bi&&(bi.thisLayer||bi.underlyingLayer)
+  if(mode==="subtract"||mode==="divide"||hasRestrict||hasBi){
     var base=ctx.getImageData(0,0,w,h)
     var srcD=clCv(srcCv,w,h).getContext("2d").getImageData(0,0,w,h).data
     var B=base.data,f=amount/100
+    var pre=hasRestrict||hasBi?new Uint8ClampedArray(B):null
     for(var i=0;i<B.length;i+=4){
+      var blended=[B[i],B[i+1],B[i+2]]
       if(mode==="subtract"){
-        B[i]=Math.max(0,B[i]-srcD[i]*f)
-        B[i+1]=Math.max(0,B[i+1]-srcD[i+1]*f)
-        B[i+2]=Math.max(0,B[i+2]-srcD[i+2]*f)
+        blended[0]=Math.max(0,B[i]-srcD[i]*f)
+        blended[1]=Math.max(0,B[i+1]-srcD[i+1]*f)
+        blended[2]=Math.max(0,B[i+2]-srcD[i+2]*f)
+      } else if(mode==="divide"){
+        blended[0]=srcD[i]>0?Math.min(255,B[i]/(srcD[i]/255)*f+B[i]*(1-f)):B[i]
+        blended[1]=srcD[i+1]>0?Math.min(255,B[i+1]/(srcD[i+1]/255)*f+B[i+1]*(1-f)):B[i+1]
+        blended[2]=srcD[i+2]>0?Math.min(255,B[i+2]/(srcD[i+2]/255)*f+B[i+2]*(1-f)):B[i+2]
       } else {
-        B[i]=srcD[i]>0?Math.min(255,B[i]/(srcD[i]/255)*f+B[i]*(1-f)):B[i]
-        B[i+1]=srcD[i+1]>0?Math.min(255,B[i+1]/(srcD[i+1]/255)*f+B[i+1]*(1-f)):B[i+1]
-        B[i+2]=srcD[i+2]>0?Math.min(255,B[i+2]/(srcD[i+2]/255)*f+B[i+2]*(1-f)):B[i+2]
+        var r=pxBl(mode,[B[i],B[i+1],B[i+2]],[srcD[i],srcD[i+1],srcD[i+2]])
+        blended[0]=Math.round(B[i]*(1-f)+r[0]*f)
+        blended[1]=Math.round(B[i+1]*(1-f)+r[1]*f)
+        blended[2]=Math.round(B[i+2]*(1-f)+r[2]*f)
       }
-      // Alpha: preserve dest alpha — caller sets the matte explicitly
+      // BlendIf gate
+      var gate=1
+      if(hasBi){
+        var srcLum=Math.round(.299*srcD[i]+.587*srcD[i+1]+.114*srcD[i+2])
+        var dstLum=Math.round(.299*B[i]+.587*B[i+1]+.114*B[i+2])
+        if(bi.thisLayer)  gate*=blendIfMult(srcLum,bi.thisLayer.s0,bi.thisLayer.s1,bi.thisLayer.h1,bi.thisLayer.h0)
+        if(bi.underlyingLayer) gate*=blendIfMult(dstLum,bi.underlyingLayer.s0,bi.underlyingLayer.s1,bi.underlyingLayer.h1,bi.underlyingLayer.h0)
+      }
+      var m=gate
+      if(!ch||ch.R) B[i]  =Math.round(B[i]  *(1-m)+blended[0]*m)
+      if(!ch||ch.G) B[i+1]=Math.round(B[i+1]*(1-m)+blended[1]*m)
+      if(!ch||ch.B) B[i+2]=Math.round(B[i+2]*(1-m)+blended[2]*m)
+      // Alpha: preserve dest — caller sets matte
     }
     ctx.putImageData(base,0,0)
   } else {
@@ -1517,7 +1552,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       var hasChRestrict=lyr.blendChannels&&(!lyr.blendChannels.R||!lyr.blendChannels.G||!lyr.blendChannels.B||!lyr.blendChannels.A)
       if(hasChRestrict||hasBlendIf) preBlend=lctx.getImageData(0,0,w,h)
 
-      blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h)
+      blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h,null,null,lyr.blendChannels,lyr.blendIf)
 
       // Blend If + channel restrict — per-pixel fixup after blend
       if(hasChRestrict||hasBlendIf){
@@ -1586,7 +1621,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   // Pixel blend (switched controls draw order = A over B or B over A)
   var bottom=n.switched?cA:cB, topC=n.switched?cB:cA
   if(bottom)ctx2.drawImage(bottom,0,0)
-  if(topC)blendCv(ctx2,topC,n.mode,n.amount,w,h)
+  if(topC)blendCv(ctx2,topC,n.mode,n.amount,w,h,null,null,n.blendChannels,n.blendIf)
   // Matte combination — switched also affects matte order
   var botM=n.switched?mA:mB, topM=n.switched?mB:mA
   var mf=(n.maskAmount==null?100:n.maskAmount)/100
