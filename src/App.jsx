@@ -196,30 +196,48 @@ function BlendIfSlider(props) {
   function pct(val) { return (val/255)*100 + "%" }
 
   function toggleShadow() {
+    // ON: pink appears coincident with green (no feather yet — drag green leftward to push pair, then back to open feather)
+    // OFF: pink collapses back to green position
     props.onChange(shadowSoft
-      ? {s0:v.s1, s1:v.s1, h1:v.h1, h0:v.h0}   // collapse — outer rejoins inner
-      : {s0:0,    s1:v.s1, h1:v.h1, h0:v.h0})   // enable — outer jumps to far end
+      ? {s0:v.s1, s1:v.s1, h1:v.h1, h0:v.h0}
+      : {s0:v.s1, s1:v.s1, h1:v.h1, h0:v.h0})  // both cases: s0=s1 (same start — ON reveals pink)
   }
   function toggleHighlight() {
     props.onChange(highlightSoft
-      ? {s0:v.s0, s1:v.s1, h1:v.h1, h0:v.h1}   // collapse — outer rejoins inner
-      : {s0:v.s0, s1:v.s1, h1:v.h1, h0:255})    // enable — outer jumps to far end
+      ? {s0:v.s0, s1:v.s1, h1:v.h1, h0:v.h1}
+      : {s0:v.s0, s1:v.s1, h1:v.h1, h0:v.h1})  // both cases: h0=h1 — ON reveals pink
   }
 
   function startDrag(handle, e) {
     e.preventDefault(); e.stopPropagation()
     var rect = trackRef.current.getBoundingClientRect()
-    var cx = e.touches ? e.touches[0].clientX : e.clientX
     dragging.current = {handle:handle, rect:rect, vals:Object.assign({},v)}
     function onMove(ev) {
       var cx2 = ev.touches ? ev.touches[0].clientX : ev.clientX
       var pct2 = Math.max(0, Math.min(1, (cx2 - dragging.current.rect.left) / dragging.current.rect.width))
       var val = Math.round(pct2 * 255)
       var nv = Object.assign({}, dragging.current.vals)
-      if(handle==="s0") nv.s0 = Math.min(nv.s1, val)
-      if(handle==="s1") nv.s1 = Math.max(nv.s0, Math.min(nv.h1, val))
-      if(handle==="h1") nv.h1 = Math.max(nv.s1, Math.min(nv.h0, val))
-      if(handle==="h0") nv.h0 = Math.max(nv.h1, val)
+      if(handle==="s0") {
+        // Pink shadow: can only move left of green
+        nv.s0 = Math.min(nv.s1, val)
+      }
+      if(handle==="s1") {
+        // Green shadow: if pushed left past pink, push pink too (pair moves together)
+        // If pulled right, pink stays creating feather zone
+        var clamped = Math.min(nv.h1, val)
+        if(clamped < nv.s0) { nv.s0 = clamped }  // push pink ahead
+        nv.s1 = Math.max(nv.s0, clamped)
+      }
+      if(handle==="h1") {
+        // Green highlight: if pushed right past pink, push pink too
+        var clamped2 = Math.max(nv.s1, val)
+        if(clamped2 > nv.h0) { nv.h0 = clamped2 }  // push pink ahead
+        nv.h1 = Math.min(nv.h0, clamped2)
+      }
+      if(handle==="h0") {
+        // Pink highlight: can only move right of green
+        nv.h0 = Math.max(nv.h1, val)
+      }
       props.onChange(nv)
     }
     function onUp() {
@@ -285,20 +303,18 @@ function BlendIfSlider(props) {
         {/* Right dark zone: h0 (or h1 if hard) → 255 */}
         <div style={{position:"absolute",top:0,bottom:0,right:0,
           width:"calc(100% - "+pct(highlightSoft?v.h0:v.h1)+")",background:"var(--bd)",borderRadius:"0 2px 2px 0"}}/>
-        {/* Shadow outer handle — only when soft */}
-        {shadowSoft&&<div style={Object.assign({},outerHandle,{left:pct(v.s0)})}
+        {/* Pink outer handles — rendered BEHIND green (lower zIndex) so green captures touch when coincident */}
+        {shadowSoft&&<div style={Object.assign({},outerHandle,{left:pct(v.s0),zIndex:9})}
           onMouseDown={function(e){startDrag("s0",e)}}
           onTouchStart={function(e){startDrag("s0",e)}}/>}
-        {/* Highlight outer handle — only when soft */}
-        {highlightSoft&&<div style={Object.assign({},outerHandle,{left:pct(v.h0)})}
+        {highlightSoft&&<div style={Object.assign({},outerHandle,{left:pct(v.h0),zIndex:9})}
           onMouseDown={function(e){startDrag("h0",e)}}
           onTouchStart={function(e){startDrag("h0",e)}}/>}
-        {/* Shadow inner handle — always */}
-        <div style={Object.assign({},innerHandle,{left:pct(v.s1)})}
+        {/* Green inner handles — always, on top (zIndex:12) */}
+        <div style={Object.assign({},innerHandle,{left:pct(v.s1),zIndex:12})}
           onMouseDown={function(e){startDrag("s1",e)}}
           onTouchStart={function(e){startDrag("s1",e)}}/>
-        {/* Highlight inner handle — always */}
-        <div style={Object.assign({},innerHandle,{left:pct(v.h1)})}
+        <div style={Object.assign({},innerHandle,{left:pct(v.h1),zIndex:12})}
           onMouseDown={function(e){startDrag("h1",e)}}
           onTouchStart={function(e){startDrag("h1",e)}}/>
       </div>
