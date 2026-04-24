@@ -316,6 +316,23 @@ function BlendIfSlider(props) {
   )
 }
 var COMMUTATIVE_MODES = {add:1,multiply:1,screen:1,difference:1,exclusion:1,darken:1,lighten:1}
+
+// BlendIfAccordion — collapsible section wrapping BlendIf sliders
+function BlendIfAccordion(props) {
+  var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
+  return (
+    <div style={{marginTop:10,borderTop:"1px solid var(--bd)"}}>
+      <button onClick={function(){setOpen(!open)}}
+        style={{width:"100%",display:"flex",alignItems:"center",gap:6,
+          padding:"8px 0",background:"none",border:"none",cursor:"pointer"}}>
+        <span className={"bp-chevron"+(open?" open":"")} style={{fontSize:14,color:"var(--lv)"}}>›</span>
+        <span style={{fontSize:9,textTransform:"uppercase",letterSpacing:".1em",
+          fontFamily:"'IBM Plex Mono',monospace",color:"var(--di)"}}>Blend If</span>
+      </button>
+      {open&&<div style={{paddingBottom:4}}>{props.children}</div>}
+    </div>
+  )
+}
 var EBMS   = ["normal","multiply","screen","overlay","add","subtract","darken","lighten"]
 var MBMS   = ["multiply","screen","add","subtract","normal"]
 var MCH    = ["luminosity","R","G","B","A"]
