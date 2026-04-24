@@ -75,14 +75,18 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .pval{color:var(--ac);font-size:10.5px;min-width:38px;text-align:right;font-family:'IBM Plex Mono',monospace;flex-shrink:0;}
 .breadcrumb{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;overflow-x:auto;white-space:nowrap;}
 .bc-item{font-size:10px;color:var(--di);font-family:'IBM Plex Mono',monospace;cursor:pointer;text-decoration:underline;text-underline-offset:3px;white-space:nowrap;flex-shrink:0;}
-.blend-if-slider .noUi-target{background:var(--el);border:1px solid var(--bd);border-radius:4px;box-shadow:none;height:6px;}
-.blend-if-slider .noUi-connects{border-radius:4px;}
-.blend-if-slider .noUi-connect:nth-child(1){background:rgba(176,96,240,.4);}
-.blend-if-slider .noUi-connect:nth-child(2){background:rgba(255,255,255,.18);}
-.blend-if-slider .noUi-connect:nth-child(3){background:rgba(176,96,240,.4);}
-.blend-if-slider .noUi-handle{width:12px;height:18px;right:-6px;top:-7px;border-radius:3px;background:var(--tx);border:1px solid var(--bd);box-shadow:none;cursor:ew-resize;}
+.blend-if-slider{padding:10px 0 4px;}
+.blend-if-slider .noUi-target{background:var(--bg);border:1px solid var(--bd);border-radius:3px;box-shadow:none;height:8px;}
+.blend-if-slider .noUi-connects{border-radius:2px;overflow:hidden;}
+.blend-if-slider .noUi-connect:nth-child(1){background:var(--sl);}
+.blend-if-slider .noUi-connect:nth-child(2){background:var(--di);opacity:.35;}
+.blend-if-slider .noUi-connect:nth-child(3){background:var(--sl);}
+.blend-if-slider .noUi-handle{width:10px;height:22px;right:-5px;top:-8px;border-radius:2px;background:var(--bd);border:1px solid var(--di);box-shadow:none;cursor:ew-resize;transition:background .1s,border-color .1s;}
+.blend-if-slider .noUi-handle:hover{background:var(--sl);border-color:var(--tx);}
 .blend-if-slider .noUi-handle::before,.blend-if-slider .noUi-handle::after{display:none;}
-.blend-if-slider .noUi-handle:focus{outline:none;border-color:var(--lv);}
+.blend-if-slider .noUi-handle:focus{outline:none;border-color:var(--lv);background:var(--sl);}
+.blend-if-slider .noUi-handle:nth-child(3),.blend-if-slider .noUi-handle:nth-child(4){border-color:var(--lv);opacity:.7;}
+.blend-if-slider .noUi-handle:nth-child(3):hover,.blend-if-slider .noUi-handle:nth-child(4):hover{opacity:1;}
 .bc-item.cur{color:var(--tx);}
 .mask-card{display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--bg);border:1px solid rgba(176,96,240,.22);border-radius:8px;margin-bottom:8px;}
 .shdr{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--pn);border-bottom:1px solid var(--bd);user-select:none;flex-shrink:0;min-height:var(--tap);}
@@ -3213,9 +3217,10 @@ function EfxCard(props) {
                 return <button key={ch} onClick={function(){
                     var nb=Object.assign({R:true,G:true,B:true,A:true},bc)
                     nb[ch]=!on; props.onChange(Object.assign({},efx,{blendChannels:nb}))}}
-                  style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                  style={{padding:"4px 0",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
                     cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
-                    background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)"}}>
+                    background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)",
+                    width:36,textAlign:"center"}}>
                   {ch}</button>})}
             </div>
           </PR>
@@ -3778,17 +3783,18 @@ function BlenderProps(props) {
               return <button key={ch} onClick={function(){
                   var nb=Object.assign({R:true,G:true,B:true,A:true},bc)
                   nb[ch]=!on; onChange(Object.assign({},node,{blendChannels:nb}))}}
-                style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                style={{padding:"4px 0",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
                   cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
-                  background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)"}}>
+                  background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)",
+                  width:36,textAlign:"center"}}>
                 {ch}</button>})}
           </div>
         </PR>
         <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
-          <BlendIfSlider label="This Layer"
+          <BlendIfSlider label={"Input A"+(node.switched?"":" (top)")}
             values={(node.blendIf&&node.blendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{thisLayer:v})}))}}/>
-          <BlendIfSlider label="Underlying Layer"
+          <BlendIfSlider label={"Input B"+(node.switched?" (top)":"")}
             values={(node.blendIf&&node.blendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{underlyingLayer:v})}))}}/>
         </div>
@@ -3801,6 +3807,14 @@ function BlenderProps(props) {
         <Sl l="amount" v={node.maskAmount==null?100:node.maskAmount} mn={0} mx={100} st={1}
           fmt={function(v){return Math.round(v)+"%"}}
           fn={function(v){onChange(Object.assign({},node,{maskAmount:v}))}}/>
+        <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+          <BlendIfSlider label={"Input A"+(node.switched?"":" (top)")}
+            values={(node.maskBlendIf&&node.maskBlendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+            onChange={function(v){onChange(Object.assign({},node,{maskBlendIf:Object.assign({},node.maskBlendIf||{},{thisLayer:v})}))}}/>
+          <BlendIfSlider label={"Input B"+(node.switched?" (top)":"")}
+            values={(node.maskBlendIf&&node.maskBlendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+            onChange={function(v){onChange(Object.assign({},node,{maskBlendIf:Object.assign({},node.maskBlendIf||{},{underlyingLayer:v})}))}}/>
+        </div>
       </div>
     )
     var body=(<div><TabBar tabs={blendTabs} active={blendTab} onChange={setBlendTab}/>{blendTab==="pixels"?pixelsBody:masksBody}</div>)
@@ -4540,9 +4554,10 @@ function LayerCard(props) {
                 return <button key={ch} onClick={function(){
                     var nb=Object.assign({R:true,G:true,B:true,A:true},bc)
                     nb[ch]=!on; props.onChange({blendChannels:nb})}}
-                  style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                  style={{padding:"4px 0",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
                     cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
-                    background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)"}}>
+                    background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)",
+                    width:36,textAlign:"center"}}>
                   {ch}</button>})}
             </div>
           </PR>
