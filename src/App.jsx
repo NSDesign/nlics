@@ -1639,43 +1639,8 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       } else {
         if(lyr.maskStack&&lyr.maskStack.length>0) maskToAlpha(lCtx,lyr.maskStack,cmap,cache,iC,w,h,lVis)
       }
-      // Capture pre-blend dest pixels for blendChannels restore + underlying blendIf
-      var preBlend=null
-      var bi=lyr.blendIf
-      var hasBlendIf=blendIfHasEffect(bi)
-      var hasChRestrict=lyr.blendChannels&&(!lyr.blendChannels.R||!lyr.blendChannels.G||!lyr.blendChannels.B||!lyr.blendChannels.A)
-      if(hasChRestrict||hasBlendIf) preBlend=lctx.getImageData(0,0,w,h)
-
       blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h,null,null,lyr.blendChannels,lyr.blendIf)
 
-      // Blend If + channel restrict — per-pixel fixup after blend
-      if(hasChRestrict||hasBlendIf){
-        var postBlend=lctx.getImageData(0,0,w,h)
-        var lyrData=lCv.getContext("2d").getImageData(0,0,w,h).data
-        var ch=lyr.blendChannels||{R:true,G:true,B:true,A:true}
-        var biThis=bi&&bi.thisLayer||{s0:0,s1:0,h1:255,h0:255}
-        var biUnder=bi&&bi.underlyingLayer||{s0:0,s1:0,h1:255,h0:255}
-        for(var bii=0;bii<w*h;bii++){
-          var bp=bii*4
-          // BlendIf: compute multiplier for this layer pixel and underlying pixel
-          var biMult=1
-          if(hasBlendIf){
-            var thisLum=Math.round(.299*lyrData[bp]+.587*lyrData[bp+1]+.114*lyrData[bp+2])
-            var underLum=preBlend?Math.round(.299*preBlend.data[bp]+.587*preBlend.data[bp+1]+.114*preBlend.data[bp+2]):128
-            var tMult=blendIfMult(thisLum,biThis.s0,biThis.s1,biThis.h1,biThis.h0)
-            var uMult=blendIfMult(underLum,biUnder.s0,biUnder.s1,biUnder.h1,biUnder.h0)
-            biMult=tMult*uMult
-          }
-          // Apply channel restrictions: restore disabled channels from pre-blend
-          if(!ch.R) postBlend.data[bp]  =preBlend?preBlend.data[bp]  :postBlend.data[bp]
-          if(!ch.G) postBlend.data[bp+1]=preBlend?preBlend.data[bp+1]:postBlend.data[bp+1]
-          if(!ch.B) postBlend.data[bp+2]=preBlend?preBlend.data[bp+2]:postBlend.data[bp+2]
-          // Apply blendIf multiplier to alpha
-          if(hasBlendIf) postBlend.data[bp+3]=Math.round(postBlend.data[bp+3]*biMult)
-          if(!ch.A) postBlend.data[bp+3]=preBlend?preBlend.data[bp+3]:postBlend.data[bp+3]
-        }
-        lctx.putImageData(postBlend,0,0)
-      }
       // Accumulate matte using layer's maskMode
       var lmf=(lyr.maskAmount==null?100:lyr.maskAmount)/100
       var lmblend=ALPHA_BM[lyr.maskMode||"add"]||ALPHA_BM["add"]
