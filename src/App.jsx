@@ -2891,14 +2891,14 @@ function MaskCard(props) {
           <Sl l="opacity" v={mk.opacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
             fn={function(v){props.onChange(Object.assign({},mk,{opacity:v}))}}/>
-          <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+<BlendIfAccordion>
             <BlendIfSlider label="This Layer"
               values={((mk.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},mk,{blendIf:Object.assign({},mk.blendIf||{},{thisLayer:v})}))}}/>
             <BlendIfSlider label="Underlying Layer"
               values={((mk.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},mk,{blendIf:Object.assign({},mk.blendIf||{},{underlyingLayer:v})}))}}/>
-          </div>
+          </BlendIfAccordion>
         </div>
       )}
       {tab==="effects" && (
@@ -3272,14 +3272,14 @@ function EfxCard(props) {
                   {ch}</button>})}
             </div>
           </PR>
-          <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+<BlendIfAccordion>
             <BlendIfSlider label="This Layer"
               values={((efx.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},efx,{blendIf:Object.assign({},efx.blendIf||{},{thisLayer:v})}))}}/>
             <BlendIfSlider label="Underlying Layer"
               values={((efx.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange(Object.assign({},efx,{blendIf:Object.assign({},efx.blendIf||{},{underlyingLayer:v})}))}}/>
-          </div>
+          </BlendIfAccordion>
         </div>
       )}
       {tab==="mask" && (
@@ -3838,14 +3838,14 @@ function BlenderProps(props) {
                 {ch}</button>})}
           </div>
         </PR>
-        <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+        <BlendIfAccordion>
           <BlendIfSlider label={"Input A"+(node.switched?"":" (top)")}
             values={(node.blendIf&&node.blendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{thisLayer:v})}))}}/>
           <BlendIfSlider label={"Input B"+(node.switched?" (top)":"")}
             values={(node.blendIf&&node.blendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{underlyingLayer:v})}))}}/>
-        </div>
+        </BlendIfAccordion>
       </div>
     )
     var masksBody=(
@@ -3855,14 +3855,14 @@ function BlenderProps(props) {
         <Sl l="amount" v={node.maskAmount==null?100:node.maskAmount} mn={0} mx={100} st={1}
           fmt={function(v){return Math.round(v)+"%"}}
           fn={function(v){onChange(Object.assign({},node,{maskAmount:v}))}}/>
-        <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+        <BlendIfAccordion>
           <BlendIfSlider label={"Input A"+(node.switched?"":" (top)")}
             values={(node.maskBlendIf&&node.maskBlendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{maskBlendIf:Object.assign({},node.maskBlendIf||{},{thisLayer:v})}))}}/>
           <BlendIfSlider label={"Input B"+(node.switched?" (top)":"")}
             values={(node.maskBlendIf&&node.maskBlendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
             onChange={function(v){onChange(Object.assign({},node,{maskBlendIf:Object.assign({},node.maskBlendIf||{},{underlyingLayer:v})}))}}/>
-        </div>
+        </BlendIfAccordion>
       </div>
     )
     var body=(<div><TabBar tabs={blendTabs} active={blendTab} onChange={setBlendTab}/>{blendTab==="pixels"?pixelsBody:masksBody}</div>)
@@ -4609,14 +4609,14 @@ function LayerCard(props) {
                   {ch}</button>})}
             </div>
           </PR>
-          <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+<BlendIfAccordion>
             <BlendIfSlider label="This Layer"
               values={((lyr.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange({blendIf:Object.assign({},lyr.blendIf||{},{thisLayer:v})})}}/>
             <BlendIfSlider label="Underlying Layer"
               values={((lyr.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange({blendIf:Object.assign({},lyr.blendIf||{},{underlyingLayer:v})})}}/>
-          </div>
+          </BlendIfAccordion>
               </div>
             ):(
               <div className="card-body">
