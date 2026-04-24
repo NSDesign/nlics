@@ -197,13 +197,13 @@ function BlendIfSlider(props) {
 
   function toggleShadow() {
     props.onChange(shadowSoft
-      ? {s0:v.s1, s1:v.s1, h1:v.h1, h0:v.h0}
-      : {s0:Math.max(0,v.s1-FEATHER_DEFAULT), s1:v.s1, h1:v.h1, h0:v.h0})
+      ? {s0:v.s1, s1:v.s1, h1:v.h1, h0:v.h0}   // collapse — outer rejoins inner
+      : {s0:0,    s1:v.s1, h1:v.h1, h0:v.h0})   // enable — outer jumps to far end
   }
   function toggleHighlight() {
     props.onChange(highlightSoft
-      ? {s0:v.s0, s1:v.s1, h1:v.h1, h0:v.h1}
-      : {s0:v.s0, s1:v.s1, h1:v.h1, h0:Math.min(255,v.h1+FEATHER_DEFAULT)})
+      ? {s0:v.s0, s1:v.s1, h1:v.h1, h0:v.h1}   // collapse — outer rejoins inner
+      : {s0:v.s0, s1:v.s1, h1:v.h1, h0:255})    // enable — outer jumps to far end
   }
 
   function startDrag(handle, e) {
@@ -233,16 +233,6 @@ function BlendIfSlider(props) {
     window.addEventListener("mouseup", onUp)
     window.addEventListener("touchmove", onMove, {passive:false})
     window.addEventListener("touchend", onUp)
-  }
-
-  // Gradient strip colours
-  function gradStyle() {
-    var stops = []
-    for(var i=0;i<=255;i+=4){
-      var m=blendIfMult(i,v.s0,v.s1,v.h1,v.h0)
-      stops.push("rgba("+Math.round(m*255)+","+Math.round(m*255)+","+Math.round(m*255)+",1) "+((i/255)*100).toFixed(1)+"%")
-    }
-    return "linear-gradient(to right,"+stops.join(",")+")"
   }
 
   var handleBase = {position:"absolute",top:"50%",transform:"translate(-50%,-50%)",
@@ -283,11 +273,18 @@ function BlendIfSlider(props) {
           </svg>
         </button>
       </div>
-      {/* Track */}
+      {/* Track — three segments matching regular slider style */}
       <div ref={trackRef} style={{position:"relative",height:3,borderRadius:2,margin:"18px 11px 18px",
-        background:"var(--bd)"}}>
-        {/* Gradient overlay */}
-        <div style={{position:"absolute",inset:0,borderRadius:2,background:gradStyle()}}/>
+        background:"var(--bg)"}}>
+        {/* Left dark zone: 0 → s0 (or s1 if hard) */}
+        <div style={{position:"absolute",top:0,bottom:0,left:0,
+          width:pct(shadowSoft?v.s0:v.s1),background:"var(--bd)",borderRadius:"2px 0 0 2px"}}/>
+        {/* Pass zone: s1 → h1 — same grey as regular slider track */}
+        <div style={{position:"absolute",top:0,bottom:0,left:pct(v.s1),
+          width:"calc("+pct(v.h1)+" - "+pct(v.s1)+")",background:"var(--bd)"}}/>
+        {/* Right dark zone: h0 (or h1 if hard) → 255 */}
+        <div style={{position:"absolute",top:0,bottom:0,right:0,
+          width:"calc(100% - "+pct(highlightSoft?v.h0:v.h1)+")",background:"var(--bd)",borderRadius:"0 2px 2px 0"}}/>
         {/* Shadow outer handle — only when soft */}
         {shadowSoft&&<div style={Object.assign({},outerHandle,{left:pct(v.s0)})}
           onMouseDown={function(e){startDrag("s0",e)}}
