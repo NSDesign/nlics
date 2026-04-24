@@ -3726,15 +3726,51 @@ function BlenderProps(props) {
         </div>
       ) : (
         <div style={{padding:"0 10px 10px"}}>
-          {Acc("inputA","Input A","var(--ac)","rgba(36,204,168,.06)",renderInputA)}
+          {Acc("inputA","Input A","var(--ac)","rgba(36,204,168,.06)",renderInputA,
+            (function(){
+              var ownerId=node.id
+              var ds=props.dispSlot
+              var isThis=ds&&ds.nodeId===ownerId&&ds.slot==="inputA"
+              var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
+              var col=!isThis?"var(--mu)":"var(--lv)"
+              return props.dspSlot?<button className="icon-btn sm"
+                onClick={function(e){e.stopPropagation();props.dspSlot(ownerId,"inputA")}}
+                style={{color:col,fontSize:18}}
+                title={!isThis?"Preview":ds&&ds.mode==="pixels"?"Pixels · tap mask":"Mask · tap off"}>
+                {icon}</button>:null
+            })())}
           {Acc("blend", "Blend",  "var(--di)",null, renderBlend,
             <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}}
               className={node.switched?"ac":"ghost"}
               style={{fontSize:10,padding:"0 10px",minHeight:28}}>
               {node.switched?"B over A":"A over B"}
             </button>)}
-          {Acc("inputB","Input B","var(--co)","rgba(208,72,152,.06)",renderInputB)}
-          {Acc("output","Output", "var(--lv)","rgba(176,96,240,.06)",renderOutput)}
+          {Acc("inputB","Input B","var(--co)","rgba(208,72,152,.06)",renderInputB,
+            (function(){
+              var ownerId=node.id
+              var ds=props.dispSlot
+              var isThis=ds&&ds.nodeId===ownerId&&ds.slot==="inputB"
+              var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
+              var col=!isThis?"var(--mu)":"var(--lv)"
+              return props.dspSlot?<button className="icon-btn sm"
+                onClick={function(e){e.stopPropagation();props.dspSlot(ownerId,"inputB")}}
+                style={{color:col,fontSize:18}}
+                title={!isThis?"Preview":ds&&ds.mode==="pixels"?"Pixels · tap mask":"Mask · tap off"}>
+                {icon}</button>:null
+            })())}
+          {Acc("output","Output", "var(--lv)","rgba(176,96,240,.06)",renderOutput,
+            (function(){
+              var ownerId=node.id
+              var ds=props.dispSlot
+              var isThis=ds&&ds.nodeId===ownerId&&ds.slot==="output"
+              var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
+              var col=!isThis?"var(--mu)":"var(--lv)"
+              return props.dspSlot?<button className="icon-btn sm"
+                onClick={function(e){e.stopPropagation();props.dspSlot(ownerId,"output")}}
+                style={{color:col,fontSize:18}}
+                title={!isThis?"Preview":ds&&ds.mode==="pixels"?"Pixels · tap mask":"Mask · tap off"}>
+                {icon}</button>:null
+            })())}
         </div>
       )}
     </div>
