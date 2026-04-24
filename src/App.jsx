@@ -4624,6 +4624,7 @@ function LayerCard(props) {
               values={((lyr.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange({blendIf:Object.assign({},lyr.blendIf||{},{thisLayer:v})})}}/>
             <BlendIfSlider label="Underlying Layer"
+              hidden={props.isLast}
               values={((lyr.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
               onChange={function(v){props.onChange({blendIf:Object.assign({},lyr.blendIf||{},{underlyingLayer:v})})}}/>
           </BlendIfAccordion>
