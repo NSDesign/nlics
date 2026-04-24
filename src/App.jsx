@@ -362,11 +362,11 @@ function mkEfx(t) {
   if(t==="edge-detect")  params={strength:100, invert:false}
   if(t==="pixelate")     params={size:8}
   if(t==="duotone")      params={shadow:"#0a0a2a", highlight:"#f5e642"}
-  return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[] }
+  return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[], blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} }
 }
-function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true } }
+function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, strength:1, opacity:100, blendMode:"multiply", effectStack:[], enabled:true, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[] } }
-function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"normal", amount:100, switched:false, maskMode:"add", maskAmount:100, outEfx:[], outMask:[] } }
+function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"normal", amount:100, switched:false, maskMode:"add", maskAmount:100, blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}}, outEfx:[], outMask:[] } }
 function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled:true,
   effectStack:[], maskStack:[], blendMode:"normal", opacity:100, maskMode:"add", maskAmount:100,
   fillOpacity:100, blendChannels:{R:true,G:true,B:true,A:true},
@@ -2804,6 +2804,14 @@ function MaskCard(props) {
           <Sl l="opacity" v={mk.opacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
             fn={function(v){props.onChange(Object.assign({},mk,{opacity:v}))}}/>
+          <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+            <BlendIfSlider label="This Layer"
+              values={((mk.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange(Object.assign({},mk,{blendIf:Object.assign({},mk.blendIf||{},{thisLayer:v})}))}}/>
+            <BlendIfSlider label="Underlying Layer"
+              values={((mk.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange(Object.assign({},mk,{blendIf:Object.assign({},mk.blendIf||{},{underlyingLayer:v})}))}}/>
+          </div>
         </div>
       )}
       {tab==="effects" && (
@@ -3161,6 +3169,29 @@ function EfxCard(props) {
         <div className="card-body">
           <Sl l="opacity" v={efx.opacity} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){props.onChange(Object.assign({},efx,{opacity:v}))}}/>
           <Se l="blend" v={efx.blendMode||"normal"} opts={EBMS} fn={function(v){props.onChange(Object.assign({},efx,{blendMode:v}))}}/>
+          <PR l="channels">
+            <div style={{display:"flex",gap:4}}>
+              {["R","G","B","A"].map(function(ch){
+                var bc=efx.blendChannels||{R:true,G:true,B:true,A:true}
+                var on=bc[ch]!==false
+                var cols={R:"#e05050",G:"#50d050",B:"#5080f0",A:"var(--mu)"}
+                return <button key={ch} onClick={function(){
+                    var nb=Object.assign({R:true,G:true,B:true,A:true},bc)
+                    nb[ch]=!on; props.onChange(Object.assign({},efx,{blendChannels:nb}))}}
+                  style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                    cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
+                    background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)"}}>
+                  {ch}</button>})}
+            </div>
+          </PR>
+          <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+            <BlendIfSlider label="This Layer"
+              values={((efx.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange(Object.assign({},efx,{blendIf:Object.assign({},efx.blendIf||{},{thisLayer:v})}))}}/>
+            <BlendIfSlider label="Underlying Layer"
+              values={((efx.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange(Object.assign({},efx,{blendIf:Object.assign({},efx.blendIf||{},{underlyingLayer:v})}))}}/>
+          </div>
         </div>
       )}
       {tab==="mask" && (
@@ -3703,6 +3734,29 @@ function BlenderProps(props) {
             order has no effect in {node.mode} mode
           </div>
         )}
+        <PR l="channels">
+          <div style={{display:"flex",gap:4}}>
+            {["R","G","B","A"].map(function(ch){
+              var bc=node.blendChannels||{R:true,G:true,B:true,A:true}
+              var on=bc[ch]!==false
+              var cols={R:"#e05050",G:"#50d050",B:"#5080f0",A:"var(--mu)"}
+              return <button key={ch} onClick={function(){
+                  var nb=Object.assign({R:true,G:true,B:true,A:true},bc)
+                  nb[ch]=!on; onChange(Object.assign({},node,{blendChannels:nb}))}}
+                style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                  cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
+                  background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)"}}>
+                {ch}</button>})}
+          </div>
+        </PR>
+        <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+          <BlendIfSlider label="This Layer"
+            values={(node.blendIf&&node.blendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+            onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{thisLayer:v})}))}}/>
+          <BlendIfSlider label="Underlying Layer"
+            values={(node.blendIf&&node.blendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+            onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{underlyingLayer:v})}))}}/>
+        </div>
       </div>
     )
     var masksBody=(
@@ -4434,11 +4488,37 @@ function LayerCard(props) {
                 <Sl l="opacity" v={lyr.opacity==null?100:lyr.opacity} mn={0} mx={100} st={1}
                   fmt={function(v){return Math.round(v)+"%"}}
                   fn={function(v){props.onChange({opacity:v})}}/>
+                <Sl l="fill" v={lyr.fillOpacity==null?100:lyr.fillOpacity} mn={0} mx={100} st={1}
+                  fmt={function(v){return Math.round(v)+"%"}}
+                  fn={function(v){props.onChange({fillOpacity:v})}}/>
                 {COMMUTATIVE_MODES[lyr.blendMode] && (
                   <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",fontStyle:"italic"}}>
                     order has no effect in {lyr.blendMode} mode
                   </div>
                 )}
+          <PR l="channels">
+            <div style={{display:"flex",gap:4}}>
+              {["R","G","B","A"].map(function(ch){
+                var bc=lyr.blendChannels||{R:true,G:true,B:true,A:true}
+                var on=bc[ch]!==false
+                var cols={R:"#e05050",G:"#50d050",B:"#5080f0",A:"var(--mu)"}
+                return <button key={ch} onClick={function(){
+                    var nb=Object.assign({R:true,G:true,B:true,A:true},bc)
+                    nb[ch]=!on; props.onChange({blendChannels:nb})}}
+                  style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                    cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
+                    background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)"}}>
+                  {ch}</button>})}
+            </div>
+          </PR>
+          <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+            <BlendIfSlider label="This Layer"
+              values={((lyr.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange({blendIf:Object.assign({},lyr.blendIf||{},{thisLayer:v})})}}/>
+            <BlendIfSlider label="Underlying Layer"
+              values={((lyr.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange({blendIf:Object.assign({},lyr.blendIf||{},{underlyingLayer:v})})}}/>
+          </div>
               </div>
             ):(
               <div className="card-body">
@@ -4454,49 +4534,6 @@ function LayerCard(props) {
             )}
           </div>
       )}
-      {!isCollapsed && layerTab==="blend" && (
-        <div className="card-body">
-          {/* Channel selection */}
-          <PR l="channels">
-            <div style={{display:"flex",gap:4}}>
-              {["R","G","B","A"].map(function(ch){
-                var on=(lyr.blendChannels||{R:true,G:true,B:true,A:true})[ch]!==false
-                var cols={R:"#e05050",G:"#50d050",B:"#5080f0",A:"var(--mu)"}
-                return <button key={ch}
-                  onClick={function(){
-                    var bc=Object.assign({R:true,G:true,B:true,A:true},lyr.blendChannels)
-                    bc[ch]=!on; props.onChange({blendChannels:bc})
-                  }}
-                  style={{padding:"4px 10px",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
-                    cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
-                    background:on?"rgba(255,255,255,.06)":"none",
-                    color:on?cols[ch]:"var(--mu)"}}>
-                  {ch}
-                </button>
-              })}
-            </div>
-          </PR>
-          {/* Fill opacity */}
-          <Sl l="fill" v={lyr.fillOpacity==null?100:lyr.fillOpacity} mn={0} mx={100} st={1}
-            fmt={function(v){return Math.round(v)+"%"}}
-            fn={function(v){props.onChange({fillOpacity:v})}}/>
-          {/* Blend If sliders */}
-          <div style={{padding:"8px 0 2px",borderTop:"1px solid var(--bd)",marginTop:6}}>
-            <BlendIfSlider label="This Layer"
-              values={(lyr.blendIf&&lyr.blendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
-              onChange={function(v){
-                var bi=Object.assign({},lyr.blendIf||{},{thisLayer:v})
-                props.onChange({blendIf:bi})
-              }}/>
-            <BlendIfSlider label="Underlying Layer"
-              values={(lyr.blendIf&&lyr.blendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
-              onChange={function(v){
-                var bi=Object.assign({},lyr.blendIf||{},{underlyingLayer:v})
-                props.onChange({blendIf:bi})
-              }}/>
-          </div>
-        </div>
-      )}}
     </div>
   )
 }
