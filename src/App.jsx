@@ -2698,6 +2698,39 @@ function GradP(props) {
       {p.gType==="radial" && <Sl l="radius" v={p.r||.7} mn={.01} mx={2.5} st={.01} fn={function(v){up(Object.assign({},p,{r:v}))}}/>}
       {p.gType==="conic" && <Sl l="start" v={p.sa||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{sa:v}))}}/>}
       <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      {/* ── Gradient utilities ── */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>
+        <button onClick={function(){
+          // Reverse: mirror stop positions
+          var ns=stops.slice().reverse().map(function(s,i){return Object.assign({},s,{pos:stops[stops.length-1-i].pos})})
+          setStops(ns)
+        }} className="ghost" style={{flex:"1 1 0",fontSize:10,padding:"4px 8px"}}>reverse</button>
+      </div>
+      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
+        <span style={{fontSize:9,color:"var(--mu)",marginRight:4}}>distribute</span>
+        {[["even",function(t){return t}],["expo",function(t){return t*t}],["log",function(t){return Math.sqrt(t)}]].map(function(m){
+          return <button key={m[0]} className="ghost" style={{fontSize:10,padding:"4px 10px"}}
+            onClick={function(){
+              var n2=stops.length; if(n2<2)return
+              var ns=stops.map(function(s,i){return Object.assign({},s,{pos:m[1](i/(n2-1))})})
+              setStops(ns)
+            }}>{m[0]}</button>
+        })}
+      </div>
+      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
+        <span style={{fontSize:9,color:"var(--mu)",marginRight:4}}>presets</span>
+        {[
+          {label:"B→W",  stops:[{pos:0,color:"#000000",alpha:1},{pos:1,color:"#ffffff",alpha:1}]},
+          {label:"W→B",  stops:[{pos:0,color:"#ffffff",alpha:1},{pos:1,color:"#000000",alpha:1}]},
+          {label:"rainbow",stops:[{pos:0,color:"#ff0000",alpha:1},{pos:.17,color:"#ff8800",alpha:1},{pos:.33,color:"#ffff00",alpha:1},{pos:.5,color:"#00cc00",alpha:1},{pos:.67,color:"#0044ff",alpha:1},{pos:.83,color:"#8800cc",alpha:1},{pos:1,color:"#ff0088",alpha:1}]},
+          {label:"heat",  stops:[{pos:0,color:"#000000",alpha:1},{pos:.33,color:"#cc2200",alpha:1},{pos:.66,color:"#ffaa00",alpha:1},{pos:1,color:"#ffffff",alpha:1}]},
+          {label:"cyan",  stops:[{pos:0,color:"#000033",alpha:1},{pos:1,color:"#00ffcc",alpha:1}]},
+          {label:"α→full",stops:[{pos:0,color:"#ffffff",alpha:0},{pos:1,color:"#ffffff",alpha:1}]}
+        ].map(function(pr){
+          return <button key={pr.label} className="ghost" style={{fontSize:10,padding:"4px 8px"}}
+            onClick={function(){setStops(pr.stops)}}>{pr.label}</button>
+        })}
+      </div>
     </div>
   )
 }
