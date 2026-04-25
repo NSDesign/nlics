@@ -487,7 +487,14 @@ function mkEfx(t) {
   var cfg=ECFG[t]
   var params=cfg ? { [cfg[0]]:cfg[4] } : {}
   if(t==="curves")    params={inBlack:0,inWhite:255,outBlack:0,outWhite:255,sCurve:0}
-  if(t==="transform") params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
+  if(t==="transform")    params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
+  if(t==="wave")          params={amplitude:.05,freqX:3,freqY:3,phaseX:0,phaseY:0}
+  if(t==="twirl")         params={angle:180,radius:.5,cx:.5,cy:.5}
+  if(t==="bulge")         params={strength:.5,radius:.7,cx:.5,cy:.5}
+  if(t==="solarise")      params={threshold:.5}
+  if(t==="uv-distort")    params={uvRefId:null,mode:"displacement",amtX:.1,amtY:.1,chX:"R",chY:"G"}
+  if(t==="polar-to-cart") params={amount:1}
+  if(t==="cart-to-polar") params={amount:1}
   if(t==="colour-map") params={
     stops:[{pos:0,color:"#000000",alpha:100},{pos:1,color:"#ffffff",alpha:100}],
     reverse:false
@@ -917,8 +924,64 @@ function pxFn(d,w,h,t,p) {
       d[i+1]=Math.round(shC[1]+(hiC[1]-shC[1])*dtL)
       d[i+2]=Math.round(shC[2]+(hiC[2]-shC[2])*dtL)
     }
+  } else if (t==="wave") {
+    // Sinusoidal pixel displacement
+    var wAmp=(p.amplitude||0.05)*Math.max(w,h), wFreqX=p.freqX||3, wFreqY=p.freqY||3
+    var wPhaseX=p.phaseX||0, wPhaseY=p.phaseY||0
+    var orig=new Uint8ClampedArray(d)
+    for(i=0;i<w*h;i++){
+      var wx=i%w,wy=Math.floor(i/w)
+      var sx=Math.round(wx+Math.sin(wy/h*wFreqX*Math.PI*2+wPhaseX)*wAmp)
+      var sy=Math.round(wy+Math.sin(wx/w*wFreqY*Math.PI*2+wPhaseY)*wAmp)
+      sx=Math.max(0,Math.min(w-1,sx)); sy=Math.max(0,Math.min(h-1,sy))
+      var si=(sy*w+sx)*4, di=i*4
+      d[di]=orig[si];d[di+1]=orig[si+1];d[di+2]=orig[si+2];d[di+3]=orig[si+3]
+    }
+  } else if (t==="twirl") {
+    // Rotate pixels around centre with angle decreasing with distance
+    var tAngle=(p.angle||180)*Math.PI/180, tRadius=(p.radius||0.5)*Math.min(w,h)*0.5
+    var tcx=p.cx!=null?p.cx*w:w/2, tcy=p.cy!=null?p.cy*h:h/2
+    var orig2=new Uint8ClampedArray(d)
+    for(i=0;i<w*h;i++){
+      var tx=i%w-tcx, ty=Math.floor(i/w)-tcy
+      var dist2=Math.sqrt(tx*tx+ty*ty)
+      if(dist2<tRadius){
+        var a=tAngle*(1-dist2/tRadius)
+        var ca=Math.cos(a),sa=Math.sin(a)
+        var sx2=Math.round(tcx+tx*ca-ty*sa), sy2=Math.round(tcy+tx*sa+ty*ca)
+        sx2=Math.max(0,Math.min(w-1,sx2)); sy2=Math.max(0,Math.min(h-1,sy2))
+        var si2=(sy2*w+sx2)*4, di2=i*4
+        d[di2]=orig2[si2];d[di2+1]=orig2[si2+1];d[di2+2]=orig2[si2+2];d[di2+3]=orig2[si2+3]
+      }
+    }
+  } else if (t==="bulge") {
+    // Radial bulge/pinch from centre
+    var bStrength=p.strength||0.5, bRadius=(p.radius||0.7)*Math.min(w,h)*0.5
+    var bcx=p.cx!=null?p.cx*w:w/2, bcy=p.cy!=null?p.cy*h:h/2
+    var orig3=new Uint8ClampedArray(d)
+    for(i=0;i<w*h;i++){
+      var bx=i%w-bcx, by=Math.floor(i/w)-bcy
+      var bd=Math.sqrt(bx*bx+by*by)
+      if(bd<bRadius&&bd>0){
+        var norm=bd/bRadius
+        var newR=norm>0?Math.pow(norm,1/(1+bStrength))*bRadius:0
+        var scale=newR/bd
+        var sx3=Math.round(bcx+bx*scale), sy3=Math.round(bcy+by*scale)
+        sx3=Math.max(0,Math.min(w-1,sx3)); sy3=Math.max(0,Math.min(h-1,sy3))
+        var si3=(sy3*w+sx3)*4, di3=i*4
+        d[di3]=orig3[si3];d[di3+1]=orig3[si3+1];d[di3+2]=orig3[si3+2];d[di3+3]=orig3[si3+3]
+      }
+    }
+  } else if (t==="solarise") {
+    // Invert pixels above threshold — classic solarisation/sabattier effect
+    var solT=(p.threshold||0.5)*255
+    for(i=0;i<d.length;i+=4){
+      var lum=.299*d[i]+.587*d[i+1]+.114*d[i+2]
+      if(lum>solT){d[i]=255-d[i];d[i+1]=255-d[i+1];d[i+2]=255-d[i+2]}
+    }
   }
-  // NOTE: "transform" is handled specially in applyEfxStk (needs full canvas context, not just ImageData)
+  // NOTE: "transform", "uv-distort", "polar-to-cart", "cart-to-polar"
+  // are handled specially in applyEfxStk (need full canvas context)
 }
 // Pixel-based affine transform — rasterises through a 2D canvas matrix.
 // Operates on the full canvas context, not ImageData, because it requires
@@ -1436,6 +1499,75 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
         applyBack(preCopy,postImg.data,null,efx.opacity!=null?efx.opacity:100,efx.blendMode||"normal")
         ctx.putImageData(new ImageData(preCopy,w,h),0,0)
       }
+      continue
+    }
+    // UV Distort — pixel remapping using a separate UV source canvas
+    if (efx.type==="uv-distort") {
+      var uvSrcId=efx.params&&efx.params.uvRefId
+      if(uvSrcId){
+        var uvCv=compAny(uvSrcId,cmap,new Map(cache),iC,w,h,new Set(vis))
+        if(uvCv){
+          var uvD=uvCv.getContext("2d").getImageData(0,0,w,h).data
+          var srcImg=ctx.getImageData(0,0,w,h)
+          var outImg2=ctx.createImageData(w,h)
+          var uvMode=efx.params.mode||"displacement"
+          var uvAmtX=(efx.params.amtX==null?.1:efx.params.amtX)
+          var uvAmtY=(efx.params.amtY==null?.1:efx.params.amtY)
+          var uvChX=efx.params.chX||"R", uvChY=efx.params.chY||"G"
+          function uvRead(px,py,ch){
+            var idx2=(Math.max(0,Math.min(h-1,py))*w+Math.max(0,Math.min(w-1,px)))*4
+            if(ch==="R")return uvD[idx2]/255;if(ch==="G")return uvD[idx2+1]/255
+            if(ch==="B")return uvD[idx2+2]/255
+            return(.299*uvD[idx2]+.587*uvD[idx2+1]+.114*uvD[idx2+2])/255
+          }
+          for(var uvy=0;uvy<h;uvy++) for(var uvx=0;uvx<w;uvx++){
+            var uvVal=uvRead(uvx,uvy,uvChX), uvValY=uvRead(uvx,uvy,uvChY)
+            var sx4,sy4
+            if(uvMode==="absolute"){
+              sx4=Math.round(uvVal*w); sy4=Math.round(uvValY*h)
+            } else {
+              sx4=Math.round(uvx+(uvVal-.5)*uvAmtX*w)
+              sy4=Math.round(uvy+(uvValY-.5)*uvAmtY*h)
+            }
+            sx4=Math.max(0,Math.min(w-1,sx4)); sy4=Math.max(0,Math.min(h-1,sy4))
+            var si4=(sy4*w+sx4)*4, di4=(uvy*w+uvx)*4
+            outImg2.data[di4]=srcImg.data[si4];outImg2.data[di4+1]=srcImg.data[si4+1]
+            outImg2.data[di4+2]=srcImg.data[si4+2];outImg2.data[di4+3]=srcImg.data[si4+3]
+          }
+          var preUv=srcImg.data
+          applyBack(preUv,outImg2.data,mv,efx.opacity,efx.blendMode||"normal",efx.blendChannels,efx.blendIf)
+          ctx.putImageData(new ImageData(preUv,w,h),0,0)
+        }
+      }
+      continue
+    }
+    // Polar / Cartesian coordinate remapping
+    if (efx.type==="polar-to-cart"||efx.type==="cart-to-polar") {
+      var pcSrc=ctx.getImageData(0,0,w,h), pcOut=ctx.createImageData(w,h)
+      var pcW=w,pcH=h,pcCx=pcW/2,pcCy=pcH/2,pcR=Math.min(pcW,pcH)/2
+      for(var pcy=0;pcy<pcH;pcy++) for(var pcx=0;pcx<pcW;pcx++){
+        var sx5,sy5
+        if(efx.type==="cart-to-polar"){
+          var dx=pcx-pcCx, dy=pcy-pcCy
+          var ang=(Math.atan2(dy,dx)+Math.PI*2)%(Math.PI*2)
+          var dist3=Math.sqrt(dx*dx+dy*dy)/pcR
+          sx5=Math.round((ang/(Math.PI*2))*pcW)
+          sy5=Math.round(Math.min(dist3,1)*(pcH-1))
+        } else {
+          var u=pcx/pcW,v=pcy/pcH
+          var ang2=u*Math.PI*2, r2=v*pcR
+          sx5=Math.round(pcCx+Math.cos(ang2)*r2)
+          sy5=Math.round(pcCy+Math.sin(ang2)*r2)
+        }
+        sx5=Math.max(0,Math.min(pcW-1,sx5)); sy5=Math.max(0,Math.min(pcH-1,sy5))
+        var si5=(sy5*pcW+sx5)*4, di5=(pcy*pcW+pcx)*4
+        pcOut.data[di5]=pcSrc.data[si5];pcOut.data[di5+1]=pcSrc.data[si5+1]
+        pcOut.data[di5+2]=pcSrc.data[si5+2];pcOut.data[di5+3]=pcSrc.data[si5+3]
+      }
+      var prePc=pcSrc.data
+      var mvPc=efx.maskStack&&efx.maskStack.length>0?compMasks(efx.maskStack,cmap,cache,iC,w,h,new Set(vis)):null
+      applyBack(prePc,pcOut.data,mvPc,efx.opacity,efx.blendMode||"normal",efx.blendChannels,efx.blendIf)
+      ctx.putImageData(new ImageData(prePc,w,h),0,0)
       continue
     }
     if (efx.type==="transform") {
@@ -2986,6 +3118,64 @@ function EfxPrimary(props) {
       <Sl l="skew y"      v={p.skY||0} mn={-60} mx={60}   st={1}    fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({skY:v})}}/>
     </div>
   )
+  if(efx.type==="solarise") return (
+    <Sl l="threshold" v={p.threshold==null?.5:p.threshold} mn={0} mx={1} st={.01}
+      fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({threshold:v})}}/>)
+  if(efx.type==="wave") return (
+    <div>
+      <Sl l="amplitude" v={p.amplitude==null?.05:p.amplitude} mn={0} mx={.5} st={.005}
+        fmt={function(v){return (v*100).toFixed(1)+"%"}} fn={function(v){up({amplitude:v})}}/>
+      <Sl l="freq x" v={p.freqX==null?3:p.freqX} mn={0} mx={20} st={.5}
+        fmt={function(v){return v.toFixed(1)}} fn={function(v){up({freqX:v})}}/>
+      <Sl l="freq y" v={p.freqY==null?3:p.freqY} mn={0} mx={20} st={.5}
+        fmt={function(v){return v.toFixed(1)}} fn={function(v){up({freqY:v})}}/>
+      <Sl l="phase x" v={p.phaseX||0} mn={0} mx={6.28} st={.05}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({phaseX:v})}}/>
+      <Sl l="phase y" v={p.phaseY||0} mn={0} mx={6.28} st={.05}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({phaseY:v})}}/>
+    </div>)
+  if(efx.type==="twirl") return (
+    <div>
+      <Sl l="angle" v={p.angle==null?180:p.angle} mn={-720} mx={720} st={5}
+        fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
+      <Sl l="radius" v={p.radius==null?.5:p.radius} mn={.05} mx={1.5} st={.01}
+        fn={function(v){up({radius:v})}}/>
+      <Sl l="centre x" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up({cx:v})}}/>
+      <Sl l="centre y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up({cy:v})}}/>
+    </div>)
+  if(efx.type==="bulge") return (
+    <div>
+      <Sl l="strength" v={p.strength==null?.5:p.strength} mn={-2} mx={2} st={.05}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({strength:v})}}/>
+      <Sl l="radius" v={p.radius==null?.7:p.radius} mn={.05} mx={1.5} st={.01}
+        fn={function(v){up({radius:v})}}/>
+      <Sl l="centre x" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up({cx:v})}}/>
+      <Sl l="centre y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up({cy:v})}}/>
+    </div>)
+  if(efx.type==="uv-distort") return (
+    <div>
+      <NRef l="UV source" v={p.uvRefId} nodes={props.nodes} selfId={props.selfId}
+        iC={props.iC} mode="source" fn={function(v){up({uvRefId:v})}}/>
+      <Se l="mode" v={p.mode||"displacement"} opts={["displacement","absolute"]}
+        fn={function(v){up({mode:v})}}/>
+      {(p.mode||"displacement")==="displacement"&&(
+        <div>
+          <Sl l="X amount" v={p.amtX==null?.1:p.amtX} mn={-1} mx={1} st={.005}
+            fmt={function(v){return (v*100).toFixed(1)+"%"}} fn={function(v){up({amtX:v})}}/>
+          <Sl l="Y amount" v={p.amtY==null?.1:p.amtY} mn={-1} mx={1} st={.005}
+            fmt={function(v){return (v*100).toFixed(1)+"%"}} fn={function(v){up({amtY:v})}}/>
+        </div>)}
+      <Se l="X channel" v={p.chX||"R"} opts={["R","G","B","luminosity"]}
+        fn={function(v){up({chX:v})}}/>
+      <Se l="Y channel" v={p.chY||"G"} opts={["R","G","B","luminosity"]}
+        fn={function(v){up({chY:v})}}/>
+    </div>)
+  if(efx.type==="polar-to-cart"||efx.type==="cart-to-polar") return (
+    <div style={{padding:"8px 0",fontSize:10,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.5}}>
+      {efx.type==="cart-to-polar"
+        ?"Wraps image into a circle (Cartesian → Polar)"
+        :"Unrolls circle into a strip (Polar → Cartesian)"}
+    </div>)
   return <div className="empty">no parameters</div>
 }
 
@@ -3609,7 +3799,8 @@ function EfxCard(props) {
 var EFX_GROUPS=[
   {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
   {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
-  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect"]},
+  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise"]},
+  {label:"Distort",  items:["wave","twirl","bulge","uv-distort","polar-to-cart","cart-to-polar"]},
   {label:"Transform",items:["transform"]},
 ]
 // Hook: compute a fixed-position rect for a popover relative to an anchor ref.
