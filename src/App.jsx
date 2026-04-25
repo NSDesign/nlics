@@ -2653,9 +2653,13 @@ function GradP(props) {
   return (
     <div>
       <Se l="type" v={p.gType} opts={GTYPES} fn={function(v){up(Object.assign({},p,{gType:v}))}}/>
-      {/* Gradient preview */}
-      <div style={{height:24,borderRadius:5,margin:"4px 0 8px",border:"1px solid var(--bd)",
-        background:"linear-gradient(to right,"+previewStops+"),repeating-conic-gradient(#1a1a38 0deg 90deg,#121228 90deg 180deg) 0 0 / 10px 10px"}}/>
+      {/* Gradient preview strip */}
+      <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 8px"}}>
+        <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
+          minWidth:76,textAlign:"right",flexShrink:0}}>preview</span>
+        <div style={{flex:1,height:24,borderRadius:5,border:"1px solid var(--bd)",
+          background:"linear-gradient(to right,"+previewStops+"),repeating-conic-gradient(#1a1a38 0deg 90deg,#121228 90deg 180deg) 0 0 / 10px 10px"}}/>
+      </div>
       {/* Stops editor */}
       <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
         {stops.map(function(s,i){
@@ -2701,9 +2705,7 @@ function GradP(props) {
       {/* ── Gradient utilities ── */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>
         <button onClick={function(){
-          // Reverse: mirror stop positions
-          var ns=stops.slice().reverse().map(function(s,i){return Object.assign({},s,{pos:stops[stops.length-1-i].pos})})
-          setStops(ns)
+          setStops(stops.map(function(s){return Object.assign({},s,{pos:1-s.pos})}))
         }} className="ghost" style={{flex:"1 1 0",fontSize:10,padding:"4px 8px"}}>reverse</button>
       </div>
       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
