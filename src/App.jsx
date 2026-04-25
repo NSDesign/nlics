@@ -1230,7 +1230,11 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
     for(var ii=0;ii<w*h;ii++){
       var pi=ii*4,v
       v=src[pi]/255  // greyscale canvas: R=G=B for all channel types
-      var mv2=(mk.invert?1-v:v)*(mk.strength==null?1:mk.strength)*f
+      var rawV=mk.invert?1-v:v
+      var contribution=(mk.strength==null?1:mk.strength)*f
+      // lerp(1, rawV, contribution): at contribution=0 → no masking (identity=1)
+      // at contribution=1 → full mask effect. Matches Nuke/AE/Fusion behaviour.
+      var mv2=1-(1-rawV)*contribution
       if(mk.blendMode==="screen")out[ii]=1-(1-out[ii])*(1-mv2)
       else if(mk.blendMode==="add")out[ii]=Math.min(1,out[ii]+mv2)
       else if(mk.blendMode==="subtract")out[ii]=Math.max(0,out[ii]-mv2)
