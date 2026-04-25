@@ -406,7 +406,7 @@ function BlendIfAccordion(props) {
 var EBMS   = ["normal","multiply","screen","overlay","add","subtract","darken","lighten"]
 var MBMS   = ["multiply","screen","add","subtract","normal"]
 var MCH    = ["luminosity","R","G","B","A"]
-var SHAPES = ["ellipse","rectangle","polygon","star","ring"]
+var SHAPES = ["ellipse","rectangle","rounded-rect","polygon","star","ring"]
 var GTYPES = ["linear","radial","conic"]
 var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value"]
 var PTYPES = ["checkerboard","stripes","dots"]
@@ -1035,45 +1035,108 @@ function gShape(ctx,p,w,h) {
   var fill=p.fill||"#fff",stroke=p.stroke||"#000",strokeW=p.strokeW||0
   var strokeOpacity=p.strokeOpacity==null?1:p.strokeOpacity
   var pts=Math.round(p.pts||5),innerR=p.innerR||.45,sides=Math.round(p.sides||5),ringR=p.ringR||.62
-  var opacity=p.opacity==null?(p.alpha==null?1:p.alpha):p.opacity  // opacity (was alpha)
-  var rx=p.rx==null?1:p.rx, ry=p.ry==null?1:p.ry  // x/y radius multipliers for ellipse/rect
+  var opacity=p.opacity==null?(p.alpha==null?1:p.alpha):p.opacity
+  var rx=p.rx==null?1:p.rx, ry=p.ry==null?1:p.ry
+  var cornerR=p.cornerR||0.2  // for rounded-rect: corner radius fraction
   var jitter=p.jitter||0, jitterSeed=p.jitterSeed||1
+  var renderMode=p.renderMode||"smooth"  // "smooth" = arcs, "faceted" = line segments
+  var segs=Math.max(3,Math.round(p.segments||32))  // faceted segment count
   var rnd=seededRand(jitterSeed)
   var sc=2, sw2=w*sc, sh2=h*sc
   var tc=document.createElement("canvas"); tc.width=sw2; tc.height=sh2
   var tc2=tc.getContext("2d")
   var r=sz*Math.min(sw2,sh2)/2
-  tc2.translate(x*sw2,y*sh2); tc2.rotate(rot*Math.PI/180); tc2.beginPath()
-  if(s==="ellipse") tc2.ellipse(0,0,r*rx,r*ry,0,0,Math.PI*2)
-  else if(s==="rectangle"){
-    if(rx!==1||ry!==1){
-      // Rounded rectangle using x/y radius
-      var cRx=Math.min(r*rx,r*ry)*Math.min(rx,ry), cRy=cRx
-      var rw=r*2*rx, rh=r*2*ry
-      tc2.roundRect(-rw/2,-rh/2,rw,rh,[cRx])
-    } else { tc2.rect(-r,-r,r*2,r*2) }
+  tc2.translate(x*sw2,y*sh2); tc2.rotate(rot*Math.PI/180)
+
+  // Helper: jittered vertex
+  function jv(vx,vy) {
+    if(!jitter) return [vx,vy]
+    return [vx+(rnd()-0.5)*2*jitter*r, vy+(rnd()-0.5)*2*jitter*r]
+  }
+  // Helper: sample ellipse at angle a with rx/ry
+  function ev(a) { return jv(Math.cos(a)*r*rx, Math.sin(a)*r*ry) }
+  // Helper: draw closed point list
+  function drawPts(pts2) {
+    tc2.beginPath()
+    tc2.moveTo(pts2[0][0],pts2[0][1])
+    for(var k=1;k<pts2.length;k++) tc2.lineTo(pts2[k][0],pts2[k][1])
+    tc2.closePath()
+  }
+
+  tc2.beginPath()
+  if(s==="ellipse") {
+    if(renderMode==="faceted") {
+      var epts=[]; for(var ei=0;ei<segs;ei++) epts.push(ev(ei*Math.PI*2/segs))
+      drawPts(epts)
+    } else { tc2.ellipse(0,0,r*rx,r*ry,0,0,Math.PI*2) }
+  }
+  else if(s==="rectangle") {
+    if(renderMode==="faceted") {
+      // Faceted rect: sample perimeter as points (4 corners + intermediate)
+      var rw2=r*rx, rh2=r*ry
+      var edgeSegs=Math.max(1,Math.round(segs/4))
+      var rpts=[]
+      for(var ri=0;ri<edgeSegs;ri++) rpts.push(jv(-rw2+ri*2*rw2/edgeSegs,-rh2))  // top
+      for(var ri2=0;ri2<edgeSegs;ri2++) rpts.push(jv(rw2,-rh2+ri2*2*rh2/edgeSegs))  // right
+      for(var ri3=0;ri3<edgeSegs;ri3++) rpts.push(jv(rw2-ri3*2*rw2/edgeSegs,rh2))  // bottom
+      for(var ri4=0;ri4<edgeSegs;ri4++) rpts.push(jv(-rw2,rh2-ri4*2*rh2/edgeSegs))  // left
+      drawPts(rpts)
+    } else { tc2.rect(-r*rx,-r*ry,r*rx*2,r*ry*2) }
+  }
+  else if(s==="rounded-rect") {
+    // Dedicated rounded rectangle — cornerR controls corner curve as fraction of min(rx,ry)*r
+    var rrW=r*rx, rrH=r*ry, cr=Math.min(rrW,rrH)*Math.max(0,Math.min(1,cornerR))
+    if(renderMode==="faceted") {
+      // Sample rounded rect perimeter as segments — corners sampled as arc points
+      var cornerSegs=Math.max(2,Math.round(segs/8))
+      var rrpts=[]
+      // Each corner: centre, radius cr, from angle a to a+PI/2
+      var corners=[[-rrW+cr,-rrH+cr,Math.PI,3*Math.PI/2],[rrW-cr,-rrH+cr,3*Math.PI/2,2*Math.PI],[rrW-cr,rrH-cr,0,Math.PI/2],[-rrW+cr,rrH-cr,Math.PI/2,Math.PI]]
+      for(var ci=0;ci<corners.length;ci++){
+        var co=corners[ci]
+        for(var cs2=0;cs2<=cornerSegs;cs2++){
+          var ca=co[2]+(co[3]-co[2])*cs2/cornerSegs
+          rrpts.push(jv(co[0]+Math.cos(ca)*cr, co[1]+Math.sin(ca)*cr))
+        }
+      }
+      drawPts(rrpts)
+    } else {
+      tc2.roundRect(-rrW,-rrH,rrW*2,rrH*2,cr)
+    }
   }
   else if(s==="polygon"){
+    var polyPts=[]
     for(var i=0;i<sides;i++){
       var a=(i*2*Math.PI/sides)-Math.PI/2
-      var jx=jitter>0?(rnd()-0.5)*2*jitter*r:0, jy=jitter>0?(rnd()-0.5)*2*jitter*r:0
-      var px2=Math.cos(a)*r+jx, py2=Math.sin(a)*r+jy
-      i===0?tc2.moveTo(px2,py2):tc2.lineTo(px2,py2)
+      polyPts.push(jv(Math.cos(a)*r, Math.sin(a)*r))
     }
-    tc2.closePath()
+    drawPts(polyPts)
   }
   else if(s==="star"){
-    var ir=r*innerR
+    var ir=r*innerR, starPts=[]
     for(var j=0;j<pts*2;j++){
       var a2=(j*Math.PI/pts)-Math.PI/2, rr=j%2===0?r:ir
-      var jx2=jitter>0&&j%2===0?(rnd()-0.5)*2*jitter*r:0
-      var jy2=jitter>0&&j%2===0?(rnd()-0.5)*2*jitter*r:0
-      var vx=Math.cos(a2)*rr+jx2, vy=Math.sin(a2)*rr+jy2
-      j===0?tc2.moveTo(vx,vy):tc2.lineTo(vx,vy)
+      var v=j%2===0?jv(Math.cos(a2)*rr,Math.sin(a2)*rr):[Math.cos(a2)*rr,Math.sin(a2)*rr]
+      starPts.push(v)
     }
-    tc2.closePath()
+    drawPts(starPts)
   }
-  else if(s==="ring"){tc2.arc(0,0,r,0,Math.PI*2);tc2.moveTo(r*ringR,0);tc2.arc(0,0,r*ringR,0,Math.PI*2,true)}
+  else if(s==="ring"){
+    if(renderMode==="faceted") {
+      // Outer ring
+      var outerPts=[]; for(var oi=0;oi<segs;oi++) outerPts.push(jv(Math.cos(oi*Math.PI*2/segs)*r,Math.sin(oi*Math.PI*2/segs)*r))
+      drawPts(outerPts)
+      // Inner ring (separate path, evenodd cuts hole)
+      tc2.moveTo(r*ringR,0)
+      var innerPts=[]; for(var ii=0;ii<segs;ii++) innerPts.push(jv(Math.cos(ii*Math.PI*2/segs)*r*ringR,Math.sin(ii*Math.PI*2/segs)*r*ringR))
+      tc2.moveTo(innerPts[0][0],innerPts[0][1])
+      for(var ik=1;ik<innerPts.length;ik++) tc2.lineTo(innerPts[ik][0],innerPts[ik][1])
+      tc2.closePath()
+    } else {
+      tc2.arc(0,0,r,0,Math.PI*2); tc2.moveTo(r*ringR,0); tc2.arc(0,0,r*ringR,0,Math.PI*2,true)
+    }
+  }
+
   if(fill&&fill!=="none"){tc2.fillStyle=fill;tc2.fill("evenodd")}
   if(strokeW>0){
     tc2.globalAlpha=strokeOpacity
@@ -2598,11 +2661,40 @@ function ShapeP(props) {
         </div>
       )}
       {s==="ring" && <Sl l="inner r" v={p.ringR} mn={.1} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{ringR:v}))}}/>}
+      {s==="rounded-rect" && (
+        <Sl l="corner r" v={p.cornerR==null?.2:p.cornerR} mn={0} mx={1} st={.01}
+          fmt={function(v){return Math.round(v*100)+"%"}}
+          fn={function(v){up(Object.assign({},p,{cornerR:v}))}}/>
+      )}
       {s==="polygon" && (
         <div>
           <Sl l="sides" v={p.sides} mn={3} mx={14} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{sides:v}))}}/>
           <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
           {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
+        </div>
+      )}
+      {/* Render mode: smooth (arcs) vs faceted (line segments — enables jitter on all shapes) */}
+      <PR l="render">
+        {["smooth","faceted"].map(function(m){
+          return <button key={m} className={(p.renderMode||"smooth")===m?"ac":"ghost"}
+            onClick={function(){up(Object.assign({},p,{renderMode:m}))}}
+            style={{flex:1,fontSize:10,minHeight:32}}>{m}</button>
+        })}
+      </PR>
+      {(p.renderMode==="faceted")&&(
+        <div>
+          <Sl l="segments" v={p.segments||32} mn={3} mx={128} st={1}
+            fmt={function(v){return Math.round(v)}}
+            fn={function(v){up(Object.assign({},p,{segments:v}))}}/>
+          {(s==="ellipse"||s==="ring"||s==="rectangle"||s==="rounded-rect")&&(
+            <div>
+              <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01}
+                fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
+              {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1}
+                fmt={function(v){return Math.round(v)}}
+                fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
+            </div>
+          )}
         </div>
       )}
       <Co l="fill" v={p.fill} fn={function(v){up(Object.assign({},p,{fill:v}))}}/>
