@@ -925,8 +925,12 @@ function pxFn(d,w,h,t,p) {
       d[i+2]=Math.round(shC[2]+(hiC[2]-shC[2])*dtL)
     }
   } else if (t==="wave") {
-    // Sinusoidal pixel displacement
-    var wAmp=(p.amplitude||0.05)*Math.max(w,h), wFreqX=p.freqX||3, wFreqY=p.freqY||3
+    // Sinusoidal pixel displacement with optional per-param randomisation
+    var wRnd=seededRand(p.rSeed||1)
+    function wRv(v,en,sc,bi,amt){if(!en)return v;var r=wRnd();if(bi!==false)r=r*2-1;return v+r*(sc||.5)*(amt==null?1:amt)}
+    var wAmp=wRv(p.amplitude||0.05,p.rAmpEn,p.rAmpSc,p.rAmpBi,p.rAmpAmt)*Math.max(w,h)
+    var wFreqX=wRv(p.freqX||3,p.rFxEn,p.rFxSc,p.rFxBi,p.rFxAmt)
+    var wFreqY=wRv(p.freqY||3,p.rFyEn,p.rFySc,p.rFyBi,p.rFyAmt)
     var wPhaseX=p.phaseX||0, wPhaseY=p.phaseY||0
     var orig=new Uint8ClampedArray(d)
     for(i=0;i<w*h;i++){
@@ -3123,16 +3127,37 @@ function EfxPrimary(props) {
       fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({threshold:v})}}/>)
   if(efx.type==="wave") return (
     <div>
-      <Sl l="amplitude" v={p.amplitude==null?.05:p.amplitude} mn={0} mx={.5} st={.005}
-        fmt={function(v){return (v*100).toFixed(1)+"%"}} fn={function(v){up({amplitude:v})}}/>
-      <Sl l="freq x" v={p.freqX==null?3:p.freqX} mn={0} mx={20} st={.5}
-        fmt={function(v){return v.toFixed(1)}} fn={function(v){up({freqX:v})}}/>
-      <Sl l="freq y" v={p.freqY==null?3:p.freqY} mn={0} mx={20} st={.5}
-        fmt={function(v){return v.toFixed(1)}} fn={function(v){up({freqY:v})}}/>
+      <RandRow enabled={p.rAmpEn} onToggle={function(){up({rAmpEn:!p.rAmpEn})}}
+        rangeBipolar={p.rAmpBi!==false} onRangeBipolar={function(v){up({rAmpBi:v})}}
+        scale={p.rAmpSc} onScale={function(v){up({rAmpSc:v})}}
+        amount={p.rAmpAmt} onAmount={function(v){up({rAmpAmt:v})}}
+        seed={p.rSeed||1} onSeed={function(v){up({rSeed:v})}}>
+        <Sl l="amplitude" v={p.amplitude==null?.05:p.amplitude} mn={0} mx={.5} st={.005}
+          fmt={function(v){return (v*100).toFixed(1)+"%"}} fn={function(v){up({amplitude:v})}}/>
+      </RandRow>
+      <RandRow enabled={p.rFxEn} onToggle={function(){up({rFxEn:!p.rFxEn})}}
+        rangeBipolar={p.rFxBi!==false} onRangeBipolar={function(v){up({rFxBi:v})}}
+        scale={p.rFxSc} onScale={function(v){up({rFxSc:v})}}
+        amount={p.rFxAmt} onAmount={function(v){up({rFxAmt:v})}}
+        seed={p.rSeed||1} onSeed={function(v){up({rSeed:v})}}>
+        <Sl l="freq x" v={p.freqX==null?3:p.freqX} mn={0} mx={20} st={.5}
+          fmt={function(v){return v.toFixed(1)}} fn={function(v){up({freqX:v})}}/>
+      </RandRow>
+      <RandRow enabled={p.rFyEn} onToggle={function(){up({rFyEn:!p.rFyEn})}}
+        rangeBipolar={p.rFyBi!==false} onRangeBipolar={function(v){up({rFyBi:v})}}
+        scale={p.rFySc} onScale={function(v){up({rFySc:v})}}
+        amount={p.rFyAmt} onAmount={function(v){up({rFyAmt:v})}}
+        seed={p.rSeed||1} onSeed={function(v){up({rSeed:v})}}>
+        <Sl l="freq y" v={p.freqY==null?3:p.freqY} mn={0} mx={20} st={.5}
+          fmt={function(v){return v.toFixed(1)}} fn={function(v){up({freqY:v})}}/>
+      </RandRow>
       <Sl l="phase x" v={p.phaseX||0} mn={0} mx={6.28} st={.05}
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up({phaseX:v})}}/>
       <Sl l="phase y" v={p.phaseY||0} mn={0} mx={6.28} st={.05}
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up({phaseY:v})}}/>
+      <div style={{fontSize:8,color:"var(--mu)",padding:"2px 84px",fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.4}}>
+        All rand params share one seed
+      </div>
     </div>)
   if(efx.type==="twirl") return (
     <div>
