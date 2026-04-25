@@ -1064,33 +1064,58 @@ function gShape(ctx,p,w,h) {
   }
 
   tc2.beginPath()
+  // Smooth closed curve through jittered points (midpoint bezier method)
+  // Used when smooth mode + jitter>0, giving organic warped smooth shapes
+  function drawSmooth(pts2) {
+    if(pts2.length<3){drawPts(pts2);return}
+    tc2.beginPath()
+    var n=pts2.length
+    for(var si=0;si<n;si++){
+      var p0=pts2[(si-1+n)%n], p1=pts2[si], p2=pts2[(si+1)%n]
+      var mx1=(p0[0]+p1[0])/2, my1=(p0[1]+p1[1])/2
+      var mx2=(p1[0]+p2[0])/2, my2=(p1[1]+p2[1])/2
+      if(si===0) tc2.moveTo(mx1,my1)
+      tc2.quadraticCurveTo(p1[0],p1[1],mx2,my2)
+    }
+    tc2.closePath()
+  }
+
   if(s==="ellipse") {
     if(renderMode==="faceted") {
       var epts=[]; for(var ei=0;ei<segs;ei++) epts.push(ev(ei*Math.PI*2/segs))
       drawPts(epts)
+    } else if(jitter>0) {
+      // Smooth jitter: sample ellipse as points, draw smooth curve through them
+      var ejpts=[]; for(var eji=0;eji<segs;eji++) ejpts.push(ev(eji*Math.PI*2/segs))
+      drawSmooth(ejpts)
     } else { tc2.ellipse(0,0,r*rx,r*ry,0,0,Math.PI*2) }
   }
   else if(s==="rectangle") {
     if(renderMode==="faceted") {
-      // Faceted rect: sample perimeter as points (4 corners + intermediate)
       var rw2=r*rx, rh2=r*ry
       var edgeSegs=Math.max(1,Math.round(segs/4))
       var rpts=[]
-      for(var ri=0;ri<edgeSegs;ri++) rpts.push(jv(-rw2+ri*2*rw2/edgeSegs,-rh2))  // top
-      for(var ri2=0;ri2<edgeSegs;ri2++) rpts.push(jv(rw2,-rh2+ri2*2*rh2/edgeSegs))  // right
-      for(var ri3=0;ri3<edgeSegs;ri3++) rpts.push(jv(rw2-ri3*2*rw2/edgeSegs,rh2))  // bottom
-      for(var ri4=0;ri4<edgeSegs;ri4++) rpts.push(jv(-rw2,rh2-ri4*2*rh2/edgeSegs))  // left
+      for(var ri=0;ri<edgeSegs;ri++) rpts.push(jv(-rw2+ri*2*rw2/edgeSegs,-rh2))
+      for(var ri2=0;ri2<edgeSegs;ri2++) rpts.push(jv(rw2,-rh2+ri2*2*rh2/edgeSegs))
+      for(var ri3=0;ri3<edgeSegs;ri3++) rpts.push(jv(rw2-ri3*2*rw2/edgeSegs,rh2))
+      for(var ri4=0;ri4<edgeSegs;ri4++) rpts.push(jv(-rw2,rh2-ri4*2*rh2/edgeSegs))
       drawPts(rpts)
+    } else if(jitter>0) {
+      var rw3=r*rx, rh3=r*ry
+      var rjSegs=Math.max(1,Math.round(segs/4))
+      var rjpts=[]
+      for(var rj=0;rj<rjSegs;rj++) rjpts.push(jv(-rw3+rj*2*rw3/rjSegs,-rh3))
+      for(var rj2=0;rj2<rjSegs;rj2++) rjpts.push(jv(rw3,-rh3+rj2*2*rh3/rjSegs))
+      for(var rj3=0;rj3<rjSegs;rj3++) rjpts.push(jv(rw3-rj3*2*rw3/rjSegs,rh3))
+      for(var rj4=0;rj4<rjSegs;rj4++) rjpts.push(jv(-rw3,rh3-rj4*2*rh3/rjSegs))
+      drawSmooth(rjpts)
     } else { tc2.rect(-r*rx,-r*ry,r*rx*2,r*ry*2) }
   }
   else if(s==="rounded-rect") {
-    // Dedicated rounded rectangle — cornerR controls corner curve as fraction of min(rx,ry)*r
     var rrW=r*rx, rrH=r*ry, cr=Math.min(rrW,rrH)*Math.max(0,Math.min(1,cornerR))
-    if(renderMode==="faceted") {
-      // Sample rounded rect perimeter as segments — corners sampled as arc points
+    if(renderMode==="faceted"||jitter>0) {
       var cornerSegs=Math.max(2,Math.round(segs/8))
       var rrpts=[]
-      // Each corner: centre, radius cr, from angle a to a+PI/2
       var corners=[[-rrW+cr,-rrH+cr,Math.PI,3*Math.PI/2],[rrW-cr,-rrH+cr,3*Math.PI/2,2*Math.PI],[rrW-cr,rrH-cr,0,Math.PI/2],[-rrW+cr,rrH-cr,Math.PI/2,Math.PI]]
       for(var ci=0;ci<corners.length;ci++){
         var co=corners[ci]
@@ -1099,7 +1124,8 @@ function gShape(ctx,p,w,h) {
           rrpts.push(jv(co[0]+Math.cos(ca)*cr, co[1]+Math.sin(ca)*cr))
         }
       }
-      drawPts(rrpts)
+      if(renderMode==="faceted") drawPts(rrpts)
+      else drawSmooth(rrpts)  // smooth jitter on rounded-rect
     } else {
       tc2.roundRect(-rrW,-rrH,rrW*2,rrH*2,cr)
     }
@@ -1110,7 +1136,8 @@ function gShape(ctx,p,w,h) {
       var a=(i*2*Math.PI/sides)-Math.PI/2
       polyPts.push(jv(Math.cos(a)*r, Math.sin(a)*r))
     }
-    drawPts(polyPts)
+    if(renderMode==="smooth"&&jitter>0) drawSmooth(polyPts)
+    else drawPts(polyPts)
   }
   else if(s==="star"){
     var ir=r*innerR, starPts=[]
@@ -1119,19 +1146,26 @@ function gShape(ctx,p,w,h) {
       var v=j%2===0?jv(Math.cos(a2)*rr,Math.sin(a2)*rr):[Math.cos(a2)*rr,Math.sin(a2)*rr]
       starPts.push(v)
     }
+    // Stars keep straight lines between points even in smooth mode — otherwise tips disappear
     drawPts(starPts)
   }
   else if(s==="ring"){
     if(renderMode==="faceted") {
-      // Outer ring
       var outerPts=[]; for(var oi=0;oi<segs;oi++) outerPts.push(jv(Math.cos(oi*Math.PI*2/segs)*r,Math.sin(oi*Math.PI*2/segs)*r))
       drawPts(outerPts)
-      // Inner ring (separate path, evenodd cuts hole)
-      tc2.moveTo(r*ringR,0)
       var innerPts=[]; for(var ii=0;ii<segs;ii++) innerPts.push(jv(Math.cos(ii*Math.PI*2/segs)*r*ringR,Math.sin(ii*Math.PI*2/segs)*r*ringR))
       tc2.moveTo(innerPts[0][0],innerPts[0][1])
       for(var ik=1;ik<innerPts.length;ik++) tc2.lineTo(innerPts[ik][0],innerPts[ik][1])
       tc2.closePath()
+    } else if(jitter>0) {
+      // Smooth jitter on ring — both outer and inner drawn as smooth curves
+      var rOutPts=[]; for(var ro=0;ro<segs;ro++) rOutPts.push(jv(Math.cos(ro*Math.PI*2/segs)*r,Math.sin(ro*Math.PI*2/segs)*r))
+      drawSmooth(rOutPts)
+      // Inner ring as separate smooth path (evenodd cuts hole)
+      var rInPts=[]; var rndInner=seededRand(jitterSeed+9999)
+      function jvI(vx,vy){if(!jitter)return[vx,vy];return[vx+(rndInner()-0.5)*2*jitter*r*ringR,vy+(rndInner()-0.5)*2*jitter*r*ringR]}
+      for(var ri5=0;ri5<segs;ri5++) rInPts.push(jvI(Math.cos(ri5*Math.PI*2/segs)*r*ringR,Math.sin(ri5*Math.PI*2/segs)*r*ringR))
+      drawSmooth(rInPts)
     } else {
       tc2.arc(0,0,r,0,Math.PI*2); tc2.moveTo(r*ringR,0); tc2.arc(0,0,r*ringR,0,Math.PI*2,true)
     }
@@ -2682,19 +2716,18 @@ function ShapeP(props) {
         })}
       </PR>
       {(p.renderMode==="faceted")&&(
+        <Sl l="segments" v={p.segments||32} mn={3} mx={128} st={1}
+          fmt={function(v){return Math.round(v)}}
+          fn={function(v){up(Object.assign({},p,{segments:v}))}}/>
+      )}
+      {/* Jitter available in both modes for all shapes */}
+      {(s==="ellipse"||s==="ring"||s==="rectangle"||s==="rounded-rect")&&(
         <div>
-          <Sl l="segments" v={p.segments||32} mn={3} mx={128} st={1}
+          <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01}
+            fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
+          {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1}
             fmt={function(v){return Math.round(v)}}
-            fn={function(v){up(Object.assign({},p,{segments:v}))}}/>
-          {(s==="ellipse"||s==="ring"||s==="rectangle"||s==="rounded-rect")&&(
-            <div>
-              <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01}
-                fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
-              {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1}
-                fmt={function(v){return Math.round(v)}}
-                fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
-            </div>
-          )}
+            fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
         </div>
       )}
       <Co l="fill" v={p.fill} fn={function(v){up(Object.assign({},p,{fill:v}))}}/>
