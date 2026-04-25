@@ -344,6 +344,49 @@ function BlendIfSlider(props) {
 }
 var COMMUTATIVE_MODES = {add:1,multiply:1,screen:1,difference:1,exclusion:1,darken:1,lighten:1}
 
+// RandRow: wraps a slider with optional randomise controls
+// props: enabled, onToggle, rangeBipolar, onRangeBipolar, scale, onScale, offset, onOffset, amount, onAmount, seed, onSeed
+function RandRow(props) {
+  var en = props.enabled||false
+  return (
+    <div>
+      {props.children}
+      <div style={{display:"flex",alignItems:"center",gap:6,padding:"0 84px 2px",marginTop:-2}}>
+        <button onClick={props.onToggle}
+          style={{fontSize:8,padding:"1px 6px",borderRadius:3,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",
+            border:"1px solid "+(en?"var(--lv)":"var(--bd)"),
+            background:en?"rgba(176,96,240,.1)":"none",
+            color:en?"var(--lv)":"var(--mu)"}}>
+          {en?"[×] rand":"[+] rand"}
+        </button>
+      </div>
+      {en&&(
+        <div style={{paddingLeft:84,paddingBottom:6,display:"flex",flexDirection:"column",gap:2}}>
+          <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:2}}>
+            <span style={{fontSize:8,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",minWidth:40}}>range</span>
+            {["0,1","-1,1"].map(function(opt){
+              var isBi=opt==="-1,1"
+              var active=(props.rangeBipolar||false)===isBi
+              return <button key={opt} onClick={function(){props.onRangeBipolar(isBi)}}
+                style={{fontSize:8,padding:"1px 6px",borderRadius:3,cursor:"pointer",
+                  fontFamily:"'IBM Plex Mono',monospace",
+                  border:"1px solid "+(active?"var(--lv)":"var(--bd)"),
+                  background:active?"rgba(176,96,240,.1)":"none",
+                  color:active?"var(--lv)":"var(--mu)"}}>{opt}</button>
+            })}
+          </div>
+          <Sl l="scale" v={props.scale==null?.5:props.scale} mn={0} mx={2} st={.01}
+            fn={props.onScale}/>
+          <Sl l="amount" v={props.amount==null?1:props.amount} mn={0} mx={1} st={.01}
+            fn={props.onAmount}/>
+          <Sl l="seed" v={props.seed==null?1:props.seed} mn={0} mx={9999} st={1}
+            fmt={function(v){return Math.round(v)}} fn={props.onSeed}/>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // BlendIfAccordion — collapsible section wrapping BlendIf sliders
 function BlendIfAccordion(props) {
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
@@ -872,30 +915,54 @@ function gSolid(ctx,p,w,h) { ctx.save();ctx.globalAlpha=p.alpha==null?1:p.alpha;
 function gShape(ctx,p,w,h) {
   var s=p.shapeType||"ellipse",x=p.x||.5,y=p.y||.5,sz=p.sz||.6,rot=p.rot||0
   var fill=p.fill||"#fff",stroke=p.stroke||"#000",strokeW=p.strokeW||0
-  var pts=p.pts||5,innerR=p.innerR||.45,sides=p.sides||5,ringR=p.ringR||.62,alpha=p.alpha==null?1:p.alpha
-  // Render at 2× resolution then downscale — gives SSAA-quality antialiasing on
-  // all path types, especially star and polygon which have sharp angle vertices.
+  var strokeOpacity=p.strokeOpacity==null?1:p.strokeOpacity
+  var pts=Math.round(p.pts||5),innerR=p.innerR||.45,sides=Math.round(p.sides||5),ringR=p.ringR||.62
+  var opacity=p.opacity==null?(p.alpha==null?1:p.alpha):p.opacity  // opacity (was alpha)
+  var rx=p.rx==null?1:p.rx, ry=p.ry==null?1:p.ry  // x/y radius multipliers for ellipse/rect
+  var jitter=p.jitter||0, jitterSeed=p.jitterSeed||1
+  var rnd=seededRand(jitterSeed)
   var sc=2, sw2=w*sc, sh2=h*sc
   var tc=document.createElement("canvas"); tc.width=sw2; tc.height=sh2
   var tc2=tc.getContext("2d")
   var r=sz*Math.min(sw2,sh2)/2
   tc2.translate(x*sw2,y*sh2); tc2.rotate(rot*Math.PI/180); tc2.beginPath()
-  if(s==="ellipse")tc2.ellipse(0,0,r,r,0,0,Math.PI*2)
-  else if(s==="rectangle")tc2.rect(-r,-r,r*2,r*2)
+  if(s==="ellipse") tc2.ellipse(0,0,r*rx,r*ry,0,0,Math.PI*2)
+  else if(s==="rectangle"){
+    if(rx!==1||ry!==1){
+      // Rounded rectangle using x/y radius
+      var cRx=Math.min(r*rx,r*ry)*Math.min(rx,ry), cRy=cRx
+      var rw=r*2*rx, rh=r*2*ry
+      tc2.roundRect(-rw/2,-rh/2,rw,rh,[cRx])
+    } else { tc2.rect(-r,-r,r*2,r*2) }
+  }
   else if(s==="polygon"){
-    for(var i=0;i<sides;i++){var a=(i*2*Math.PI/sides)-Math.PI/2;i===0?tc2.moveTo(Math.cos(a)*r,Math.sin(a)*r):tc2.lineTo(Math.cos(a)*r,Math.sin(a)*r)}
+    for(var i=0;i<sides;i++){
+      var a=(i*2*Math.PI/sides)-Math.PI/2
+      var jx=jitter>0?(rnd()-0.5)*2*jitter*r:0, jy=jitter>0?(rnd()-0.5)*2*jitter*r:0
+      var px2=Math.cos(a)*r+jx, py2=Math.sin(a)*r+jy
+      i===0?tc2.moveTo(px2,py2):tc2.lineTo(px2,py2)
+    }
     tc2.closePath()
   }
   else if(s==="star"){
     var ir=r*innerR
-    for(var j=0;j<pts*2;j++){var a2=(j*Math.PI/pts)-Math.PI/2,rr=j%2===0?r:ir;j===0?tc2.moveTo(Math.cos(a2)*rr,Math.sin(a2)*rr):tc2.lineTo(Math.cos(a2)*rr,Math.sin(a2)*rr)}
+    for(var j=0;j<pts*2;j++){
+      var a2=(j*Math.PI/pts)-Math.PI/2, rr=j%2===0?r:ir
+      var jx2=jitter>0&&j%2===0?(rnd()-0.5)*2*jitter*r:0
+      var jy2=jitter>0&&j%2===0?(rnd()-0.5)*2*jitter*r:0
+      var vx=Math.cos(a2)*rr+jx2, vy=Math.sin(a2)*rr+jy2
+      j===0?tc2.moveTo(vx,vy):tc2.lineTo(vx,vy)
+    }
     tc2.closePath()
   }
   else if(s==="ring"){tc2.arc(0,0,r,0,Math.PI*2);tc2.moveTo(r*ringR,0);tc2.arc(0,0,r*ringR,0,Math.PI*2,true)}
   if(fill&&fill!=="none"){tc2.fillStyle=fill;tc2.fill("evenodd")}
-  if(strokeW>0){tc2.strokeStyle=stroke;tc2.lineWidth=strokeW*sc;tc2.stroke()}
-  // Downscale to output with bilinear filtering for smooth edges
-  ctx.save();ctx.globalAlpha=alpha;ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high"
+  if(strokeW>0){
+    tc2.globalAlpha=strokeOpacity
+    tc2.strokeStyle=stroke;tc2.lineWidth=strokeW*sc;tc2.stroke()
+    tc2.globalAlpha=1
+  }
+  ctx.save();ctx.globalAlpha=opacity;ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high"
   ctx.drawImage(tc,0,0,w,h);ctx.restore()
 }
 function gradStops(p) {
@@ -937,22 +1004,37 @@ function gNoise(ctx,p,w,h) {
 }
 function gPat(ctx,p,w,h) {
   var pType=p.pType||"checkerboard",c1=p.c1||"#fff",c2=p.c2||"#000"
-  var scale=p.scale||.1,sw=p.sw||.1,angle=p.angle||0,dr=p.dr||.03,ds=p.ds||.1,alpha=p.alpha==null?1:p.alpha
-  var a1=p.a1==null?1:p.a1, a2=p.a2==null?1:p.a2   // per-colour alpha (0-1)
+  var scale=p.scale||.1,sw=p.sw||.1,angle=p.angle||0,dr=p.dr||.03,ds=p.ds||.1
+  var alpha=p.alpha==null?1:p.alpha
+  var a1=p.a1==null?1:p.a1, a2=p.a2==null?1:p.a2
   var CA=h2r(c1),CB=h2r(c2)
   var img=ctx.createImageData(w,h),d=img.data
-  // cs = cell size in pixels. scale is fraction of canvas dimension (0.1 = 10% = ~10 tiles across).
-  var cs  = Math.max(2, Math.round(scale * Math.max(w,h)))
-  var sW  = Math.max(1, sw * Math.max(w,h))
-  var dR  = Math.max(1, dr * Math.max(w,h))
-  var dS  = Math.max(2, ds * Math.max(w,h))
-  var rad = angle * Math.PI / 180
+  var cs   = Math.max(2, scale * Math.max(w,h))
+  var sW   = Math.max(1, sw * Math.max(w,h))
+  var dR   = Math.max(1, dr * Math.max(w,h))
+  var dS   = Math.max(2, ds * Math.max(w,h))
+  var rad  = angle * Math.PI / 180
+  var cx2  = w/2, cy2 = h/2
+
+  // Apply randomisation to positional/scale/angle params
+  var seed = p.rSeed||1, rnd = seededRand(seed)
+  function rv(en,v,sc,bi,amt){if(!en)return v;var r=rnd();if(bi)r=r*2-1;return v+r*sc*(amt==null?1:amt)}
+  cs = rv(p.scaleRandEn,cs,p.rScaleSc||.5,p.rScaleBi!==false,p.rScaleAmt)
+  sW = rv(p.swRandEn,sW,p.rSwSc||.5,p.rSwBi!==false,p.rSwAmt)
+  dR = rv(p.drRandEn,dR,p.rDrSc||.5,p.rDrBi!==false,p.rDrAmt)
+  dS = rv(p.dsRandEn,dS,p.rDsSc||.5,p.rDsBi!==false,p.rDsAmt)
+  if(p.angleRandEn){var ar=rnd();if(p.rAngleBi!==false)ar=ar*2-1;rad=(angle+ar*(p.rAngleSc||30)*(p.rAngleAmt==null?1:p.rAngleAmt))*Math.PI/180}
 
   for(var py=0;py<h;py++) for(var px=0;px<w;px++){
     var ii=(py*w+px)*4, r, g, b
 
     if(pType==="checkerboard"){
-      var t=(Math.floor(px/cs)+Math.floor(py/cs))%2
+      // Rotation: rotate pixel around canvas centre before grid lookup
+      var rpx=px-cx2, rpy=py-cy2
+      var rx2=rpx*Math.cos(rad)-rpy*Math.sin(rad)+cx2
+      var ry2=rpx*Math.sin(rad)+rpy*Math.cos(rad)+cy2
+      var t=(Math.floor(rx2/cs)+Math.floor(ry2/cs))%2
+      if(t<0)t+=2
       r=t===0?CA.r:CB.r; g=t===0?CA.g:CB.g; b=t===0?CA.b:CB.b
       d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=Math.round((t===0?a1:a2)*255)
 
@@ -963,8 +1045,12 @@ function gPat(ctx,p,w,h) {
       d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=Math.round((t2===0?a1:a2)*255)
 
     } else if(pType==="dots"){
-      var gx=((px%dS)+dS)%dS-dS/2
-      var gy=((py%dS)+dS)%dS-dS/2
+      // Rotation: rotate pixel around centre for dot grid
+      var dpx=px-cx2, dpy=py-cy2
+      var drx=dpx*Math.cos(rad)-dpy*Math.sin(rad)
+      var dry=dpx*Math.sin(rad)+dpy*Math.cos(rad)
+      var gx=((drx%dS)+dS)%dS-dS/2
+      var gy=((dry%dS)+dS)%dS-dS/2
       var dist=Math.sqrt(gx*gx+gy*gy)
       var blend=Math.max(0,Math.min(1,dist-dR+0.5))
       r=Math.round(CA.r*(1-blend)+CB.r*blend)
@@ -974,6 +1060,18 @@ function gPat(ctx,p,w,h) {
     }
   }
   ctx.save();ctx.globalAlpha=alpha;ctx.putImageData(img,0,0);ctx.restore()
+}
+// Seeded pseudo-random for reproducible jitter/variation. LCG — fast, good enough.
+function seededRand(seed) {
+  var s = (seed * 1664525 + 1013904223) & 0xFFFFFFFF
+  return function() { s = (s * 1664525 + 1013904223) & 0xFFFFFFFF; return (s >>> 0) / 0xFFFFFFFF }
+}
+// Apply per-param randomise: returns base + bipolar random in range scaled by amount
+function applyRand(base, rnd, enabled, rangeScale, rangeBipolar, amount) {
+  if(!enabled) return base
+  var r = rnd() // 0-1
+  if(rangeBipolar) r = (r * 2 - 1)  // -1 to 1
+  return base + r * rangeScale * amount
 }
 function gImg(ctx,p,iC,w,h) {
   var url=p.url||"",fit=p.fit||"contain",alpha=p.alpha==null?1:p.alpha
@@ -2271,19 +2369,48 @@ function ShapeP(props) {
       <Sl l="x" v={p.x} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x:v}))}}/>
       <Sl l="y" v={p.y} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y:v}))}}/>
       <Sl l="size" v={p.sz} mn={.05} mx={1.8} st={.01} fn={function(v){up(Object.assign({},p,{sz:v}))}}/>
+      {(s==="ellipse") && (
+        <div>
+          <Sl l="x radius" v={p.rx==null?1:p.rx} mn={.1} mx={3} st={.01} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>
+          <Sl l="y radius" v={p.ry==null?1:p.ry} mn={.1} mx={3} st={.01} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>
+        </div>
+      )}
+      {(s==="rectangle") && (
+        <div>
+          <Sl l="corner x" v={p.rx==null?1:p.rx} mn={0} mx={2} st={.01} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>
+          <Sl l="corner y" v={p.ry==null?1:p.ry} mn={0} mx={2} st={.01} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>
+        </div>
+      )}
       <Sl l="rotation" v={p.rot} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rot:v}))}}/>
       {s==="star" && (
         <div>
           <Sl l="points" v={p.pts} mn={3} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pts:v}))}}/>
           <Sl l="inner r" v={p.innerR} mn={.05} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{innerR:v}))}}/>
+          <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
+          {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
         </div>
       )}
       {s==="ring" && <Sl l="inner r" v={p.ringR} mn={.1} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{ringR:v}))}}/>}
-      {s==="polygon" && <Sl l="sides" v={p.sides} mn={3} mx={14} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{sides:v}))}}/>}
+      {s==="polygon" && (
+        <div>
+          <Sl l="sides" v={p.sides} mn={3} mx={14} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{sides:v}))}}/>
+          <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
+          {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
+        </div>
+      )}
       <Co l="fill" v={p.fill} fn={function(v){up(Object.assign({},p,{fill:v}))}}/>
       <Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>
-      {p.strokeW>0 && <Co l="stroke" v={p.stroke} fn={function(v){up(Object.assign({},p,{stroke:v}))}}/>}
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      {p.strokeW>0 && (
+        <div>
+          <Co l="stroke" v={p.stroke} fn={function(v){up(Object.assign({},p,{stroke:v}))}}/>
+          <Sl l="stroke op" v={p.strokeOpacity==null?1:p.strokeOpacity} mn={0} mx={1} st={.01}
+            fmt={function(v){return Math.round(v*100)+"%"}}
+            fn={function(v){up(Object.assign({},p,{strokeOpacity:v}))}}/>
+        </div>
+      )}
+      <Sl l="opacity" v={p.opacity==null?(p.alpha==null?1:p.alpha):p.opacity} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}}
+        fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
     </div>
   )
 }
@@ -2377,12 +2504,27 @@ function NoiseP(props) {
       <Sl l="scale" v={p.scale} mn={.005} mx={.4} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
       {(p.nType==="perlin"||p.nType==="turbulent") && <Sl l="octaves" v={p.oct} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>}
       <Sl l="seed" v={p.seed} mn={0} mx={99} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      <Sl l="opacity" v={p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
   )
 }
 function PatP(props) {
   var p=props.p, up=props.up
+  function mkRand(field,scField,biField,amtField) {
+    var enField=field+"RandEn"
+    return {
+      enabled:p[enField]||false,
+      onToggle:function(){var o={};o[enField]=!p[enField];up(Object.assign({},p,o))},
+      rangeBipolar:p[biField]!==false,
+      onRangeBipolar:function(v){var o={};o[biField]=v;up(Object.assign({},p,o))},
+      scale:p[scField]||.5,
+      onScale:function(v){var o={};o[scField]=v;up(Object.assign({},p,o))},
+      amount:p[amtField]==null?1:p[amtField],
+      onAmount:function(v){var o={};o[amtField]=v;up(Object.assign({},p,o))},
+      seed:p.rSeed||1,
+      onSeed:function(v){up(Object.assign({},p,{rSeed:v}))}
+    }
+  }
   return (
     <div>
       <Se l="type" v={p.pType} opts={PTYPES} fn={function(v){up(Object.assign({},p,{pType:v}))}}/>
@@ -2390,20 +2532,29 @@ function PatP(props) {
       <Sl l="opacity 1" v={p.a1==null?1:p.a1} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a1:v}))}}/>
       <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
       <Sl l="opacity 2" v={p.a2==null?1:p.a2} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a2:v}))}}/>
-      <Sl l="scale" v={p.scale} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+      <RandRow {...mkRand("scale","rScaleSc","rScaleBi","rScaleAmt")}>
+        <Sl l="scale" v={p.scale} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+      </RandRow>
+      {/* Rotation — all patterns get rotation */}
+      <RandRow {...mkRand("angle","rAngleSc","rAngleBi","rAngleAmt")}>
+        <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>
+      </RandRow>
       {p.pType==="stripes" && (
-        <div>
+        <RandRow {...mkRand("sw","rSwSc","rSwBi","rSwAmt")}>
           <Sl l="width" v={p.sw} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{sw:v}))}}/>
-          <Sl l="angle" v={p.angle} mn={0} mx={180} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>
-        </div>
+        </RandRow>
       )}
       {p.pType==="dots" && (
         <div>
-          <Sl l="dot r" v={p.dr} mn={.005} mx={.2} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{dr:v}))}}/>
-          <Sl l="spacing" v={p.ds} mn={.02} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{ds:v}))}}/>
+          <RandRow {...mkRand("dr","rDrSc","rDrBi","rDrAmt")}>
+            <Sl l="dot r" v={p.dr} mn={.005} mx={.2} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{dr:v}))}}/>
+          </RandRow>
+          <RandRow {...mkRand("ds","rDsSc","rDsBi","rDsAmt")}>
+            <Sl l="spacing" v={p.ds} mn={.02} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{ds:v}))}}/>
+          </RandRow>
         </div>
       )}
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      <Sl l="opacity" v={p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
   )
 }
