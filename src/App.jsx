@@ -126,7 +126,7 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 /* ── Settings sheet ── */
 .sheet-scrim{position:fixed;inset:0;z-index:700;display:flex;flex-direction:column;justify-content:flex-end;pointer-events:none;}
 .sheet-scrim.top{justify-content:flex-start;}
-.sheet-body{background:var(--pn);border-radius:18px 18px 0 0;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
+.sheet-body{background:var(--pn);border-radius:18px 18px 0 0;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;pointer-events:auto;}
 .sheet-grip{width:40px;height:4px;background:var(--bd);border-radius:2px;margin:10px auto 6px;flex-shrink:0;}
 .sheet-hdr{display:flex;align-items:center;padding:4px 16px 12px;flex-shrink:0;}
 .sheet-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--tx);flex:1;}
@@ -4938,8 +4938,9 @@ function SettingsSheet(props) {
 
   if (!props.open) return null
   return (
-    <div className="sheet-scrim" onClick={function(e){ if(e.target===e.currentTarget) props.onClose() }}>
-      <div className="sheet-body">
+    <div className="sheet-scrim" style={{pointerEvents:"auto",background:"rgba(4,4,18,.72)"}}>
+      <div style={{position:"absolute",inset:0}} onClick={props.onClose}/>
+      <div className="sheet-body" style={{position:"relative"}}>
         <div className="sheet-grip"/>
         <div className="sheet-hdr">
           <span className="sheet-title">Layout Settings</span>
