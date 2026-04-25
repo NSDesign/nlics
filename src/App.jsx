@@ -408,7 +408,7 @@ var MBMS   = ["multiply","screen","add","subtract","normal"]
 var MCH    = ["luminosity","R","G","B","A"]
 var SHAPES = ["ellipse","rectangle","polygon","star","ring"]
 var GTYPES = ["linear","radial","conic"]
-var NTYPES = ["perlin","random"]
+var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value"]
 var PTYPES = ["checkerboard","stripes","dots"]
 var ECFG   = {
   brightness: ["value",0,300,1,150],
@@ -574,6 +574,57 @@ function vn(x,y,s) {
   return vh(ix,iy,s)+(vh(ix+1,iy,s)-vh(ix,iy,s))*sm(fx)+(vh(ix,iy+1,s)-vh(ix,iy,s))*sm(fy)+(vh(ix,iy,s)-vh(ix+1,iy,s)-vh(ix,iy+1,s)+vh(ix+1,iy+1,s))*sm(fx)*sm(fy)
 }
 function octN(x,y,o,s) { var v=0,a=1,f=1,m=0; for(var i=0;i<o;i++){v+=vn(x*f,y*f,s+i)*a;m+=a;a*=.5;f*=2.08} return v/m }
+
+// ── Fractal Brownian Motion (fBm) — like octN but lacunarity/gain control ────
+function fbm(x,y,oct,lacunarity,gain,s) {
+  var v=0,a=.5,f=1
+  for(var i=0;i<oct;i++){v+=vn(x*f,y*f,s+i)*a;a*=gain;f*=lacunarity}
+  return Math.max(0,Math.min(1,v+.5))
+}
+// ── Turbulence — absolute value of octave noise (ridged look) ─────────────────
+function turbulence(x,y,oct,s) {
+  var v=0,a=1,f=1,m=0
+  for(var i=0;i<oct;i++){v+=Math.abs(vn(x*f,y*f,s+i)*2-1)*a;m+=a;a*=.5;f*=2.08}
+  return 1-v/m
+}
+// ── Worley / Cellular noise (F1 — distance to nearest point) ──────────────────
+function worley(x,y,s,jitter) {
+  jitter=jitter==null?1:jitter
+  var ix=Math.floor(x), iy=Math.floor(y), minD=1e9
+  for(var dy=-1;dy<=1;dy++) for(var dx=-1;dx<=1;dx++){
+    var cx=ix+dx, cy=iy+dy
+    var px=cx+vh(cx,cy,s)*jitter, py=cy+vh(cx+31.4,cy+27.8,s)*jitter
+    var d=(x-px)*(x-px)+(y-py)*(y-py)
+    if(d<minD)minD=d
+  }
+  return Math.max(0,Math.min(1,Math.sqrt(minD)))
+}
+// ── Simplex-style noise (gradient noise, fewer artefacts than value noise) ────
+function simplex2(x,y,s) {
+  var F2=.5*(Math.sqrt(3)-1), G2=(3-Math.sqrt(3))/6
+  var s2=(x+y)*F2, i=Math.floor(x+s2), j=Math.floor(y+s2)
+  var t=(i+j)*G2, X0=i-t, Y0=j-t, x0=x-X0, y0=y-Y0
+  var i1=x0>y0?1:0, j1=x0>y0?0:1
+  var x1=x0-i1+G2, y1=y0-j1+G2, x2=x0-1+2*G2, y2=y0-1+2*G2
+  function gi(ii,jj){return vh(ii,jj,s)*2-1}
+  function n(xi,yi,gx,gy){var t2=.5-(gx*gx+gy*gy);return t2<0?0:t2*t2*t2*t2*(gi(xi,jj=(j+(jj=0,0)),0)*gx+gi(ii=(i+(ii=0,0)),yi,0)*gy)}
+  // Simple gradient noise as simplex approximation
+  var d0=Math.max(0,.5-(x0*x0+y0*y0)),d1=Math.max(0,.5-(x1*x1+y1*y1)),d2=Math.max(0,.5-(x2*x2+y2*y2))
+  var g0=vh(i,j,s)*2-1, g1=vh(i+i1,j+j1,s+1)*2-1, g2=vh(i+1,j+1,s+2)*2-1
+  var v=70*(d0*d0*d0*d0*(g0*x0+vh(i,j,s+3)*y0)+d1*d1*d1*d1*(g1*x1+vh(i+i1,j+j1,s+4)*y1)+d2*d2*d2*d2*(g2*x2+vh(i+1,j+1,s+5)*y2))
+  return Math.max(0,Math.min(1,(v+1)*.5))
+}
+// ── Marble — sinusoidal bands + turbulence ────────────────────────────────────
+function marble(x,y,oct,s,freq,turb) {
+  var t=turbulence(x,y,oct,s)
+  return Math.max(0,Math.min(1,(Math.sin((x*freq+t*turb)*Math.PI)+1)*.5))
+}
+// ── Wood rings ────────────────────────────────────────────────────────────────
+function wood(x,y,oct,s,freq,turb) {
+  var t=turbulence(x,y,oct,s)
+  var g=Math.sqrt(x*x+y*y)*freq+t*turb
+  return Math.max(0,Math.min(1,(Math.sin(g*Math.PI*2)+1)*.5))
+}
 
 /* ─── PIXEL EFFECTS ── pure pixel math, zero CSS ─────────── */
 function pxFn(d,w,h,t,p) {
@@ -993,13 +1044,33 @@ function gGrad(ctx,p,w,h) {
   ctx.fillRect(0,0,w,h);ctx.restore()
 }
 function gNoise(ctx,p,w,h) {
-  var nType=p.nType||"perlin",c1=p.c1||"#fff",c2=p.c2||"#000",scale=p.scale||.04,oct=p.oct||4,seed=p.seed||1,alpha=p.alpha==null?1:p.alpha
-  var CA=h2r(c1),CB=h2r(c2),ds=2,dw=Math.ceil(w/ds),dh=Math.ceil(h/ds),img=ctx.createImageData(dw,dh),d=img.data
+  var nType=p.nType||"perlin",c1=p.c1||"#fff",c2=p.c2||"#000"
+  var scale=p.scale||.04,oct=p.oct||4,seed=p.seed||1,alpha=p.alpha==null?1:p.alpha
+  var lac=p.lac||2.0,gain=p.gain||.5  // fBm params
+  var wJitter=p.wJitter==null?1:p.wJitter  // worley jitter
+  var mFreq=p.mFreq||4,mTurb=p.mTurb||2   // marble/wood freq+turb
+  var CA=h2r(c1),CB=h2r(c2)
+  var ds=2,dw=Math.ceil(w/ds),dh=Math.ceil(h/ds)
+  var img=ctx.createImageData(dw,dh),d=img.data
   for(var py=0;py<dh;py++) for(var px=0;px<dw;px++){
-    var v=Math.max(0,Math.min(1,nType==="perlin"?octN(px*scale,py*scale,oct,seed):vh(px,py,seed)))
-    var c=lrC(CB,CA,v),idx=(py*dw+px)*4;d[idx]=c.r;d[idx+1]=c.g;d[idx+2]=c.b;d[idx+3]=255
+    var sx=px*scale, sy=py*scale, v
+    switch(nType){
+      case "perlin":     v=octN(sx,sy,oct,seed); break
+      case "fbm":        v=fbm(sx,sy,oct,lac,gain,seed); break
+      case "turbulence": v=turbulence(sx,sy,oct,seed); break
+      case "worley":     v=worley(sx,sy,seed,wJitter); break
+      case "simplex":    v=simplex2(sx,sy,seed); break
+      case "marble":     v=marble(sx,sy,oct,seed,mFreq,mTurb); break
+      case "wood":       v=wood(sx,sy,oct,seed,mFreq,mTurb); break
+      case "value":      v=vn(sx,sy,seed); break
+      default:           v=vh(px,py,seed)
+    }
+    v=Math.max(0,Math.min(1,v))
+    var c=lrC(CB,CA,v),idx=(py*dw+px)*4
+    d[idx]=c.r;d[idx+1]=c.g;d[idx+2]=c.b;d[idx+3]=255
   }
-  var tc=document.createElement("canvas");tc.width=dw;tc.height=dh;tc.getContext("2d").putImageData(img,0,0)
+  var tc=document.createElement("canvas");tc.width=dw;tc.height=dh
+  tc.getContext("2d").putImageData(img,0,0)
   ctx.save();ctx.globalAlpha=alpha;ctx.imageSmoothingEnabled=true;ctx.drawImage(tc,0,0,w,h);ctx.restore()
 }
 function gPat(ctx,p,w,h) {
@@ -2496,15 +2567,31 @@ function GradP(props) {
 }
 function NoiseP(props) {
   var p=props.p, up=props.up
+  var hasOct=["perlin","fbm","turbulence","marble","wood"].includes(p.nType)
   return (
     <div>
       <Se l="type" v={p.nType} opts={NTYPES} fn={function(v){up(Object.assign({},p,{nType:v}))}}/>
       <Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>
       <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
       <Sl l="scale" v={p.scale} mn={.005} mx={.4} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
-      {(p.nType==="perlin"||p.nType==="turbulent") && <Sl l="octaves" v={p.oct} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>}
-      <Sl l="seed" v={p.seed} mn={0} mx={99} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
-      <Sl l="opacity" v={p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      {hasOct&&<Sl l="octaves" v={p.oct||4} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>}
+      {p.nType==="fbm"&&(
+        <div>
+          <Sl l="lacunarity" v={p.lac||2} mn={1} mx={4} st={.1} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{lac:v}))}}/>
+          <Sl l="gain" v={p.gain||.5} mn={.1} mx={.9} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gain:v}))}}/>
+        </div>
+      )}
+      {p.nType==="worley"&&(
+        <Sl l="jitter" v={p.wJitter==null?1:p.wJitter} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{wJitter:v}))}}/>
+      )}
+      {(p.nType==="marble"||p.nType==="wood")&&(
+        <div>
+          <Sl l="frequency" v={p.mFreq||4} mn={1} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{mFreq:v}))}}/>
+          <Sl l="turbulence" v={p.mTurb||2} mn={0} mx={10} st={.1} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{mTurb:v}))}}/>
+        </div>
+      )}
+      <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
+      <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
     </div>
   )
 }
