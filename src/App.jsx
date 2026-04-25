@@ -375,10 +375,12 @@ function RandRow(props) {
                   color:active?"var(--lv)":"var(--mu)"}}>{opt}</button>
             })}
           </div>
-          <Sl l="scale" v={props.scale==null?.5:props.scale} mn={0} mx={2} st={.01}
-            fn={props.onScale}/>
-          <Sl l="amount" v={props.amount==null?1:props.amount} mn={0} mx={1} st={.01}
-            fn={props.onAmount}/>
+          <Sl l="scale" v={props.scale==null?.5:props.scale} mn={0} mx={20} st={.1}
+            fmt={function(v){return v.toFixed(1)}} fn={props.onScale}/>
+          <Sl l="offset" v={props.offset==null?0:props.offset} mn={-10} mx={10} st={.05}
+            fmt={function(v){return v.toFixed(2)}} fn={props.onOffset||function(){}}/>
+          <Sl l="amount" v={props.amount==null?1:props.amount} mn={0} mx={2} st={.01}
+            fmt={function(v){return v.toFixed(2)}} fn={props.onAmount}/>
           <Sl l="seed" v={props.seed==null?1:props.seed} mn={0} mx={9999} st={1}
             fmt={function(v){return Math.round(v)}} fn={props.onSeed}/>
         </div>
@@ -927,10 +929,10 @@ function pxFn(d,w,h,t,p) {
   } else if (t==="wave") {
     // Sinusoidal pixel displacement with optional per-param randomisation
     var wRnd=seededRand(p.rSeed||1)
-    function wRv(v,en,sc,bi,amt){if(!en)return v;var r=wRnd();if(bi!==false)r=r*2-1;return v+r*(sc||.5)*(amt==null?1:amt)}
-    var wAmp=wRv(p.amplitude||0.05,p.rAmpEn,p.rAmpSc,p.rAmpBi,p.rAmpAmt)*Math.max(w,h)
-    var wFreqX=wRv(p.freqX||3,p.rFxEn,p.rFxSc,p.rFxBi,p.rFxAmt)
-    var wFreqY=wRv(p.freqY||3,p.rFyEn,p.rFySc,p.rFyBi,p.rFyAmt)
+    function wRv(v,en,sc,bi,amt,off){if(!en)return v;var r=wRnd();if(bi!==false)r=r*2-1;return v+(r+(off||0))*(sc||.5)*(amt==null?1:amt)}
+    var wAmp=wRv(p.amplitude||0.05,p.rAmpEn,p.rAmpSc,p.rAmpBi,p.rAmpAmt,p.rAmpOff)*Math.max(w,h)
+    var wFreqX=wRv(p.freqX||3,p.rFxEn,p.rFxSc,p.rFxBi,p.rFxAmt,p.rFxOff)
+    var wFreqY=wRv(p.freqY||3,p.rFyEn,p.rFySc,p.rFyBi,p.rFyAmt,p.rFyOff)
     var wPhaseX=p.phaseX||0, wPhaseY=p.phaseY||0
     var orig=new Uint8ClampedArray(d)
     for(i=0;i<w*h;i++){
@@ -1253,12 +1255,12 @@ function gPat(ctx,p,w,h) {
 
   // Apply randomisation to positional/scale/angle params
   var seed = p.rSeed||1, rnd = seededRand(seed)
-  function rv(en,v,sc,bi,amt){if(!en)return v;var r=rnd();if(bi)r=r*2-1;return v+r*sc*(amt==null?1:amt)}
-  cs = rv(p.scaleRandEn,cs,p.rScaleSc||.5,p.rScaleBi!==false,p.rScaleAmt)
-  sW = rv(p.swRandEn,sW,p.rSwSc||.5,p.rSwBi!==false,p.rSwAmt)
-  dR = rv(p.drRandEn,dR,p.rDrSc||.5,p.rDrBi!==false,p.rDrAmt)
-  dS = rv(p.dsRandEn,dS,p.rDsSc||.5,p.rDsBi!==false,p.rDsAmt)
-  if(p.angleRandEn){var ar=rnd();if(p.rAngleBi!==false)ar=ar*2-1;rad=(angle+ar*(p.rAngleSc||30)*(p.rAngleAmt==null?1:p.rAngleAmt))*Math.PI/180}
+  function rv(en,v,sc,bi,amt,off){if(!en)return v;var r=rnd();if(bi!==false)r=r*2-1;return v+(r+(off||0))*(sc||.5)*(amt==null?1:amt)}
+  cs = rv(p.scaleRandEn,cs,p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
+  sW = rv(p.swRandEn,sW,p.rSwSc,p.rSwBi,p.rSwAmt,p.rSwOff)
+  dR = rv(p.drRandEn,dR,p.rDrSc,p.rDrBi,p.rDrAmt,p.rDrOff)
+  dS = rv(p.dsRandEn,dS,p.rDsSc,p.rDsBi,p.rDsAmt,p.rDsOff)
+  if(p.angleRandEn){var ar=rnd();if(p.rAngleBi!==false)ar=ar*2-1;rad=(angle+(ar+(p.rAngleOff||0))*(p.rAngleSc||30)*(p.rAngleAmt==null?1:p.rAngleAmt))*Math.PI/180}
 
   for(var py=0;py<h;py++) for(var px=0;px<w;px++){
     var ii=(py*w+px)*4, r, g, b
@@ -1301,12 +1303,12 @@ function seededRand(seed) {
   var s = (seed * 1664525 + 1013904223) & 0xFFFFFFFF
   return function() { s = (s * 1664525 + 1013904223) & 0xFFFFFFFF; return (s >>> 0) / 0xFFFFFFFF }
 }
-// Apply per-param randomise: returns base + bipolar random in range scaled by amount
-function applyRand(base, rnd, enabled, rangeScale, rangeBipolar, amount) {
+// Apply per-param randomise: returns base + (random + offset) * scale * amount
+function applyRand(base, rnd, enabled, rangeScale, rangeBipolar, amount, offset) {
   if(!enabled) return base
   var r = rnd() // 0-1
   if(rangeBipolar) r = (r * 2 - 1)  // -1 to 1
-  return base + r * rangeScale * amount
+  return base + (r + (offset||0)) * (rangeScale||0.5) * (amount==null?1:amount)
 }
 function gImg(ctx,p,iC,w,h) {
   var url=p.url||"",fit=p.fit||"contain",alpha=p.alpha==null?1:p.alpha
@@ -2893,15 +2895,17 @@ function NoiseP(props) {
 }
 function PatP(props) {
   var p=props.p, up=props.up
-  function mkRand(field,scField,biField,amtField) {
+  function mkRand(field,scField,biField,amtField,offField) {
     var enField=field+"RandEn"
     return {
       enabled:p[enField]||false,
       onToggle:function(){var o={};o[enField]=!p[enField];up(Object.assign({},p,o))},
       rangeBipolar:p[biField]!==false,
       onRangeBipolar:function(v){var o={};o[biField]=v;up(Object.assign({},p,o))},
-      scale:p[scField]||.5,
+      scale:p[scField],
       onScale:function(v){var o={};o[scField]=v;up(Object.assign({},p,o))},
+      offset:p[offField]||0,
+      onOffset:function(v){var o={};o[offField]=v;up(Object.assign({},p,o))},
       amount:p[amtField]==null?1:p[amtField],
       onAmount:function(v){var o={};o[amtField]=v;up(Object.assign({},p,o))},
       seed:p.rSeed||1,
@@ -2915,24 +2919,24 @@ function PatP(props) {
       <Sl l="opacity 1" v={p.a1==null?1:p.a1} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a1:v}))}}/>
       <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
       <Sl l="opacity 2" v={p.a2==null?1:p.a2} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a2:v}))}}/>
-      <RandRow {...mkRand("scale","rScaleSc","rScaleBi","rScaleAmt")}>
+      <RandRow {...mkRand("scale","rScaleSc","rScaleBi","rScaleAmt","rScaleOff")}>
         <Sl l="scale" v={p.scale} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
       </RandRow>
       {/* Rotation — all patterns get rotation */}
-      <RandRow {...mkRand("angle","rAngleSc","rAngleBi","rAngleAmt")}>
+      <RandRow {...mkRand("angle","rAngleSc","rAngleBi","rAngleAmt","rAngleOff")}>
         <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>
       </RandRow>
       {p.pType==="stripes" && (
-        <RandRow {...mkRand("sw","rSwSc","rSwBi","rSwAmt")}>
+        <RandRow {...mkRand("sw","rSwSc","rSwBi","rSwAmt","rSwOff")}>
           <Sl l="width" v={p.sw} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{sw:v}))}}/>
         </RandRow>
       )}
       {p.pType==="dots" && (
         <div>
-          <RandRow {...mkRand("dr","rDrSc","rDrBi","rDrAmt")}>
+          <RandRow {...mkRand("dr","rDrSc","rDrBi","rDrAmt","rDrOff")}>
             <Sl l="dot r" v={p.dr} mn={.005} mx={.2} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{dr:v}))}}/>
           </RandRow>
-          <RandRow {...mkRand("ds","rDsSc","rDsBi","rDsAmt")}>
+          <RandRow {...mkRand("ds","rDsSc","rDsBi","rDsAmt","rDsOff")}>
             <Sl l="spacing" v={p.ds} mn={.02} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{ds:v}))}}/>
           </RandRow>
         </div>
@@ -3290,6 +3294,7 @@ function EfxPrimary(props) {
       <RandRow enabled={p.rAmpEn} onToggle={function(){up({rAmpEn:!p.rAmpEn})}}
         rangeBipolar={p.rAmpBi!==false} onRangeBipolar={function(v){up({rAmpBi:v})}}
         scale={p.rAmpSc} onScale={function(v){up({rAmpSc:v})}}
+        offset={p.rAmpOff||0} onOffset={function(v){up({rAmpOff:v})}}
         amount={p.rAmpAmt} onAmount={function(v){up({rAmpAmt:v})}}
         seed={p.rSeed||1} onSeed={function(v){up({rSeed:v})}}>
         <Sl l="amplitude" v={p.amplitude==null?.05:p.amplitude} mn={0} mx={.5} st={.005}
@@ -3298,6 +3303,7 @@ function EfxPrimary(props) {
       <RandRow enabled={p.rFxEn} onToggle={function(){up({rFxEn:!p.rFxEn})}}
         rangeBipolar={p.rFxBi!==false} onRangeBipolar={function(v){up({rFxBi:v})}}
         scale={p.rFxSc} onScale={function(v){up({rFxSc:v})}}
+        offset={p.rFxOff||0} onOffset={function(v){up({rFxOff:v})}}
         amount={p.rFxAmt} onAmount={function(v){up({rFxAmt:v})}}
         seed={p.rSeed||1} onSeed={function(v){up({rSeed:v})}}>
         <Sl l="freq x" v={p.freqX==null?3:p.freqX} mn={0} mx={20} st={.5}
@@ -3306,6 +3312,7 @@ function EfxPrimary(props) {
       <RandRow enabled={p.rFyEn} onToggle={function(){up({rFyEn:!p.rFyEn})}}
         rangeBipolar={p.rFyBi!==false} onRangeBipolar={function(v){up({rFyBi:v})}}
         scale={p.rFySc} onScale={function(v){up({rFySc:v})}}
+        offset={p.rFyOff||0} onOffset={function(v){up({rFyOff:v})}}
         amount={p.rFyAmt} onAmount={function(v){up({rFyAmt:v})}}
         seed={p.rSeed||1} onSeed={function(v){up({rSeed:v})}}>
         <Sl l="freq y" v={p.freqY==null?3:p.freqY} mn={0} mx={20} st={.5}
