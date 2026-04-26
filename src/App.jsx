@@ -1360,40 +1360,50 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
 
   ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high"
 
-  // Stamp loop
-  for(var row=0;row<rows;row++){
-    for(var col=0;col<cols;col++){
-      // Per-cell random values — each property gets its own independent RNG channel
-      var cRot  =rv2(cellRnd(col,row,0),p.rRotEn,   baseRot,    p.rRotSc,  p.rRotBi,  p.rRotAmt,  p.rRotOff)
-      var cScale=rv2(cellRnd(col,row,1),p.rScaleEn, baseScale,  p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
-      var cOpacity=Math.max(0,Math.min(1,rv2(cellRnd(col,row,2),p.rOpEn,baseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff)))
-      var cOX=rv2(cellRnd(col,row,3),p.rOxEn,0,p.rOxSc,p.rOxBi,p.rOxAmt,p.rOxOff)*tileW
-      var cOY=rv2(cellRnd(col,row,4),p.rOyEn,0,p.rOySc,p.rOyBi,p.rOyAmt,p.rOyOff)*tileH
-      // Flip: independent RNG channels, compare against probability threshold
-      var doFlipX=flipXP>0&&cellRnd(col,row,5)()<flipXP
-      var doFlipY=flipYP>0&&cellRnd(col,row,6)()<flipYP
+  // Stamp loop — extends one tile beyond grid in each direction so wrap/stagger
+  // gaps at edges are filled. Source cell determined by wrap mode.
+  var pad=1  // extra tiles rendered outside the grid bounds on each side
+  for(var row=-pad;row<rows+pad;row++){
+    for(var col=-pad;col<cols+pad;col++){
 
-      // Cell centre
+      // Actual draw position (may be off-canvas — let canvas clip it)
       var staggerOff=0
-      if(staggerAxis==="row"&&row%2===1) staggerOff=stagger*tileW
-      else if(staggerAxis==="col"&&col%2===1) staggerOff=stagger*tileH
-      var cx3=(col+0.5)*tileW+offX+(staggerAxis==="row"?staggerOff:0)+cOX
-      var cy3=(row+0.5)*tileH+offY+(staggerAxis==="col"?staggerOff:0)+cOY
+      if(staggerAxis==="row"&&((row%2)+2)%2===1) staggerOff=stagger*tileW
+      else if(staggerAxis==="col"&&((col%2)+2)%2===1) staggerOff=stagger*tileH
+      var cx3=(col+0.5)*tileW+offX+(staggerAxis==="row"?staggerOff:0)
+      var cy3=(row+0.5)*tileH+offY+(staggerAxis==="col"?staggerOff:0)
 
-      // Wrap: for repeat/mirror, offset the stamp position within canvas bounds
+      // Skip tiles whose centre is more than one full tile outside the canvas
+      if(cx3<-tileW||cx3>w+tileW||cy3<-tileH||cy3>h+tileH) continue
+
+      // Determine source cell for RNG + mirror flip based on wrap mode
+      var srcCol=col, srcRow=row, mirrorFlipX=false, mirrorFlipY=false
       if(wrap==="repeat"){
-        cx3=((cx3%w)+w)%w
-        cy3=((cy3%h)+h)%h
+        srcCol=((col%cols)+cols)%cols
+        srcRow=((row%rows)+rows)%rows
       } else if(wrap==="mirror"){
-        var wx=((cx3%(w*2))+w*2)%(w*2); cx3=wx<w?wx:w*2-wx
-        var wy=((cy3%(h*2))+h*2)%(h*2); cy3=wy<h?wy:h*2-wy
+        var mc=((col%(cols*2))+(cols*2))%(cols*2)
+        mirrorFlipX=mc>=cols; srcCol=mirrorFlipX?cols*2-1-mc:mc
+        var mr=((row%(rows*2))+(rows*2))%(rows*2)
+        mirrorFlipY=mr>=rows; srcRow=mirrorFlipY?rows*2-1-mr:mr
+      } else {
+        // clamp: skip tiles that are outside the grid
+        if(col<0||col>=cols||row<0||row>=rows) continue
       }
 
+      // Per-source-cell random values
+      var cRot  =rv2(cellRnd(srcCol,srcRow,0),p.rRotEn,   baseRot,    p.rRotSc,  p.rRotBi,  p.rRotAmt,  p.rRotOff)
+      var cScale=rv2(cellRnd(srcCol,srcRow,1),p.rScaleEn, baseScale,  p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
+      var cOpacity=Math.max(0,Math.min(1,rv2(cellRnd(srcCol,srcRow,2),p.rOpEn,baseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff)))
+      var cOX=rv2(cellRnd(srcCol,srcRow,3),p.rOxEn,0,p.rOxSc,p.rOxBi,p.rOxAmt,p.rOxOff)*tileW
+      var cOY=rv2(cellRnd(srcCol,srcRow,4),p.rOyEn,0,p.rOySc,p.rOyBi,p.rOyAmt,p.rOyOff)*tileH
+      var doFlipX=(flipXP>0&&cellRnd(srcCol,srcRow,5)()<flipXP)!==mirrorFlipX
+      var doFlipY=(flipYP>0&&cellRnd(srcCol,srcRow,6)()<flipYP)!==mirrorFlipY
+
       ctx.save()
-      ctx.translate(cx3,cy3)
+      ctx.translate(cx3+cOX,cy3+cOY)
       ctx.rotate(cRot)
       ctx.scale(cScale,cScale)
-      // Flip: applied after scale so direction is independent of scale sign
       if(doFlipX) ctx.scale(-1,1)
       if(doFlipY) ctx.scale(1,-1)
       ctx.globalAlpha=cOpacity
