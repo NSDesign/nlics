@@ -513,7 +513,7 @@ function mkEfx(t) {
   if(t==="edge-detect")  params={strength:100, invert:false}
   if(t==="pixelate")     params={size:8}
   if(t==="duotone")      params={shadow:"#0a0a2a", highlight:"#f5e642"}
-  return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[], blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} }
+  return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[], blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}}, domain:"pixels" }
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, fillOpacity:100, opacity:100, blendMode:"multiply", effectStack:[], enabled:true, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[], fillOpacity:100 } }
@@ -1839,11 +1839,83 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
   }
   return any?out:null
 }
+// Apply a spatial effect to point positions rather than pixels
+// Returns new _points array with x,y (and optionally rotation/scale) modified
+function applyEfxToPoints(pts,efx,w,h) {
+  var p=efx.params||{}, t=efx.type
+  var out=pts.map(function(pt){ return Object.assign({},pt) })
+  if(t==="transform"){
+    var tx=p.tx||0,ty=p.ty||0,rot=(p.rot||0)*Math.PI/180,su=p.su!=null?p.su:1
+    var cx2=w/2,cy2=h/2
+    out.forEach(function(pt){
+      var px=pt.x*w-cx2, py=pt.y*h-cy2
+      var rx=px*Math.cos(rot)-py*Math.sin(rot), ry=px*Math.sin(rot)+py*Math.cos(rot)
+      pt.x=Math.max(0,Math.min(1,(rx*su+cx2+tx*w)/w))
+      pt.y=Math.max(0,Math.min(1,(ry*su+cy2+ty*h)/h))
+      pt.rotation=(pt.rotation||0)+(p.rot||0)
+      pt.scale=(pt.scale||1)*(su)
+    })
+  } else if(t==="wave"){
+    var wA=(p.amplitude||.05),fX=p.freqX||3,fY=p.freqY||3
+    out.forEach(function(pt){
+      pt.x=Math.max(0,Math.min(1,pt.x+Math.sin(pt.y*fY*Math.PI*2+(p.phaseY||0))*wA))
+      pt.y=Math.max(0,Math.min(1,pt.y+Math.sin(pt.x*fX*Math.PI*2+(p.phaseX||0))*wA))
+    })
+  } else if(t==="twirl"){
+    var tA=(p.angle||180)*Math.PI/180,tR=p.radius||.5
+    var tcx=p.cx!=null?p.cx:.5,tcy=p.cy!=null?p.cy:.5
+    out.forEach(function(pt){
+      var dx=pt.x-tcx,dy=pt.y-tcy,d=Math.sqrt(dx*dx+dy*dy)
+      if(d<tR){var a=tA*(1-d/tR);var ca=Math.cos(a),sa=Math.sin(a)
+        pt.x=tcx+dx*ca-dy*sa; pt.y=tcy+dx*sa+dy*ca}
+    })
+  } else if(t==="bulge"){
+    var bS=p.strength||.5,bR=p.radius||.7
+    var bcx=p.cx!=null?p.cx:.5,bcy=p.cy!=null?p.cy:.5
+    out.forEach(function(pt){
+      var dx=pt.x-bcx,dy=pt.y-bcy,d=Math.sqrt(dx*dx+dy*dy)
+      if(d>0&&d<bR){var norm=d/bR,newR=Math.pow(norm,1/(1+bS))*bR
+        var sc2=newR/d; pt.x=bcx+dx*sc2; pt.y=bcy+dy*sc2}
+    })
+  } else if(t==="cart-to-polar"){
+    out.forEach(function(pt){
+      var dx=pt.x-.5,dy=pt.y-.5
+      var ang=(Math.atan2(dy,dx)+Math.PI*2)%(Math.PI*2)
+      var r=Math.sqrt(dx*dx+dy*dy)
+      pt.x=ang/(Math.PI*2); pt.y=Math.min(1,r*2)
+    })
+  } else if(t==="polar-to-cart"){
+    out.forEach(function(pt){
+      var ang=pt.x*Math.PI*2,r=pt.y*.5
+      pt.x=.5+Math.cos(ang)*r; pt.y=.5+Math.sin(ang)*r
+    })
+  } else if(t==="point-map"){
+    var mappings=p.mappings||[]
+    out.forEach(function(pt){
+      mappings.forEach(function(m){
+        var inV=pt[m.inputAttr]
+        if(inV==null)return
+        var outMin=m.min==null?0:m.min, outMax=m.max==null?1:m.max
+        var mapped=m.mode==="invert"?(1-inV)*(outMax-outMin)+outMin:inV*(outMax-outMin)+outMin
+        var curV=pt[m.outputAttr]==null?1:pt[m.outputAttr]
+        pt[m.outputAttr]=m.multiply?curV*mapped:mapped
+      })
+    })
+  }
+  return out
+}
+
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
   // Iterate bottom-to-top: last item in list is applied first (bottom layer),
   // first item in list is applied last (top layer). Standard layer convention.
   for(var ei=stack.length-1;ei>=0;ei--){
     var efx=stack[ei]; if(!efx.enabled) continue
+    // Points-domain effects: transform _points, skip canvas
+    if(efx.domain==="points"&&efx.type!=="show-points"&&efx.type!=="source-at-points"){
+      if(ctx.canvas&&ctx.canvas._points)
+        ctx.canvas._points=applyEfxToPoints(ctx.canvas._points,efx,w,h)
+      continue
+    }
     // Stack reference — apply referenced Effect Stack with opacity/blendMode control
     if(efx.type==="__stackref__"){
       var refEn=cmap.get(efx.stackRefId)
@@ -1860,6 +1932,53 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
       }
       continue
     }
+    // Point Map — handled via domain:"points" above, skip pixel path
+    if(efx.type==="point-map"){ continue }
+
+    // Source at Points — stamps sources at each point position
+    if(efx.type==="source-at-points"){
+      var satPts=ctx.canvas&&ctx.canvas._points
+      if(satPts&&satPts.length>0){
+        var satP=efx.params||{}, satSrcs=satP.sources||[]
+        if(satSrcs.length>0){
+          var satMode=satP.distributionMode||"weighted"
+          var satTW=Math.max(4,Math.round(w/Math.sqrt(Math.max(1,satPts.length))*1.5))
+          var satTH=satTW
+          var satRendered=satSrcs.map(function(s){
+            if(!s.refId)return null
+            var sc=compAny(s.refId,cmap,new Map(cache),iC,satTW*2,satTH*2,new Set(vis))
+            if(!sc)return null
+            var sv=document.createElement("canvas");sv.width=satTW;sv.height=satTH
+            var sx2=sv.getContext("2d");sx2.imageSmoothingEnabled=true;sx2.imageSmoothingQuality="high"
+            sx2.drawImage(sc,0,0,satTW,satTH);return sv
+          })
+          var satTotalW=satSrcs.reduce(function(a,s){return a+(s.weight||1)},0)
+          satPts.forEach(function(pt,pi){
+            var srcIdx=0
+            if(satMode==="sequence"){
+              srcIdx=pi%satSrcs.length
+            } else if(satMode==="attribute"){
+              srcIdx=Math.min(Math.max(0,Math.round(pt.sourceIndex||0)),satSrcs.length-1)
+            } else {
+              var satR=seededRand(pi*997+(efx._seed||1))()
+              var satAcc=0;for(var satSi=0;satSi<satSrcs.length;satSi++){satAcc+=(satSrcs[satSi].weight||1)/satTotalW;if(satR<satAcc){srcIdx=satSi;break}}
+            }
+            var satCv=satRendered[srcIdx]; if(!satCv)return
+            var ptScale=(pt.scale||1), ptRot=(pt.rotation||0)*Math.PI/180
+            var sw=satTW*ptScale, sh=satTH*ptScale
+            ctx.save()
+            ctx.translate(pt.x*w,pt.y*h)
+            ctx.rotate(ptRot)
+            ctx.globalAlpha=Math.max(0,Math.min(1,pt.opacity==null?1:pt.opacity))
+            ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high"
+            ctx.drawImage(satCv,-sw/2,-sh/2,sw,sh)
+            ctx.restore()
+          })
+        }
+      }
+      continue
+    }
+
     // Show Points — renders markers at point positions onto canvas
     if(efx.type==="show-points"){
       var spts=ctx.canvas&&ctx.canvas._points
@@ -3835,8 +3954,78 @@ function EfxPrimary(props) {
         <Co l="label col" v={p.labelColor||"#ffffff"} fn={function(v){up({labelColor:v})}}/>
       </div>}
     </div>)
-  if(efx.type==="point-map")         return <div className="empty" style={{padding:12}}>Point Map — Phase 3</div>
-  if(efx.type==="source-at-points")  return <div className="empty" style={{padding:12}}>Source at Points — Phase 4</div>
+  if(efx.type==="point-map") {
+    var mappings=p.mappings||[]
+    function updMapping(i,patch){
+      var nm=mappings.map(function(m,j){return j===i?Object.assign({},m,patch):m})
+      up({mappings:nm})
+    }
+    function addMapping(){up({mappings:mappings.concat([{inputAttr:"pointIndex",outputAttr:"scale",mode:"linear",min:0,max:1,multiply:false}])})}
+    function delMapping(i){up({mappings:mappings.filter(function(_,j){return j!==i})})}
+    return (
+      <div>
+        {mappings.length===0&&<div className="empty" style={{padding:"8px 0"}}>no mappings — tap + to add</div>}
+        {mappings.map(function(m,mi){
+          return (
+            <div key={mi} style={{borderBottom:"1px solid var(--bd)",paddingBottom:8,marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>mapping {mi+1}</span>
+                <button onClick={function(){delMapping(mi)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
+              </div>
+              <Se l="input" v={m.inputAttr||"pointIndex"} opts={["pointIndex","pointCount","x","y","rowNorm","colNorm","row","col","spiralT","angleNorm","radiusNorm","perimeterT","fibIndex","scatterIndex"]} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
+              <Se l="output" v={m.outputAttr||"scale"} opts={["scale","rotation","opacity","x","y","sourceIndex"]} fn={function(v){updMapping(mi,{outputAttr:v})}}/>
+              <Se l="mode" v={m.mode||"linear"} opts={["linear","invert"]} fn={function(v){updMapping(mi,{mode:v})}}/>
+              <Sl l="min" v={m.min==null?0:m.min} mn={-2} mx={2} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{min:v})}}/>
+              <Sl l="max" v={m.max==null?1:m.max} mn={-2} mx={2} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{max:v})}}/>
+              <PR l="combine">
+                {["replace","multiply"].map(function(mo){
+                  var active=(m.multiply?"multiply":"replace")===mo
+                  return <button key={mo} className={active?"ac":"ghost"} style={{flex:1,fontSize:10,minHeight:32}}
+                    onClick={function(){updMapping(mi,{multiply:mo==="multiply"})}}>{mo}</button>
+                })}
+              </PR>
+            </div>
+          )
+        })}
+        <button onClick={addMapping} className="ghost" style={{width:"100%",minHeight:36,fontSize:11}}>+ add mapping</button>
+      </div>
+    )
+  }
+  if(efx.type==="source-at-points") {
+    var satSrcs=p.sources||[]
+    function updSrc(i,patch){
+      var ns=satSrcs.map(function(s,j){return j===i?Object.assign({},s,patch):s})
+      up({sources:ns})
+    }
+    function addSrc(){up({sources:satSrcs.concat([{refId:null,weight:1}])})}
+    function delSrc(i){up({sources:satSrcs.filter(function(_,j){return j!==i})})}
+    return (
+      <div>
+        {satSrcs.length===0&&<div className="empty" style={{padding:"8px 0"}}>no sources — tap + to add</div>}
+        {satSrcs.map(function(s,si){
+          return (
+            <div key={si} style={{borderBottom:"1px solid var(--bd)",paddingBottom:6,marginBottom:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>source {si+1}</span>
+                <button onClick={function(){delSrc(si)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
+              </div>
+              <NRef l="node" v={s.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+                fn={function(v){updSrc(si,{refId:v})}}/>
+              <Sl l="weight" v={s.weight==null?1:s.weight} mn={0} mx={10} st={.1}
+                fmt={function(v){return v.toFixed(1)}} fn={function(v){updSrc(si,{weight:v})}}/>
+            </div>
+          )
+        })}
+        <button onClick={addSrc} className="ghost" style={{width:"100%",minHeight:36,fontSize:11}}>+ add source</button>
+        <div style={{borderTop:"1px solid var(--bd)",paddingTop:8,marginTop:4}}>
+          <Se l="distribute" v={p.distributionMode||"weighted"} opts={["weighted","sequence","attribute"]}
+            fn={function(v){up({distributionMode:v})}}/>
+          <Se l="wrap" v={p.wrap||"clamp"} opts={["clamp","repeat"]}
+            fn={function(v){up({wrap:v})}}/>
+        </div>
+      </div>
+    )
+  }
   return <div className="empty">no parameters</div>
 }
 
@@ -4274,6 +4463,16 @@ function EfxCard(props) {
         <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},efx,{enabled:!efx.enabled}))}} style={{color:efx.enabled?"var(--ac)":"var(--mu)",fontSize:18}}>
           {efx.enabled?"●":"○"}
         </button>
+        {["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","point-map"].includes(efx.type)&&(
+          <button onClick={function(){props.onChange(Object.assign({},efx,{domain:efx.domain==="points"?"pixels":"points"}))}}
+            style={{fontSize:8,padding:"2px 6px",borderRadius:3,cursor:"pointer",
+              fontFamily:"'IBM Plex Mono',monospace",
+              border:"1px solid "+(efx.domain==="points"?"var(--lv)":"var(--bd)"),
+              background:efx.domain==="points"?"rgba(176,96,240,.15)":"none",
+              color:efx.domain==="points"?"var(--lv)":"var(--mu)"}}>
+            {efx.domain==="points"?"pt":"px"}
+          </button>
+        )}
         {/* Type button — tap to open effect-swap picker */}
         <button ref={swapAnchorRef} onClick={function(){setSwap(swap==="picking"?null:"picking")}}
           title="Tap to swap effect type"
