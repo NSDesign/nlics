@@ -1377,8 +1377,10 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
 
       // Cell centre
       var staggerOff=0
-      if(staggerAxis==="row"&&row%2===1) staggerOff=stagger*tileW
-      else if(staggerAxis==="col"&&col%2===1) staggerOff=stagger*tileH
+      var sp=p.staggerParity||"odd"  // "odd" or "even"
+      var rowParity=((row%2)+2)%2, colParity=((col%2)+2)%2
+      if(staggerAxis==="row"&&rowParity===(sp==="odd"?1:0)) staggerOff=stagger*tileW
+      else if(staggerAxis==="col"&&colParity===(sp==="odd"?1:0)) staggerOff=stagger*tileH
       var cx3=(col+0.5)*tileW+offX+(staggerAxis==="row"?staggerOff:0)+cOX
       var cy3=(row+0.5)*tileH+offY+(staggerAxis==="col"?staggerOff:0)+cOY
 
@@ -3077,8 +3079,12 @@ function TileP(props) {
       <Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01}
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>
       {(p.stagger||0)>0&&(
-        <Se l="stagger axis" v={p.staggerAxis||"row"} opts={["row","col"]}
-          fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>
+        <div>
+          <Se l="stagger axis" v={p.staggerAxis||"row"} opts={["row","col"]}
+            fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>
+          <Se l="apply to" v={p.staggerParity||"odd"} opts={["odd","even"]}
+            fn={function(v){up(Object.assign({},p,{staggerParity:v}))}}/>
+        </div>
       )}
       <Sl l="offset X" v={p.offX||0} mn={-1} mx={1} st={.01}
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
