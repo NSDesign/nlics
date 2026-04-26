@@ -1309,12 +1309,14 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
   var refId=p.refId
   var cols=Math.max(1,Math.round(p.cols||4))
   var rows=Math.max(1,Math.round(p.rows||4))
-  var tileW=w/cols, tileH=h/rows
-  // Gap: fraction of cell size — reduces stamp area, not source size
-  var gapFX=Math.max(0,Math.min(.99,p.gapX||0))
-  var gapFY=Math.max(0,Math.min(.99,p.gapY||0))
-  var stampW=Math.max(1,tileW*(1-gapFX))  // actual drawn size
-  var stampH=Math.max(1,tileH*(1-gapFY))
+  // Gap as gutter: gap fraction of cell is taken as space between tiles.
+  // Cell size = (canvas / count). Stamp size = cell - gap. Cell centres stay fixed.
+  // Background colour fills the gutters. Source is never cropped by gap.
+  var gapFX=Math.max(0,Math.min(.98,p.gapX||0))
+  var gapFY=Math.max(0,Math.min(.98,p.gapY||0))
+  var tileW=w/cols, tileH=h/rows          // cell centre spacing (unchanged)
+  var stampW=Math.max(1,tileW*(1-gapFX))  // tile is smaller by gap fraction
+  var stampH=Math.max(1,tileH*(1-gapFY))  // source rendered at full stampW×stampH (no crop)
   var stagger=p.stagger||0
   var staggerAxis=p.staggerAxis||"row"
   var offX=(p.offX||0)*tileW, offY=(p.offY||0)*tileH
@@ -1335,7 +1337,8 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
     return base+(r+(off||0))*(sc==null?.5:sc)*(amt==null?1:amt)
   }
 
-  // Render source at stamp dimensions (gap-adjusted, at 2× for quality then downscale)
+  // Render source at stamp dimensions at 2× for SSAA quality then downscale.
+  // stampW = tileW*(1-gap) — source fills the tile fully, gap is gutter between tiles.
   var srcCv=null
   if(refId&&cmap){
     var sW2=Math.round(stampW*2), sH2=Math.round(stampH*2)
