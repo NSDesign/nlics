@@ -1574,6 +1574,72 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
   }
 }
 
+// ── Grid point creator engine ────────────────────────────────────────────────
+// Generates a grid of points and stores them in cv._pts.
+// Renders point markers to the canvas (pixel output).
+function gGrid(ctx,p,w,h) {
+  var cols=Math.max(1,Math.round(p.cols||4))
+  var rows=Math.max(1,Math.round(p.rows||4))
+  var spacingX=(p.spacingX||1)*w/cols
+  var spacingY=(p.spacingY||1)*h/rows
+  var offX=(p.offX||0)*spacingX, offY=(p.offY||0)*spacingY
+  var stagger=p.stagger||0
+  var staggerAxis=p.staggerAxis||"row"
+  var staggerParity=p.staggerParity==null?1:p.staggerParity
+  var jitterX=p.jitterX||0, jitterY=p.jitterY||0
+  var seed=p.seed||1, rnd=seededRand(seed)
+  var showPts=p.showPoints!==false
+  var ptStyle=p.ptStyle||"circle"
+  var ptColor=p.ptColor||"#24cca8"
+  var ptSize=p.ptSize||4
+  var ptOpacity=p.ptOpacity==null?1:p.ptOpacity
+
+  var pts=[]
+  var totalPoints=cols*rows
+
+  for(var row=0;row<rows;row++){
+    for(var col=0;col<cols;col++){
+      var idx2=row*cols+col
+      var staggerOff=0
+      if(staggerAxis==="row"&&row%2===staggerParity) staggerOff=stagger*spacingX
+      else if(staggerAxis==="col"&&col%2===staggerParity) staggerOff=stagger*spacingY
+      var jx=jitterX>0?(rnd()-0.5)*2*jitterX*spacingX:0
+      var jy=jitterY>0?(rnd()-0.5)*2*jitterY*spacingY:0
+      var px=(col+0.5)*spacingX+offX+(staggerAxis==="row"?staggerOff:0)+jx
+      var py=(row+0.5)*spacingY+offY+(staggerAxis==="col"?staggerOff:0)+jy
+      pts.push({
+        x:px, y:py, scale:1, rotation:0, opacity:1, sourceIndex:-1,
+        id:"g-"+idx2, pointIndex:idx2, pointCount:totalPoints,
+        row:row, col:col, rowCount:rows, colCount:cols,
+        rowNorm:rows>1?row/(rows-1):0.5,
+        colNorm:cols>1?col/(cols-1):0.5
+      })
+    }
+  }
+
+  // Render point markers
+  if(showPts&&ptOpacity>0){
+    ctx.save(); ctx.globalAlpha=ptOpacity
+    ctx.fillStyle=ptColor; ctx.strokeStyle=ptColor
+    pts.forEach(function(pt){
+      ctx.beginPath()
+      if(ptStyle==="circle")     { ctx.arc(pt.x,pt.y,ptSize/2,0,Math.PI*2); ctx.fill() }
+      else if(ptStyle==="dot")   { ctx.arc(pt.x,pt.y,ptSize/4,0,Math.PI*2); ctx.fill() }
+      else if(ptStyle==="square"){ ctx.fillRect(pt.x-ptSize/2,pt.y-ptSize/2,ptSize,ptSize) }
+      else if(ptStyle==="crosshair"){
+        ctx.lineWidth=1
+        ctx.moveTo(pt.x-ptSize,pt.y); ctx.lineTo(pt.x+ptSize,pt.y)
+        ctx.moveTo(pt.x,pt.y-ptSize); ctx.lineTo(pt.x,pt.y+ptSize)
+        ctx.stroke()
+      }
+    })
+    ctx.restore()
+  }
+
+  // Store _pts on the canvas element for downstream effects
+  ctx.canvas._pts=pts
+}
+
 // Seeded pseudo-random for reproducible jitter/variation. LCG — fast, good enough.
 function seededRand(seed) {
   var s = (seed * 1664525 + 1013904223) & 0xFFFFFFFF
@@ -2268,6 +2334,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     else if(n.type==="noise")gNoise(ctx,n.props,w,h)
     else if(n.type==="pattern")gPat(ctx,n.props,w,h)
     else if(n.type==="tile")gTile(ctx,n.props,cmap,cache,iC,w,h,vis)
+    else if(n.type==="grid")gGrid(ctx,n.props,w,h)
     else if(n.type==="image")gImg(ctx,n.props,iC,w,h)
     cache.set(id,cv);return cv
   }
@@ -3218,6 +3285,72 @@ function PatP(props) {
   )
 }
 
+// ── Grid creator UI ──────────────────────────────────────────────────────────
+function GridP(props) {
+  var p=props.p, up=props.up
+  return (
+    <div>
+      <Sl l="columns" v={p.cols||4} mn={1} mx={64} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>
+      <Sl l="rows" v={p.rows||4} mn={1} mx={64} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>
+      <Sl l="spacing X" v={p.spacingX==null?1:p.spacingX} mn={0.1} mx={3} st={.01}
+        fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{spacingX:v}))}}/>
+      <Sl l="spacing Y" v={p.spacingY==null?1:p.spacingY} mn={0.1} mx={3} st={.01}
+        fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{spacingY:v}))}}/>
+      <Sl l="offset X" v={p.offX||0} mn={-1} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
+      <Sl l="offset Y" v={p.offY||0} mn={-1} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
+      <Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>
+      {(p.stagger||0)>0&&(
+        <div>
+          <Se l="stagger axis" v={p.staggerAxis||"row"} opts={["row","col"]}
+            fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>
+          <PR l="stagger on">
+            {["odd","even"].map(function(opt,i){
+              var active=(p.staggerParity==null?1:p.staggerParity)===i
+              return <button key={opt} className={active?"ac":"ghost"}
+                onClick={function(){up(Object.assign({},p,{staggerParity:i}))}}
+                style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>
+            })}
+          </PR>
+        </div>
+      )}
+      <Sl l="jitter X" v={p.jitterX||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{jitterX:v}))}}/>
+      <Sl l="jitter Y" v={p.jitterY||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{jitterY:v}))}}/>
+      {((p.jitterX||0)>0||(p.jitterY||0)>0)&&(
+        <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1}
+          fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
+      )}
+      {/* Point display */}
+      <div style={{borderTop:"1px solid var(--bd)",marginTop:8,paddingTop:4}}>
+        <PR l="show pts">
+          <button className={p.showPoints!==false?"ac":"ghost"}
+            onClick={function(){up(Object.assign({},p,{showPoints:p.showPoints===false}))}}
+            style={{flex:1,fontSize:10,minHeight:32}}>
+            {p.showPoints!==false?"visible":"hidden"}
+          </button>
+        </PR>
+        {p.showPoints!==false&&(
+          <div>
+            <Se l="style" v={p.ptStyle||"circle"} opts={["circle","dot","square","crosshair"]}
+              fn={function(v){up(Object.assign({},p,{ptStyle:v}))}}/>
+            <Co l="colour" v={p.ptColor||"#24cca8"} fn={function(v){up(Object.assign({},p,{ptColor:v}))}}/>
+            <Sl l="size" v={p.ptSize||4} mn={1} mx={20} st={.5}
+              fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up(Object.assign({},p,{ptSize:v}))}}/>
+            <Sl l="opacity" v={p.ptOpacity==null?1:p.ptOpacity} mn={0} mx={1} st={.01}
+              fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{ptOpacity:v}))}}/>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Tile pattern UI ───────────────────────────────────────────────────────────
 function TileP(props) {
   var p=props.p, up=props.up, nodes=props.nodes, selfId=props.selfId, iC=props.iC
@@ -3363,6 +3496,7 @@ function CreatorProps(props) {
       {node.type==="noise"    && <NoiseP p={node.props} up={up}/>}
       {node.type==="pattern"  && <PatP   p={node.props} up={up}/>}
       {node.type==="tile"     && <TileP  p={node.props} up={up} nodes={props.nodes} selfId={node.id} iC={props.iC}/>}
+      {node.type==="grid"     && <GridP  p={node.props} up={up}/>}
       {node.type==="image"    && <ImgP   p={node.props} up={up} onLoad={onLoad}/>}
       {/* Save-as-default row */}
       <div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid var(--bd)",alignItems:"center"}}>
@@ -5125,7 +5259,7 @@ function BlenderProps(props) {
 }
 
 /* ─── NODE ITEM ───────────────────────────────────────── */
-var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","tile":"#20a890","blender":"#b82880","layers":"#e06828","stack":"#24acc4","promoted":"#d4b428"}
+var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","tile":"#20a890","grid":"#a84020","blender":"#b82880","layers":"#e06828","stack":"#24acc4","promoted":"#d4b428"}
 /* ─── DISPLAY MODE BUTTON ──────────────────────────────── */
 // Renders a stacked-layers SVG icon in a round-rect.
 // A small triangle badge in the bottom-right signals multiple modes.
@@ -5324,7 +5458,7 @@ function AddMenu(props) {
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
-  var s1=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"tile",l:"Tile"},{t:"image",l:"Image"}]
+  var s1=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"tile",l:"Tile"},{t:"grid",l:"Grid"},{t:"image",l:"Image"}]
   var items=props.sec===1?s1:[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
   return (
     <div ref={anchorRef} style={{position:"relative"}}>
