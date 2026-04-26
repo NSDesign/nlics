@@ -1310,9 +1310,13 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
   var cols=Math.max(1,Math.round(p.cols||4))
   var rows=Math.max(1,Math.round(p.rows||4))
   var tileW=w/cols, tileH=h/rows
-  var gapX=(p.gapX||0)*tileW, gapY=(p.gapY||0)*tileH
-  var stagger=p.stagger||0  // 0-1: fraction of tileW to offset alternating rows
-  var staggerAxis=p.staggerAxis||"row"  // "row" or "col"
+  // Gap: fraction of cell size — reduces stamp area, not source size
+  var gapFX=Math.max(0,Math.min(.99,p.gapX||0))
+  var gapFY=Math.max(0,Math.min(.99,p.gapY||0))
+  var stampW=Math.max(1,tileW*(1-gapFX))  // actual drawn size
+  var stampH=Math.max(1,tileH*(1-gapFY))
+  var stagger=p.stagger||0
+  var staggerAxis=p.staggerAxis||"row"
   var offX=(p.offX||0)*tileW, offY=(p.offY||0)*tileH
   var baseRot=(p.rotation||0)*Math.PI/180
   var baseScale=p.scale==null?1:p.scale
@@ -1323,61 +1327,77 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
   var wrap=p.wrap||"clamp"
   var flipXP=p.flipXProb||0, flipYP=p.flipYProb||0
 
-  // Randomise helpers — per-cell seeded
-  function cellRnd(col,row,channel){return seededRand(masterSeed+col*1000+row*100000+channel*7)}
+  // Per-cell deterministic RNG — unique seed per cell per property
+  function cellRnd(col,row,ch){return seededRand(masterSeed*13+col*1009+row*100003+ch*7)}
   function rv2(rnd2,en,base,sc,bi,amt,off){
     if(!en)return base
-    var r=rnd2();if(bi!==false)r=r*2-1
+    var r=rnd2(); if(bi!==false)r=r*2-1
     return base+(r+(off||0))*(sc==null?.5:sc)*(amt==null?1:amt)
   }
 
-  // Render source at tile size
+  // Render source at stamp dimensions (gap-adjusted, at 2× for quality then downscale)
   var srcCv=null
   if(refId&&cmap){
-    var raw=compAny(refId,cmap,cache,iC,Math.round(tileW),Math.round(tileH),new Set(vis||[]))
-    if(raw)srcCv=raw
+    var sW2=Math.round(stampW*2), sH2=Math.round(stampH*2)
+    var rawHi=compAny(refId,cmap,cache,iC,sW2,sH2,new Set(vis||[]))
+    if(rawHi){
+      // Downscale to stamp size for SSAA quality
+      var sCV=document.createElement("canvas"); sCV.width=Math.round(stampW); sCV.height=Math.round(stampH)
+      var sCTX=sCV.getContext("2d"); sCTX.imageSmoothingEnabled=true; sCTX.imageSmoothingQuality="high"
+      sCTX.drawImage(rawHi,0,0,Math.round(stampW),Math.round(stampH))
+      srcCv=sCV
+    }
   }
 
-  // Draw background
+  // Background
   if(bgA>0){
-    ctx.save();ctx.globalAlpha=bgA
+    ctx.save(); ctx.globalAlpha=bgA
     ctx.fillStyle="rgb("+bgC.r+","+bgC.g+","+bgC.b+")"
-    ctx.fillRect(0,0,w,h);ctx.restore()
+    ctx.fillRect(0,0,w,h); ctx.restore()
   }
 
   if(!srcCv)return
 
-  // Stamp each tile
+  ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high"
+
+  // Stamp loop
   for(var row=0;row<rows;row++){
     for(var col=0;col<cols;col++){
-      var rnd3=cellRnd(col,row,masterSeed)
-      // Per-cell randomised values
-      var cRot=rv2(rnd3,p.rRotEn,baseRot,p.rRotSc,p.rRotBi,p.rRotAmt,p.rRotOff)
-      var rnd4=cellRnd(col,row,masterSeed+1)
-      var cScale=rv2(rnd4,p.rScaleEn,baseScale,p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
-      var rnd5=cellRnd(col,row,masterSeed+2)
-      var cOpacity=Math.max(0,Math.min(1,rv2(rnd5,p.rOpEn,baseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff)))
-      var rnd6=cellRnd(col,row,masterSeed+3)
-      var cOX=rv2(rnd6,p.rOxEn,0,p.rOxSc,p.rOxBi,p.rOxAmt,p.rOxOff)*tileW
-      var rnd7=cellRnd(col,row,masterSeed+4)
-      var cOY=rv2(rnd7,p.rOyEn,0,p.rOySc,p.rOyBi,p.rOyAmt,p.rOyOff)*tileH
-      var doFlipX=flipXP>0&&(cellRnd(col,row,masterSeed+5)())< flipXP
-      var doFlipY=flipYP>0&&(cellRnd(col,row,masterSeed+6)())<flipYP
+      // Per-cell random values — each property gets its own independent RNG channel
+      var cRot  =rv2(cellRnd(col,row,0),p.rRotEn,   baseRot,    p.rRotSc,  p.rRotBi,  p.rRotAmt,  p.rRotOff)
+      var cScale=rv2(cellRnd(col,row,1),p.rScaleEn, baseScale,  p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
+      var cOpacity=Math.max(0,Math.min(1,rv2(cellRnd(col,row,2),p.rOpEn,baseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff)))
+      var cOX=rv2(cellRnd(col,row,3),p.rOxEn,0,p.rOxSc,p.rOxBi,p.rOxAmt,p.rOxOff)*tileW
+      var cOY=rv2(cellRnd(col,row,4),p.rOyEn,0,p.rOySc,p.rOyBi,p.rOyAmt,p.rOyOff)*tileH
+      // Flip: independent RNG channels, compare against probability threshold
+      var doFlipX=flipXP>0&&cellRnd(col,row,5)()<flipXP
+      var doFlipY=flipYP>0&&cellRnd(col,row,6)()<flipYP
 
-      // Cell centre position
+      // Cell centre
       var staggerOff=0
       if(staggerAxis==="row"&&row%2===1) staggerOff=stagger*tileW
       else if(staggerAxis==="col"&&col%2===1) staggerOff=stagger*tileH
-      var cx3=(col+0.5)*tileW+offX+staggerOff+cOX
+      var cx3=(col+0.5)*tileW+offX+(staggerAxis==="row"?staggerOff:0)+cOX
       var cy3=(row+0.5)*tileH+offY+(staggerAxis==="col"?staggerOff:0)+cOY
-      var tw=tileW-gapX, th=tileH-gapY
+
+      // Wrap: for repeat/mirror, offset the stamp position within canvas bounds
+      if(wrap==="repeat"){
+        cx3=((cx3%w)+w)%w
+        cy3=((cy3%h)+h)%h
+      } else if(wrap==="mirror"){
+        var wx=((cx3%(w*2))+w*2)%(w*2); cx3=wx<w?wx:w*2-wx
+        var wy=((cy3%(h*2))+h*2)%(h*2); cy3=wy<h?wy:h*2-wy
+      }
 
       ctx.save()
       ctx.translate(cx3,cy3)
       ctx.rotate(cRot)
-      ctx.scale(cScale*(doFlipX?-1:1),cScale*(doFlipY?-1:1))
+      ctx.scale(cScale,cScale)
+      // Flip: applied after scale so direction is independent of scale sign
+      if(doFlipX) ctx.scale(-1,1)
+      if(doFlipY) ctx.scale(1,-1)
       ctx.globalAlpha=cOpacity
-      ctx.drawImage(srcCv,-tw/2,-th/2,tw,th)
+      ctx.drawImage(srcCv,-stampW/2,-stampH/2,stampW,stampH)
       ctx.restore()
     }
   }
@@ -3056,13 +3076,18 @@ function TileP(props) {
         <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
           fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
       </RandRow>
-      <RandRow {...tr("rOxEn","offX","rOxSc","rOxBi","rOxAmt","rOxOff")}>
-        <Sl l="rand X" v={0} mn={-1} mx={1} st={.01}
-          fmt={function(v){return v.toFixed(2)}} fn={function(){}}/>
+      {/* Random position nudge per tile — base is always 0 (cell centre) */}
+      <RandRow {...tr("rOxEn","rOxBase","rOxSc","rOxBi","rOxAmt","rOxOff")}>
+        <div style={{display:"flex",alignItems:"center",minHeight:36}}>
+          <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",minWidth:76,textAlign:"right",paddingRight:12}}>nudge X</span>
+          <span style={{fontSize:9,color:"var(--di)"}}>per-tile random offset</span>
+        </div>
       </RandRow>
-      <RandRow {...tr("rOyEn","offY","rOySc","rOyBi","rOyAmt","rOyOff")}>
-        <Sl l="rand Y" v={0} mn={-1} mx={1} st={.01}
-          fmt={function(v){return v.toFixed(2)}} fn={function(){}}/>
+      <RandRow {...tr("rOyEn","rOyBase","rOySc","rOyBi","rOyAmt","rOyOff")}>
+        <div style={{display:"flex",alignItems:"center",minHeight:36}}>
+          <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",minWidth:76,textAlign:"right",paddingRight:12}}>nudge Y</span>
+          <span style={{fontSize:9,color:"var(--di)"}}>per-tile random offset</span>
+        </div>
       </RandRow>
       {/* Flip probabilities */}
       <Sl l="flip X prob" v={p.flipXProb||0} mn={0} mx={1} st={.01}
