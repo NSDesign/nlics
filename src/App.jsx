@@ -411,7 +411,7 @@ var MCH    = ["luminosity","R","G","B","A"]
 var SHAPES = ["ellipse","rectangle","rounded-rect","polygon","star","ring"]
 var GTYPES = ["linear","radial","conic"]
 var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value"]
-var PTYPES = ["checkerboard","stripes","dots"]
+var PTYPES = ["checkerboard","stripes","dots","tile"]
 var ECFG   = {
   brightness: ["value",0,300,1,150],
   contrast:   ["value",0,300,1,150],
@@ -1253,15 +1253,6 @@ function gPat(ctx,p,w,h) {
   var rad  = angle * Math.PI / 180
   var cx2  = w/2, cy2 = h/2
 
-  // Apply randomisation to positional/scale/angle params
-  var seed = p.rSeed||1, rnd = seededRand(seed)
-  function rv(en,v,sc,bi,amt,off){if(!en)return v;var r=rnd();if(bi!==false)r=r*2-1;return v+(r+(off||0))*(sc||.5)*(amt==null?1:amt)}
-  cs = rv(p.scaleRandEn,cs,p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
-  sW = rv(p.swRandEn,sW,p.rSwSc,p.rSwBi,p.rSwAmt,p.rSwOff)
-  dR = rv(p.drRandEn,dR,p.rDrSc,p.rDrBi,p.rDrAmt,p.rDrOff)
-  dS = rv(p.dsRandEn,dS,p.rDsSc,p.rDsBi,p.rDsAmt,p.rDsOff)
-  if(p.angleRandEn){var ar=rnd();if(p.rAngleBi!==false)ar=ar*2-1;rad=(angle+(ar+(p.rAngleOff||0))*(p.rAngleSc||30)*(p.rAngleAmt==null?1:p.rAngleAmt))*Math.PI/180}
-
   for(var py=0;py<h;py++) for(var px=0;px<w;px++){
     var ii=(py*w+px)*4, r, g, b
 
@@ -1298,6 +1289,87 @@ function gPat(ctx,p,w,h) {
   }
   ctx.save();ctx.globalAlpha=alpha;ctx.putImageData(img,0,0);ctx.restore()
 }
+// ── Tile pattern engine ──────────────────────────────────────────────────────
+// Renders a source node and stamps it in a grid with per-cell randomisation.
+// Takes cmap/cache/iC/vis for source resolution — dispatched specially from compAny.
+function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
+  var refId=p.refId
+  var cols=Math.max(1,Math.round(p.cols||4))
+  var rows=Math.max(1,Math.round(p.rows||4))
+  var tileW=w/cols, tileH=h/rows
+  var gapX=(p.gapX||0)*tileW, gapY=(p.gapY||0)*tileH
+  var stagger=p.stagger||0  // 0-1: fraction of tileW to offset alternating rows
+  var staggerAxis=p.staggerAxis||"row"  // "row" or "col"
+  var offX=(p.offX||0)*tileW, offY=(p.offY||0)*tileH
+  var baseRot=(p.rotation||0)*Math.PI/180
+  var baseScale=p.scale==null?1:p.scale
+  var baseOpacity=p.opacity==null?1:p.opacity
+  var masterSeed=p.seed||1
+  var bgC=h2r(p.bgColor||"#000000")
+  var bgA=p.bgOpacity==null?0:p.bgOpacity
+  var wrap=p.wrap||"clamp"
+  var flipXP=p.flipXProb||0, flipYP=p.flipYProb||0
+
+  // Randomise helpers — per-cell seeded
+  function cellRnd(col,row,channel){return seededRand(masterSeed+col*1000+row*100000+channel*7)}
+  function rv2(rnd2,en,base,sc,bi,amt,off){
+    if(!en)return base
+    var r=rnd2();if(bi!==false)r=r*2-1
+    return base+(r+(off||0))*(sc==null?.5:sc)*(amt==null?1:amt)
+  }
+
+  // Render source at tile size
+  var srcCv=null
+  if(refId&&cmap){
+    var raw=compAny(refId,cmap,cache,iC,Math.round(tileW),Math.round(tileH),new Set(vis||[]))
+    if(raw)srcCv=raw
+  }
+
+  // Draw background
+  if(bgA>0){
+    ctx.save();ctx.globalAlpha=bgA
+    ctx.fillStyle="rgb("+bgC.r+","+bgC.g+","+bgC.b+")"
+    ctx.fillRect(0,0,w,h);ctx.restore()
+  }
+
+  if(!srcCv)return
+
+  // Stamp each tile
+  for(var row=0;row<rows;row++){
+    for(var col=0;col<cols;col++){
+      var rnd3=cellRnd(col,row,masterSeed)
+      // Per-cell randomised values
+      var cRot=rv2(rnd3,p.rRotEn,baseRot,p.rRotSc,p.rRotBi,p.rRotAmt,p.rRotOff)
+      var rnd4=cellRnd(col,row,masterSeed+1)
+      var cScale=rv2(rnd4,p.rScaleEn,baseScale,p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
+      var rnd5=cellRnd(col,row,masterSeed+2)
+      var cOpacity=Math.max(0,Math.min(1,rv2(rnd5,p.rOpEn,baseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff)))
+      var rnd6=cellRnd(col,row,masterSeed+3)
+      var cOX=rv2(rnd6,p.rOxEn,0,p.rOxSc,p.rOxBi,p.rOxAmt,p.rOxOff)*tileW
+      var rnd7=cellRnd(col,row,masterSeed+4)
+      var cOY=rv2(rnd7,p.rOyEn,0,p.rOySc,p.rOyBi,p.rOyAmt,p.rOyOff)*tileH
+      var doFlipX=flipXP>0&&(cellRnd(col,row,masterSeed+5)())< flipXP
+      var doFlipY=flipYP>0&&(cellRnd(col,row,masterSeed+6)())<flipYP
+
+      // Cell centre position
+      var staggerOff=0
+      if(staggerAxis==="row"&&row%2===1) staggerOff=stagger*tileW
+      else if(staggerAxis==="col"&&col%2===1) staggerOff=stagger*tileH
+      var cx3=(col+0.5)*tileW+offX+staggerOff+cOX
+      var cy3=(row+0.5)*tileH+offY+(staggerAxis==="col"?staggerOff:0)+cOY
+      var tw=tileW-gapX, th=tileH-gapY
+
+      ctx.save()
+      ctx.translate(cx3,cy3)
+      ctx.rotate(cRot)
+      ctx.scale(cScale*(doFlipX?-1:1),cScale*(doFlipY?-1:1))
+      ctx.globalAlpha=cOpacity
+      ctx.drawImage(srcCv,-tw/2,-th/2,tw,th)
+      ctx.restore()
+    }
+  }
+}
+
 // Seeded pseudo-random for reproducible jitter/variation. LCG — fast, good enough.
 function seededRand(seed) {
   var s = (seed * 1664525 + 1013904223) & 0xFFFFFFFF
@@ -1982,6 +2054,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     else if(n.type==="gradient")gGrad(ctx,n.props,w,h)
     else if(n.type==="noise")gNoise(ctx,n.props,w,h)
     else if(n.type==="pattern")gPat(ctx,n.props,w,h)
+    else if(n.type==="tile")gTile(ctx,n.props,cmap,cache,iC,w,h,vis)
     else if(n.type==="image")gImg(ctx,n.props,iC,w,h)
     cache.set(id,cv);return cv
   }
@@ -2895,23 +2968,6 @@ function NoiseP(props) {
 }
 function PatP(props) {
   var p=props.p, up=props.up
-  function mkRand(field,scField,biField,amtField,offField) {
-    var enField=field+"RandEn"
-    return {
-      enabled:p[enField]||false,
-      onToggle:function(){var o={};o[enField]=!p[enField];up(Object.assign({},p,o))},
-      rangeBipolar:p[biField]!==false,
-      onRangeBipolar:function(v){var o={};o[biField]=v;up(Object.assign({},p,o))},
-      scale:p[scField],
-      onScale:function(v){var o={};o[scField]=v;up(Object.assign({},p,o))},
-      offset:p[offField]||0,
-      onOffset:function(v){var o={};o[offField]=v;up(Object.assign({},p,o))},
-      amount:p[amtField]==null?1:p[amtField],
-      onAmount:function(v){var o={};o[amtField]=v;up(Object.assign({},p,o))},
-      seed:p.rSeed||1,
-      onSeed:function(v){up(Object.assign({},p,{rSeed:v}))}
-    }
-  }
   return (
     <div>
       <Se l="type" v={p.pType} opts={PTYPES} fn={function(v){up(Object.assign({},p,{pType:v}))}}/>
@@ -2919,29 +2975,95 @@ function PatP(props) {
       <Sl l="opacity 1" v={p.a1==null?1:p.a1} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a1:v}))}}/>
       <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
       <Sl l="opacity 2" v={p.a2==null?1:p.a2} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a2:v}))}}/>
-      <RandRow {...mkRand("scale","rScaleSc","rScaleBi","rScaleAmt","rScaleOff")}>
-        <Sl l="scale" v={p.scale} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
-      </RandRow>
-      {/* Rotation — all patterns get rotation */}
-      <RandRow {...mkRand("angle","rAngleSc","rAngleBi","rAngleAmt","rAngleOff")}>
-        <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>
-      </RandRow>
+      <Sl l="scale" v={p.scale||.1} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+      <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>
       {p.pType==="stripes" && (
-        <RandRow {...mkRand("sw","rSwSc","rSwBi","rSwAmt","rSwOff")}>
-          <Sl l="width" v={p.sw} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{sw:v}))}}/>
-        </RandRow>
+        <Sl l="width" v={p.sw||.1} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{sw:v}))}}/>
       )}
       {p.pType==="dots" && (
         <div>
-          <RandRow {...mkRand("dr","rDrSc","rDrBi","rDrAmt","rDrOff")}>
-            <Sl l="dot r" v={p.dr} mn={.005} mx={.2} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{dr:v}))}}/>
-          </RandRow>
-          <RandRow {...mkRand("ds","rDsSc","rDsBi","rDsAmt","rDsOff")}>
-            <Sl l="spacing" v={p.ds} mn={.02} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{ds:v}))}}/>
-          </RandRow>
+          <Sl l="dot r" v={p.dr||.03} mn={.005} mx={.2} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{dr:v}))}}/>
+          <Sl l="spacing" v={p.ds||.1} mn={.02} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{ds:v}))}}/>
         </div>
       )}
-      <Sl l="opacity" v={p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+    </div>
+  )
+}
+
+// ── Tile pattern UI ───────────────────────────────────────────────────────────
+function TileP(props) {
+  var p=props.p, up=props.up, nodes=props.nodes, selfId=props.selfId, iC=props.iC
+  // RandRow factory for per-tile params
+  function tr(enK,baseK,scK,biK,amtK,offK){
+    return {
+      enabled:p[enK]||false, onToggle:function(){var o={};o[enK]=!p[enK];up(Object.assign({},p,o))},
+      rangeBipolar:p[biK]!==false, onRangeBipolar:function(v){var o={};o[biK]=v;up(Object.assign({},p,o))},
+      scale:p[scK], onScale:function(v){var o={};o[scK]=v;up(Object.assign({},p,o))},
+      offset:p[offK]||0, onOffset:function(v){var o={};o[offK]=v;up(Object.assign({},p,o))},
+      amount:p[amtK]==null?1:p[amtK], onAmount:function(v){var o={};o[amtK]=v;up(Object.assign({},p,o))},
+      seed:p.seed||1, onSeed:function(v){up(Object.assign({},p,{seed:v}))}
+    }
+  }
+  return (
+    <div>
+      {/* Source */}
+      <NRef l="source" v={p.refId} nodes={nodes} selfId={selfId} iC={iC}
+        fn={function(v){up(Object.assign({},p,{refId:v}))}}/>
+      {/* Grid */}
+      <Sl l="columns" v={p.cols||4} mn={1} mx={32} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>
+      <Sl l="rows" v={p.rows||4} mn={1} mx={32} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>
+      {/* Layout */}
+      <Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>
+      {(p.stagger||0)>0&&(
+        <Se l="stagger axis" v={p.staggerAxis||"row"} opts={["row","col"]}
+          fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>
+      )}
+      <Sl l="offset X" v={p.offX||0} mn={-1} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
+      <Sl l="offset Y" v={p.offY||0} mn={-1} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
+      <Sl l="gap X" v={p.gapX||0} mn={0} mx={.9} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapX:v}))}}/>
+      <Sl l="gap Y" v={p.gapY||0} mn={0} mx={.9} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapY:v}))}}/>
+      {/* Per-tile base + randomise */}
+      <RandRow {...tr("rRotEn","rotation","rRotSc","rRotBi","rRotAmt","rRotOff")}>
+        <Sl l="rotation" v={p.rotation||0} mn={-180} mx={180} st={1}
+          fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rotation:v}))}}/>
+      </RandRow>
+      <RandRow {...tr("rScaleEn","scale","rScaleSc","rScaleBi","rScaleAmt","rScaleOff")}>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.05} mx={3} st={.01}
+          fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+      </RandRow>
+      <RandRow {...tr("rOpEn","opacity","rOpSc","rOpBi","rOpAmt","rOpOff")}>
+        <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
+          fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
+      </RandRow>
+      <RandRow {...tr("rOxEn","offX","rOxSc","rOxBi","rOxAmt","rOxOff")}>
+        <Sl l="rand X" v={0} mn={-1} mx={1} st={.01}
+          fmt={function(v){return v.toFixed(2)}} fn={function(){}}/>
+      </RandRow>
+      <RandRow {...tr("rOyEn","offY","rOySc","rOyBi","rOyAmt","rOyOff")}>
+        <Sl l="rand Y" v={0} mn={-1} mx={1} st={.01}
+          fmt={function(v){return v.toFixed(2)}} fn={function(){}}/>
+      </RandRow>
+      {/* Flip probabilities */}
+      <Sl l="flip X prob" v={p.flipXProb||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{flipXProb:v}))}}/>
+      <Sl l="flip Y prob" v={p.flipYProb||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{flipYProb:v}))}}/>
+      {/* Wrap + background */}
+      <Se l="wrap" v={p.wrap||"clamp"} opts={["clamp","repeat","mirror"]}
+        fn={function(v){up(Object.assign({},p,{wrap:v}))}}/>
+      <Co l="bg colour" v={p.bgColor||"#000000"} fn={function(v){up(Object.assign({},p,{bgColor:v}))}}/>
+      <Sl l="bg opacity" v={p.bgOpacity||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{bgOpacity:v}))}}/>
+      <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
     </div>
   )
 }
@@ -2974,6 +3096,7 @@ function ImgP(props) {
 }
 function CreatorProps(props) {
   var node=props.node, onUpdate=props.onUpdate, onLoad=props.onLoad
+  var nodes=props.nodes||[], iC=props.iC
   function up(p){onUpdate(Object.assign({},node,{props:p}))}
   var savedSt=useState(false); var savedMsg=savedSt[0], setSavedMsg=savedSt[1]
   var hasSt=useState(hasCreatorDefault(node.type)); var hasDef=hasSt[0], setHasDef=hasSt[1]
@@ -2996,6 +3119,7 @@ function CreatorProps(props) {
       {node.type==="gradient" && <GradP  p={node.props} up={up}/>}
       {node.type==="noise"    && <NoiseP p={node.props} up={up}/>}
       {node.type==="pattern"  && <PatP   p={node.props} up={up}/>}
+      {node.type==="tile"     && <TileP  p={node.props} up={up} nodes={props.nodes} selfId={node.id} iC={props.iC}/>}
       {node.type==="image"    && <ImgP   p={node.props} up={up} onLoad={onLoad}/>}
       {/* Save-as-default row */}
       <div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid var(--bd)",alignItems:"center"}}>
@@ -4749,7 +4873,7 @@ function BlenderProps(props) {
 }
 
 /* ─── NODE ITEM ───────────────────────────────────────── */
-var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","blender":"#b82880","layers":"#e06828","stack":"#24acc4","promoted":"#d4b428"}
+var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","tile":"#20a890","blender":"#b82880","layers":"#e06828","stack":"#24acc4","promoted":"#d4b428"}
 /* ─── DISPLAY MODE BUTTON ──────────────────────────────── */
 // Renders a stacked-layers SVG icon in a round-rect.
 // A small triangle badge in the bottom-right signals multiple modes.
@@ -4948,7 +5072,7 @@ function AddMenu(props) {
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
-  var s1=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
+  var s1=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"tile",l:"Tile"},{t:"image",l:"Image"}]
   var items=props.sec===1?s1:[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
   return (
     <div ref={anchorRef} style={{position:"relative"}}>
@@ -5573,7 +5697,7 @@ function NodeDetailSheet(props) {
         </div>
         <div className="node-sheet-scroll">
           {props.sec===1
-            ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad}/>
+            ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad} nodes={props.nodes} iC={props.iC}/>
             : props.node.type==="stack"
               ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
                   onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
@@ -5778,7 +5902,7 @@ function Section(props) {
                 {isSel && props.panelStyle!=="sheet" && (
                   <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
                     {props.sec===1
-                      ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}/>
+                      ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} nodes={props.nodes} iC={props.iC}/>
                       : node.type==="blender"
                         ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
                         : node.type==="layers"
