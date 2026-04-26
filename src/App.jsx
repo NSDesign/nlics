@@ -5182,7 +5182,7 @@ function LivePreview(props) {
             <div style={{fontSize:12,color:"var(--mu)"}}>Tap ◎ on any item to preview</div>
           </div>
         )}
-        <div style={{transform:"scale("+zoom+")",transformOrigin:"center center",boxShadow:"0 12px 60px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.04)",lineHeight:0}}>
+        <div style={{transform:"scale("+zoom+")",transformOrigin:"center center",boxShadow:"0 12px 60px rgba(0,0,0,.85)",outline:"1px solid var(--bd)",lineHeight:0}}>
           <canvas ref={props.cvRef} width={props.sz} height={props.sz} style={{display:"block",imageRendering:zoom>2?"pixelated":"auto"}}/>
         </div>
       </div>
