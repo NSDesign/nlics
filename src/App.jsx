@@ -1315,7 +1315,7 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
   var rows=Math.max(1,Math.round(p.rows||4))
   var gapFX=Math.max(0,p.gapX||0)
   var gapFY=Math.max(0,p.gapY||0)
-  var gapMode=p.gapMode||"spacing"  // "spacing" = additive (grid expands) | "inset" = tile shrinks
+  var gapMode=p.gapMode||"spacing"  // "spacing"=spread: tiles stay full size, grid expands | "inset"=shrink: tile reduces, cell spacing fixed
   var tileW=w/cols, tileH=h/rows    // base cell size
 
   var stampW, stampH, cellSpacingW, cellSpacingH
@@ -3126,10 +3126,10 @@ function TileP(props) {
       <Sl l="offset Y" v={p.offY||0} mn={-1} mx={1} st={.01}
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
       <PR l="gap mode">
-        {[["spacing","Spacing"],["inset","Inset"]].map(function(m){
+        {[["spacing","spread"],["inset","shrink"]].map(function(m){
           return <button key={m[0]} className={(p.gapMode||"spacing")===m[0]?"ac":"ghost"}
             onClick={function(){up(Object.assign({},p,{gapMode:m[0]}))}}
-            style={{flex:1,fontSize:10,minHeight:32}}>{m[1]}</button>
+            style={{flex:1,fontSize:11,minHeight:32}}>{m[1]}</button>
         })}
       </PR>
       <Sl l="gap X" v={p.gapX||0} mn={0} mx={(p.gapMode||"spacing")==="spacing"?4:.98} st={.01}
