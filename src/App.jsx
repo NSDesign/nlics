@@ -1360,55 +1360,70 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
 
   ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high"
 
-  // Stamp loop — extends one tile beyond grid in each direction so wrap/stagger
-  // gaps at edges are filled. Source cell determined by wrap mode.
-  var pad=1  // extra tiles rendered outside the grid bounds on each side
-  for(var row=-pad;row<rows+pad;row++){
-    for(var col=-pad;col<cols+pad;col++){
+  // Stamp each tile, then add extra copies for repeat/mirror overflow at edges.
+  // This approach is simpler than an extended grid and handles stagger gaps correctly:
+  // a tile that bleeds off the right edge stamps a copy on the left, filling the gap.
+  for(var row=0;row<rows;row++){
+    for(var col=0;col<cols;col++){
 
-      // Actual draw position (may be off-canvas — let canvas clip it)
+      // Per-cell RNG using source coordinates
+      var cRot  =rv2(cellRnd(col,row,0),p.rRotEn,   baseRot,    p.rRotSc,  p.rRotBi,  p.rRotAmt,  p.rRotOff)
+      var cScale=rv2(cellRnd(col,row,1),p.rScaleEn, baseScale,  p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
+      var cOpacity=Math.max(0,Math.min(1,rv2(cellRnd(col,row,2),p.rOpEn,baseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff)))
+      var cOX=rv2(cellRnd(col,row,3),p.rOxEn,0,p.rOxSc,p.rOxBi,p.rOxAmt,p.rOxOff)*tileW
+      var cOY=rv2(cellRnd(col,row,4),p.rOyEn,0,p.rOySc,p.rOyBi,p.rOyAmt,p.rOyOff)*tileH
+      var doFlipX=flipXP>0&&cellRnd(col,row,5)()<flipXP
+      var doFlipY=flipYP>0&&cellRnd(col,row,6)()<flipYP
+
+      // Cell centre
       var staggerOff=0
-      if(staggerAxis==="row"&&((row%2)+2)%2===1) staggerOff=stagger*tileW
-      else if(staggerAxis==="col"&&((col%2)+2)%2===1) staggerOff=stagger*tileH
-      var cx3=(col+0.5)*tileW+offX+(staggerAxis==="row"?staggerOff:0)
-      var cy3=(row+0.5)*tileH+offY+(staggerAxis==="col"?staggerOff:0)
+      if(staggerAxis==="row"&&row%2===1) staggerOff=stagger*tileW
+      else if(staggerAxis==="col"&&col%2===1) staggerOff=stagger*tileH
+      var cx3=(col+0.5)*tileW+offX+(staggerAxis==="row"?staggerOff:0)+cOX
+      var cy3=(row+0.5)*tileH+offY+(staggerAxis==="col"?staggerOff:0)+cOY
 
-      // Skip tiles whose centre is more than one full tile outside the canvas
-      if(cx3<-tileW||cx3>w+tileW||cy3<-tileH||cy3>h+tileH) continue
+      // Half-extents for overflow detection (scale affects how far stamp reaches)
+      var hw=stampW/2*cScale, hh=stampH/2*cScale
 
-      // Determine source cell for RNG + mirror flip based on wrap mode
-      var srcCol=col, srcRow=row, mirrorFlipX=false, mirrorFlipY=false
-      if(wrap==="repeat"){
-        srcCol=((col%cols)+cols)%cols
-        srcRow=((row%rows)+rows)%rows
-      } else if(wrap==="mirror"){
-        var mc=((col%(cols*2))+(cols*2))%(cols*2)
-        mirrorFlipX=mc>=cols; srcCol=mirrorFlipX?cols*2-1-mc:mc
-        var mr=((row%(rows*2))+(rows*2))%(rows*2)
-        mirrorFlipY=mr>=rows; srcRow=mirrorFlipY?rows*2-1-mr:mr
-      } else {
-        // clamp: skip tiles that are outside the grid
-        if(col<0||col>=cols||row<0||row>=rows) continue
+      // Draw stamp function — fx/fy = extra flip for mirror copies (XOR with tile flip)
+      function doStamp(dx,dy,fx,fy) {
+        var flipX=(doFlipX)!==(fx||false)
+        var flipY=(doFlipY)!==(fy||false)
+        ctx.save()
+        ctx.translate(dx,dy)
+        ctx.rotate(cRot)
+        ctx.scale(cScale*(flipX?-1:1),cScale*(flipY?-1:1))
+        ctx.globalAlpha=cOpacity
+        ctx.drawImage(srcCv,-stampW/2,-stampH/2,stampW,stampH)
+        ctx.restore()
       }
 
-      // Per-source-cell random values
-      var cRot  =rv2(cellRnd(srcCol,srcRow,0),p.rRotEn,   baseRot,    p.rRotSc,  p.rRotBi,  p.rRotAmt,  p.rRotOff)
-      var cScale=rv2(cellRnd(srcCol,srcRow,1),p.rScaleEn, baseScale,  p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
-      var cOpacity=Math.max(0,Math.min(1,rv2(cellRnd(srcCol,srcRow,2),p.rOpEn,baseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff)))
-      var cOX=rv2(cellRnd(srcCol,srcRow,3),p.rOxEn,0,p.rOxSc,p.rOxBi,p.rOxAmt,p.rOxOff)*tileW
-      var cOY=rv2(cellRnd(srcCol,srcRow,4),p.rOyEn,0,p.rOySc,p.rOyBi,p.rOyAmt,p.rOyOff)*tileH
-      var doFlipX=(flipXP>0&&cellRnd(srcCol,srcRow,5)()<flipXP)!==mirrorFlipX
-      var doFlipY=(flipYP>0&&cellRnd(srcCol,srcRow,6)()<flipYP)!==mirrorFlipY
+      doStamp(cx3,cy3)
 
-      ctx.save()
-      ctx.translate(cx3+cOX,cy3+cOY)
-      ctx.rotate(cRot)
-      ctx.scale(cScale,cScale)
-      if(doFlipX) ctx.scale(-1,1)
-      if(doFlipY) ctx.scale(1,-1)
-      ctx.globalAlpha=cOpacity
-      ctx.drawImage(srcCv,-stampW/2,-stampH/2,stampW,stampH)
-      ctx.restore()
+      if(wrap==="repeat"){
+        // Tile bleeds off an edge → place a copy at the wrapped position
+        if(cx3+hw>w) doStamp(cx3-w,cy3)          // right bleed → copy on left
+        if(cx3-hw<0) doStamp(cx3+w,cy3)           // left bleed → copy on right
+        if(cy3+hh>h) doStamp(cx3,cy3-h)           // bottom bleed → copy on top
+        if(cy3-hh<0) doStamp(cx3,cy3+h)           // top bleed → copy on bottom
+        // Corner cases
+        if(cx3+hw>w&&cy3+hh>h) doStamp(cx3-w,cy3-h)
+        if(cx3-hw<0&&cy3-hh<0) doStamp(cx3+w,cy3+h)
+        if(cx3+hw>w&&cy3-hh<0) doStamp(cx3-w,cy3+h)
+        if(cx3-hw<0&&cy3+hh>h) doStamp(cx3+w,cy3-h)
+      } else if(wrap==="mirror"){
+        // Tile bleeds off an edge → place a FLIPPED copy reflected at the edge
+        if(cx3+hw>w) doStamp(2*w-cx3,cy3,true,false)   // right → reflect, flip X
+        if(cx3-hw<0) doStamp(-cx3,cy3,true,false)       // left → reflect, flip X
+        if(cy3+hh>h) doStamp(cx3,2*h-cy3,false,true)   // bottom → reflect, flip Y
+        if(cy3-hh<0) doStamp(cx3,-cy3,false,true)       // top → reflect, flip Y
+        // Corners: flip both axes
+        if(cx3+hw>w&&cy3+hh>h) doStamp(2*w-cx3,2*h-cy3,true,true)
+        if(cx3-hw<0&&cy3-hh<0) doStamp(-cx3,-cy3,true,true)
+        if(cx3+hw>w&&cy3-hh<0) doStamp(2*w-cx3,-cy3,true,true)
+        if(cx3-hw<0&&cy3+hh>h) doStamp(-cx3,2*h-cy3,true,true)
+      }
+      // clamp: nothing extra — canvas clips naturally at edges
     }
   }
 }
