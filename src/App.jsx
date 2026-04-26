@@ -1426,15 +1426,14 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
 
       if(wrap==="repeat"){
         // Tile bleeds off an edge → place a copy at the wrapped position
-        if(cx3+hw>w) doStamp(cx3-w,cy3)          // right bleed → copy on left
-        if(cx3-hw<0) doStamp(cx3+w,cy3)           // left bleed → copy on right
-        if(cy3+hh>h) doStamp(cx3,cy3-h)           // bottom bleed → copy on top
-        if(cy3-hh<0) doStamp(cx3,cy3+h)           // top bleed → copy on bottom
-        // Corner cases
-        if(cx3+hw>w&&cy3+hh>h) doStamp(cx3-w,cy3-h)
-        if(cx3-hw<0&&cy3-hh<0) doStamp(cx3+w,cy3+h)
-        if(cx3+hw>w&&cy3-hh<0) doStamp(cx3-w,cy3+h)
-        if(cx3-hw<0&&cy3+hh>h) doStamp(cx3+w,cy3-h)
+        if(cx3+hw>w) doStamp(cx3-wrapW,cy3)
+        if(cx3-hw<0) doStamp(cx3+wrapW,cy3)
+        if(cy3+hh>h) doStamp(cx3,cy3-wrapH)
+        if(cy3-hh<0) doStamp(cx3,cy3+wrapH)
+        if(cx3+hw>w&&cy3+hh>h) doStamp(cx3-wrapW,cy3-wrapH)
+        if(cx3-hw<0&&cy3-hh<0) doStamp(cx3+wrapW,cy3+wrapH)
+        if(cx3+hw>w&&cy3-hh<0) doStamp(cx3-wrapW,cy3+wrapH)
+        if(cx3-hw<0&&cy3+hh>h) doStamp(cx3+wrapW,cy3-wrapH)
       } else if(wrap==="mirror"){
         // Tile bleeds off an edge → place a FLIPPED copy reflected at the edge
         if(cx3+hw>w) doStamp(2*w-cx3,cy3,true,false)   // right → reflect, flip X
