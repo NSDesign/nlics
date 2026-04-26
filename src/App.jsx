@@ -1285,7 +1285,6 @@ function gPat(ctx,p,w,h) {
       g=Math.round(CA.g*(1-blend)+CB.g*blend)
       b=Math.round(CA.b*(1-blend)+CB.b*blend)
       d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=Math.round((a1*(1-blend)+a2*blend)*255)
-    }
     } else if(pType==="diamond"){
       // Rotate pixel around centre
       var ddpx=px-cx2, ddpy=py-cy2
