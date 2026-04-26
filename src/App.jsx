@@ -411,7 +411,7 @@ var MCH    = ["luminosity","R","G","B","A"]
 var SHAPES = ["ellipse","rectangle","rounded-rect","polygon","star","ring"]
 var GTYPES = ["linear","radial","conic"]
 var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value"]
-var PTYPES = ["checkerboard","stripes","dots","tile"]
+var PTYPES = ["checkerboard","stripes","dots","diamond"]
 var ECFG   = {
   brightness: ["value",0,300,1,150],
   contrast:   ["value",0,300,1,150],
@@ -1285,6 +1285,20 @@ function gPat(ctx,p,w,h) {
       g=Math.round(CA.g*(1-blend)+CB.g*blend)
       b=Math.round(CA.b*(1-blend)+CB.b*blend)
       d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=Math.round((a1*(1-blend)+a2*blend)*255)
+    }
+    } else if(pType==="diamond"){
+      // Rotate pixel around centre
+      var ddpx=px-cx2, ddpy=py-cy2
+      var ddrx=ddpx*Math.cos(rad)-ddpy*Math.sin(rad)
+      var ddry=ddpx*Math.sin(rad)+ddpy*Math.cos(rad)
+      // Diamond grid: |x/cs| + |y/cs| creates diamond/rhombus tiling
+      var dcs=Math.max(2,scale*Math.max(w,h))
+      var dgx=((ddrx%dcs)+dcs)%dcs-dcs/2
+      var dgy=((ddry%dcs)+dcs)%dcs-dcs/2
+      // Diamond check: |x|+|y| < half_cell
+      var inside=Math.abs(dgx)+Math.abs(dgy)<dcs/2
+      r=inside?CA.r:CB.r; g=inside?CA.g:CB.g; b=inside?CA.b:CB.b
+      d[ii]=r;d[ii+1]=g;d[ii+2]=b;d[ii+3]=Math.round((inside?a1:a2)*255)
     }
   }
   ctx.save();ctx.globalAlpha=alpha;ctx.putImageData(img,0,0);ctx.restore()
