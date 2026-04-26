@@ -1173,7 +1173,11 @@ function gShape(ctx,p,w,h) {
     }
   }
 
-  if(fill&&fill!=="none"){tc2.fillStyle=fill;tc2.fill("evenodd")}
+  if(fill&&fill!=="none"){
+    tc2.globalAlpha=p.fillOpacity==null?1:p.fillOpacity
+    tc2.fillStyle=fill;tc2.fill("evenodd")
+    tc2.globalAlpha=1
+  }
   if(strokeW>0){
     tc2.globalAlpha=strokeOpacity
     tc2.strokeStyle=stroke;tc2.lineWidth=strokeW*sc;tc2.stroke()
@@ -2869,6 +2873,9 @@ function ShapeP(props) {
         </div>
       )}
       <Co l="fill" v={p.fill} fn={function(v){up(Object.assign({},p,{fill:v}))}}/>
+      <Sl l="fill op" v={p.fillOpacity==null?1:p.fillOpacity} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}}
+        fn={function(v){up(Object.assign({},p,{fillOpacity:v}))}}/>
       <Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>
       {p.strokeW>0 && (
         <div>
