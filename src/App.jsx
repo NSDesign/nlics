@@ -1313,14 +1313,25 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
   var refId=p.refId
   var cols=Math.max(1,Math.round(p.cols||4))
   var rows=Math.max(1,Math.round(p.rows||4))
-  // Gap as gutter: gap fraction of cell is taken as space between tiles.
-  // Cell size = (canvas / count). Stamp size = cell - gap. Cell centres stay fixed.
-  // Background colour fills the gutters. Source is never cropped by gap.
-  var gapFX=Math.max(0,Math.min(.98,p.gapX||0))
-  var gapFY=Math.max(0,Math.min(.98,p.gapY||0))
-  var tileW=w/cols, tileH=h/rows          // cell centre spacing (unchanged)
-  var stampW=Math.max(1,tileW*(1-gapFX))  // tile is smaller by gap fraction
-  var stampH=Math.max(1,tileH*(1-gapFY))  // source rendered at full stampW×stampH (no crop)
+  var gapFX=Math.max(0,p.gapX||0)
+  var gapFY=Math.max(0,p.gapY||0)
+  var gapMode=p.gapMode||"spacing"  // "spacing" = additive (grid expands) | "inset" = tile shrinks
+  var tileW=w/cols, tileH=h/rows    // base cell size
+
+  var stampW, stampH, cellSpacingW, cellSpacingH
+  if(gapMode==="inset"){
+    // Inset: gap reduces stamp size, cell spacing unchanged
+    // Tile shrinks, cell centres stay on the original grid
+    stampW=Math.max(1,tileW*(1-Math.min(.98,gapFX)))
+    stampH=Math.max(1,tileH*(1-Math.min(.98,gapFY)))
+    cellSpacingW=tileW; cellSpacingH=tileH
+  } else {
+    // Spacing: gap adds space between tiles, stamp stays full cell size
+    // Cell spacing grows, grid expands beyond canvas — wrap/clamp handles edges
+    stampW=tileW; stampH=tileH
+    cellSpacingW=tileW*(1+gapFX)
+    cellSpacingH=tileH*(1+gapFY)
+  }
   var stagger=p.stagger||0
   var staggerAxis=p.staggerAxis||"row"
   var offX=(p.offX||0)*tileW, offY=(p.offY||0)*tileH
@@ -1342,7 +1353,8 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
   }
 
   // Render source at stamp dimensions at 2× for SSAA quality then downscale.
-  // stampW = tileW*(1-gap) — source fills the tile fully, gap is gutter between tiles.
+  // Spacing mode: stampW = tileW (full cell, gap is additive)
+  // Inset mode:   stampW = tileW*(1-gap) (tile shrinks, cell spacing fixed)
   var srcCv=null
   if(refId&&cmap){
     var sW2=Math.round(stampW*2), sH2=Math.round(stampH*2)
@@ -1384,15 +1396,18 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
 
       // Cell centre
       var staggerOff=0
-      var sp=p.staggerParity||"odd"  // "odd" or "even"
+      var sp=p.staggerParity||"odd"
       var rowParity=((row%2)+2)%2, colParity=((col%2)+2)%2
-      if(staggerAxis==="row"&&rowParity===(sp==="odd"?1:0)) staggerOff=stagger*tileW
-      else if(staggerAxis==="col"&&colParity===(sp==="odd"?1:0)) staggerOff=stagger*tileH
-      var cx3=(col+0.5)*tileW+offX+(staggerAxis==="row"?staggerOff:0)+cOX
-      var cy3=(row+0.5)*tileH+offY+(staggerAxis==="col"?staggerOff:0)+cOY
+      if(staggerAxis==="row"&&rowParity===(sp==="odd"?1:0)) staggerOff=stagger*cellSpacingW
+      else if(staggerAxis==="col"&&colParity===(sp==="odd"?1:0)) staggerOff=stagger*cellSpacingH
+      var cx3=(col+0.5)*cellSpacingW+offX+(staggerAxis==="row"?staggerOff:0)+cOX
+      var cy3=(row+0.5)*cellSpacingH+offY+(staggerAxis==="col"?staggerOff:0)+cOY
 
       // Half-extents for overflow detection (scale affects how far stamp reaches)
       var hw=stampW/2*cScale, hh=stampH/2*cScale
+      // For repeat wrap in spacing mode, use cellSpacing as the repeat period
+      var wrapW=gapMode==="spacing"?cellSpacingW*cols:w
+      var wrapH=gapMode==="spacing"?cellSpacingH*rows:h
 
       // Draw stamp function — fx/fy = extra flip for mirror copies (XOR with tile flip)
       function doStamp(dx,dy,fx,fy) {
@@ -3111,9 +3126,16 @@ function TileP(props) {
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
       <Sl l="offset Y" v={p.offY||0} mn={-1} mx={1} st={.01}
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
-      <Sl l="gap X" v={p.gapX||0} mn={0} mx={.9} st={.01}
+      <PR l="gap mode">
+        {[["spacing","Spacing"],["inset","Inset"]].map(function(m){
+          return <button key={m[0]} className={(p.gapMode||"spacing")===m[0]?"ac":"ghost"}
+            onClick={function(){up(Object.assign({},p,{gapMode:m[0]}))}}
+            style={{flex:1,fontSize:10,minHeight:32}}>{m[1]}</button>
+        })}
+      </PR>
+      <Sl l="gap X" v={p.gapX||0} mn={0} mx={(p.gapMode||"spacing")==="spacing"?4:.98} st={.01}
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapX:v}))}}/>
-      <Sl l="gap Y" v={p.gapY||0} mn={0} mx={.9} st={.01}
+      <Sl l="gap Y" v={p.gapY||0} mn={0} mx={(p.gapMode||"spacing")==="spacing"?4:.98} st={.01}
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapY:v}))}}/>
       {/* Per-tile base + randomise */}
       <RandRow {...tr("rRotEn","rotation","rRotSc","rRotBi","rRotAmt","rRotOff")}>
