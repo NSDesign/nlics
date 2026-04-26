@@ -344,6 +344,120 @@ function BlendIfSlider(props) {
 }
 var COMMUTATIVE_MODES = {add:1,multiply:1,screen:1,difference:1,exclusion:1,darken:1,lighten:1}
 
+// ── Points-domain effect routing ─────────────────────────────────────────────
+// Effects that can operate on _points[] spatial data.
+// Each function receives pts (array of point objects) and returns modified pts.
+var POINTS_DOMAIN_EFFECTS = {
+  "transform":true,"wave":true,"twirl":true,"bulge":true,
+  "polar-to-cart":true,"cart-to-polar":true,"point-map":true
+}
+
+function applyEfxPoints(pts, efx, w, h) {
+  if(!pts||!pts.length||!efx.enabled) return pts
+  var p=efx.params||{}, t=efx.type
+  // Clone array — don't mutate in place
+  var out=pts.map(function(pt){return Object.assign({},pt)})
+
+  if(t==="transform"){
+    var tx=(p.tx||0)*w, ty=(p.ty||0)*h
+    var rot=(p.rot||0)*Math.PI/180
+    var su=p.su!=null?p.su:1, sx=(p.sx||1)*su, sy=(p.sy||1)*su
+    var cx2=w/2, cy2=h/2
+    out=out.map(function(pt){
+      var dx=pt.x-cx2, dy=pt.y-cy2
+      return Object.assign({},pt,{
+        x:cx2+(dx*Math.cos(rot)-dy*Math.sin(rot))*sx+tx,
+        y:cy2+(dx*Math.sin(rot)+dy*Math.cos(rot))*sy+ty,
+        rotation:(pt.rotation||0)+rot,
+        scale:(pt.scale||1)*su
+      })
+    })
+  }
+  else if(t==="wave"){
+    var wAmp=(p.amplitude||0.05)*Math.max(w,h)
+    var wFx=p.freqX||3,wFy=p.freqY||3,wPx=p.phaseX||0,wPy=p.phaseY||0
+    out=out.map(function(pt){
+      return Object.assign({},pt,{
+        x:pt.x+Math.sin(pt.y/h*wFy*Math.PI*2+wPy)*wAmp,
+        y:pt.y+Math.sin(pt.x/w*wFx*Math.PI*2+wPx)*wAmp
+      })
+    })
+  }
+  else if(t==="twirl"){
+    var tAngle=(p.angle||180)*Math.PI/180, tRad=(p.radius||0.5)*Math.min(w,h)*0.5
+    var tcx=(p.cx!=null?p.cx:0.5)*w, tcy=(p.cy!=null?p.cy:0.5)*h
+    out=out.map(function(pt){
+      var dx=pt.x-tcx, dy=pt.y-tcy
+      var d=Math.sqrt(dx*dx+dy*dy)
+      if(d<tRad){
+        var a=tAngle*(1-d/tRad)
+        return Object.assign({},pt,{
+          x:tcx+dx*Math.cos(a)-dy*Math.sin(a),
+          y:tcy+dx*Math.sin(a)+dy*Math.cos(a),
+          rotation:(pt.rotation||0)+a
+        })
+      }
+      return pt
+    })
+  }
+  else if(t==="bulge"){
+    var bStr=p.strength||0.5, bRad=(p.radius||0.7)*Math.min(w,h)*0.5
+    var bcx=(p.cx!=null?p.cx:0.5)*w, bcy=(p.cy!=null?p.cy:0.5)*h
+    out=out.map(function(pt){
+      var dx=pt.x-bcx, dy=pt.y-bcy
+      var d=Math.sqrt(dx*dx+dy*dy)
+      if(d<bRad&&d>0){
+        var norm=d/bRad, newR=Math.pow(norm,1/(1+bStr))*bRad
+        return Object.assign({},pt,{x:bcx+dx*(newR/d),y:bcy+dy*(newR/d)})
+      }
+      return pt
+    })
+  }
+  else if(t==="cart-to-polar"){
+    var pCx=w/2, pCy=h/2, pR=Math.min(w,h)/2
+    out=out.map(function(pt){
+      var ang=(Math.atan2(pt.y-pCy,pt.x-pCx)+Math.PI*2)%(Math.PI*2)
+      var dist=Math.sqrt((pt.x-pCx)*(pt.x-pCx)+(pt.y-pCy)*(pt.y-pCy))/pR
+      return Object.assign({},pt,{x:(ang/(Math.PI*2))*w, y:Math.min(dist,1)*h})
+    })
+  }
+  else if(t==="polar-to-cart"){
+    var pCx2=w/2, pCy2=h/2, pR2=Math.min(w,h)/2
+    out=out.map(function(pt){
+      var u=pt.x/w, v=pt.y/h
+      return Object.assign({},pt,{
+        x:pCx2+Math.cos(u*Math.PI*2)*v*pR2,
+        y:pCy2+Math.sin(u*Math.PI*2)*v*pR2
+      })
+    })
+  }
+  else if(t==="point-map"){
+    // Map input info attribute → output mutable attribute via linear/invert mapping
+    var mappings=p.mappings||[]
+    out=out.map(function(pt){
+      var npt=Object.assign({},pt)
+      mappings.forEach(function(m){
+        var inVal=npt[m.inputAttr]
+        if(inVal==null)return
+        var v=Math.max(0,Math.min(1,inVal))  // normalise 0-1
+        if(m.mapping==="invert") v=1-v
+        var mapped=(m.min||0)+(v*(((m.max!=null?m.max:1)-(m.min||0))))
+        npt[m.outputAttr]=mapped
+      })
+      return npt
+    })
+  }
+
+  // Clamp x/y to canvas after all transforms
+  out=out.map(function(pt){
+    return Object.assign({},pt,{
+      x:Math.max(0,Math.min(w,pt.x)),
+      y:Math.max(0,Math.min(h,pt.y))
+    })
+  })
+  return out
+}
+
 // RandRow: wraps a slider with optional randomise controls
 // props: enabled, onToggle, rangeBipolar, onRangeBipolar, scale, onScale, offset, onOffset, amount, onAmount, seed, onSeed
 function RandRow(props) {
@@ -510,7 +624,7 @@ function mkEfx(t) {
   if(t==="edge-detect")  params={strength:100, invert:false}
   if(t==="pixelate")     params={size:8}
   if(t==="duotone")      params={shadow:"#0a0a2a", highlight:"#f5e642"}
-  return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[], blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} }
+  return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[], blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}}, domain:"pixels" }
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, fillOpacity:100, opacity:100, blendMode:"multiply", effectStack:[], enabled:true, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[], fillOpacity:100 } }
@@ -1750,6 +1864,15 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
   // first item in list is applied last (top layer). Standard layer convention.
   for(var ei=stack.length-1;ei>=0;ei--){
     var efx=stack[ei]; if(!efx.enabled) continue
+    // Points-domain effects: operate on _pts stored on canvas element, skip pixel transform
+    if((efx.domain==="points")&&POINTS_DOMAIN_EFFECTS[efx.type]){
+      var curPts=ctx.canvas?ctx.canvas._pts:(ctx._pts||null)
+      if(curPts){
+        var newPts=applyEfxPoints(curPts,efx,w,h)
+        if(ctx.canvas)ctx.canvas._pts=newPts; else ctx._pts=newPts
+      }
+      continue
+    }
     // Stack reference — apply referenced Effect Stack with opacity/blendMode control
     if(efx.type==="__stackref__"){
       var refEn=cmap.get(efx.stackRefId)
@@ -4166,6 +4289,15 @@ function EfxCard(props) {
       )}
       {tab==="layer" && (
         <div className="card-body">
+          <PR l="domain">
+            {["pixels","points"].map(function(d){
+              var hasPts=POINTS_DOMAIN_EFFECTS[efx.type]
+              return <button key={d} disabled={d==="points"&&!hasPts}
+                className={(efx.domain||"pixels")===d?"ac":"ghost"}
+                onClick={function(){props.onChange(Object.assign({},efx,{domain:d}))}}
+                style={{flex:1,fontSize:10,minHeight:32,opacity:d==="points"&&!hasPts?.35:1}}>{d}</button>
+            })}
+          </PR>
           <Sl l="opacity" v={efx.opacity} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){props.onChange(Object.assign({},efx,{opacity:v}))}}/>
           <Se l="blend" v={efx.blendMode||"normal"} opts={EBMS} fn={function(v){props.onChange(Object.assign({},efx,{blendMode:v}))}}/>
           <PR l="channels">
