@@ -408,7 +408,7 @@ function BlendIfAccordion(props) {
 var EBMS   = ["normal","multiply","screen","overlay","add","subtract","darken","lighten"]
 var MBMS   = ["multiply","screen","add","subtract","normal"]
 var MCH    = ["luminosity","R","G","B","A"]
-var SHAPES = ["ellipse","rectangle","rounded-rect","polygon","star","ring"]
+var SHAPES = ["ellipse","rectangle","rounded-rect","polygon","star","ring","grid","spiral","polar-grid","phyllotaxis","scatter"]
 var GTYPES = ["linear","radial","conic"]
 var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value"]
 var PTYPES = ["checkerboard","stripes","dots","diamond"]
@@ -1153,6 +1153,24 @@ function gShape(ctx,p,w,h) {
     }
     // Stars keep straight lines between points even in smooth mode — otherwise tips disappear
     drawPts(starPts)
+  }
+  else if(s==="grid"||s==="spiral"||s==="polar-grid"||s==="phyllotaxis"||s==="scatter"){
+    // Geometry types: generate _points and render as dots or path line
+    // _points are set in compAny after gShape runs; here we just draw markers if needed
+    var geoPts=ctx.canvas&&ctx.canvas._points
+    if(geoPts&&geoPts.length>0&&(p.pointStyle||"dots")==="dots"){
+      var dr=Math.max(1,(p.dotSize||4)/2),gc=p.color||"#ffffff"
+      ctx.save();ctx.globalAlpha=p.opacity==null?1:p.opacity;ctx.fillStyle=gc
+      geoPts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,dr,0,Math.PI*2);ctx.fill()})
+      ctx.restore()
+    }
+    // Also draw connecting lines in smooth mode
+    if(geoPts&&geoPts.length>1&&renderMode==="smooth"&&(s==="spiral"||s==="polar-grid")){
+      ctx.save();ctx.strokeStyle=p.color||"#ffffff";ctx.lineWidth=p.strokeW||1.5
+      ctx.globalAlpha=p.opacity==null?1:p.opacity;ctx.beginPath()
+      geoPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+      ctx.stroke();ctx.restore()
+    }
   }
   else if(s==="ring"){
     if(renderMode==="faceted") {
@@ -2373,7 +2391,16 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   if(n.section===1){
     var cv=mkCv(w,h),ctx=cv.getContext("2d")
     if(n.type==="solid")gSolid(ctx,n.props,w,h)
-    else if(n.type==="shape")gShape(ctx,n.props,w,h)
+    else if(n.type==="shape"){
+      // For geometry sub-types, generate _points first then render
+      var sType=n.props&&n.props.shapeType
+      if(sType==="grid")        { gGrid(ctx,n.props,w,h);        cv._points=ctx.canvas._points||cv._points }
+      else if(sType==="spiral") { gSpiral(ctx,n.props,w,h);      cv._points=ctx.canvas._points||cv._points }
+      else if(sType==="polar-grid"){ gPolarGrid(ctx,n.props,w,h);cv._points=ctx.canvas._points||cv._points }
+      else if(sType==="phyllotaxis"){ gPhyllotaxis(ctx,n.props,w,h);cv._points=ctx.canvas._points||cv._points }
+      else if(sType==="scatter"){ gScatter(ctx,n.props,w,h);     cv._points=ctx.canvas._points||cv._points }
+      gShape(ctx,n.props,w,h)
+    }
     else if(n.type==="gradient")gGrad(ctx,n.props,w,h)
     else if(n.type==="noise")gNoise(ctx,n.props,w,h)
     else if(n.type==="pattern")gPat(ctx,n.props,w,h)
@@ -3079,14 +3106,21 @@ function SolidP(props) {
     </div>
   )
 }
+// Geometry types that are point-based (use point render controls)
+var GEO_POINT_TYPES = ["grid","spiral","polar-grid","phyllotaxis","scatter"]
+
 function ShapeP(props) {
   var p=props.p, up=props.up, s=p.shapeType
+  var isPointGeo = GEO_POINT_TYPES.includes(s)
+  var rm = p.renderMode||"smooth"
   return (
     <div>
       <Se l="type" v={s} opts={SHAPES} fn={function(v){up(Object.assign({},p,{shapeType:v}))}}/>
-      <Sl l="x" v={p.x} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x:v}))}}/>
-      <Sl l="y" v={p.y} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y:v}))}}/>
-      <Sl l="size" v={p.sz} mn={.05} mx={1.8} st={.01} fn={function(v){up(Object.assign({},p,{sz:v}))}}/>
+      <Se l="render" v={rm} opts={isPointGeo?["smooth","points"]:["smooth","faceted","points"]}
+        fn={function(v){up(Object.assign({},p,{renderMode:v}))}}/>
+      {!isPointGeo&&<Sl l="x" v={p.x||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x:v}))}}/>}
+      {!isPointGeo&&<Sl l="y" v={p.y||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y:v}))}}/>}
+      {!isPointGeo&&<Sl l="size" v={p.sz||.6} mn={.05} mx={1.8} st={.01} fn={function(v){up(Object.assign({},p,{sz:v}))}}/>}
       {(s==="ellipse") && (
         <div>
           <Sl l="x radius" v={p.rx==null?1:p.rx} mn={.1} mx={3} st={.01} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>
@@ -3144,7 +3178,58 @@ function ShapeP(props) {
             fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
         </div>
       )}
-      <Co l="fill" v={p.fill} fn={function(v){up(Object.assign({},p,{fill:v}))}}/>
+      {/* ── Geometry-specific params ── */}
+      {s==="grid"&&(<div>
+        <Sl l="columns" v={p.cols||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>
+        <Sl l="rows" v={p.rows||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>
+        <Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>
+        {(p.stagger||0)>0&&<Se l="axis" v={p.staggerAxis||"row"} opts={["row","col"]} fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>}
+        <Sl l="offset X" v={p.offX||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
+        <Sl l="offset Y" v={p.offY||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
+      </div>)}
+      {s==="spiral"&&(<div>
+        <Sl l="points" v={p.pointCount||32} mn={4} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+        <Sl l="turns" v={p.turns||3} mn={.25} mx={20} st={.25} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{turns:v}))}}/>
+        <Sl l="start r" v={p.startRadius||0} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>
+        <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
+        <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+        <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+      </div>)}
+      {s==="polar-grid"&&(<div>
+        <Sl l="rings" v={p.rings||4} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rings:v}))}}/>
+        <Sl l="per ring" v={p.pointsPerRing||8} mn={2} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointsPerRing:v}))}}/>
+        <Sl l="start r" v={p.startRadius||.05} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>
+        <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
+        <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+        <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+      </div>)}
+      {s==="phyllotaxis"&&(<div>
+        <Sl l="points" v={p.pointCount||64} mn={4} mx={1024} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+        <Sl l="divergence" v={p.divergenceAngle==null?137.508:p.divergenceAngle} mn={90} mx={180} st={.001} fmt={function(v){return v.toFixed(3)+"°"}} fn={function(v){up(Object.assign({},p,{divergenceAngle:v}))}}/>
+        <Sl l="spread" v={p.scale||.45} mn={.05} mx={.5} st={.005} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+        <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+      </div>)}
+      {s==="scatter"&&(<div>
+        <Sl l="points" v={p.pointCount||32} mn={2} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+        <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
+        <Sl l="x min" v={p.x0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x0:v}))}}/>
+        <Sl l="x max" v={p.x1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x1:v}))}}/>
+        <Sl l="y min" v={p.y0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y0:v}))}}/>
+        <Sl l="y max" v={p.y1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y1:v}))}}/>
+      </div>)}
+      {isPointGeo&&<div>
+        <Se l="style" v={p.pointStyle||"dots"} opts={["dots","hidden"]}
+          fn={function(v){up(Object.assign({},p,{pointStyle:v}))}}/>
+        {(p.pointStyle||"dots")==="dots"&&<div>
+          <Sl l="dot size" v={p.dotSize||4} mn={1} mx={20} st={.5}
+            fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up(Object.assign({},p,{dotSize:v}))}}/>
+          <Co l="colour" v={p.color||"#ffffff"} fn={function(v){up(Object.assign({},p,{color:v}))}}/>
+          <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
+            fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
+        </div>}
+      </div>}
+      {!isPointGeo&&<Co l="fill" v={p.fill} fn={function(v){up(Object.assign({},p,{fill:v}))}}/>}
       <Sl l="fill op" v={p.fillOpacity==null?1:p.fillOpacity} mn={0} mx={1} st={.01}
         fmt={function(v){return Math.round(v*100)+"%"}}
         fn={function(v){up(Object.assign({},p,{fillOpacity:v}))}}/>
@@ -5618,8 +5703,8 @@ function AddMenu(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
   var s1groups=[
-    {label:"Pixel",items:[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]},
-    {label:"Geometry",items:[{t:"grid",l:"Grid"},{t:"spiral",l:"Spiral"},{t:"polar-grid",l:"Polar Grid"},{t:"phyllotaxis",l:"Phyllotaxis"},{t:"scatter",l:"Scatter"}]},
+    {label:"Pixel",items:[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Geometry"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]},
+
     {label:"Tile",items:[{t:"tile",l:"Tile"}]},
   ]
   var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
