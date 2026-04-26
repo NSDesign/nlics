@@ -1345,10 +1345,18 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
   var flipXP=p.flipXProb||0, flipYP=p.flipYProb||0
 
   // Per-cell deterministic RNG — unique seed per cell per property
-  function cellRnd(col,row,ch){return seededRand(masterSeed*13+col*1009+row*100003+ch*7)}
-  function rv2(rnd2,en,base,sc,bi,amt,off){
+  // propertySeed allows each randomised param to have its own independent seed
+  function cellRnd(col,row,ch,propertySeed){
+    var ps=propertySeed||0
+    return seededRand(masterSeed*13+ps*997+col*1009+row*100003+ch*7)
+  }
+  // negateUni: for params like opacity where base=1 and unipolar should REDUCE not increase
+  function rv2(rnd2,en,base,sc,bi,amt,off,negateUni){
     if(!en)return base
-    var r=rnd2(); if(bi!==false)r=r*2-1
+    var r=rnd2()
+    if(bi!==false) r=r*2-1          // bipolar: -1 to 1
+    else if(negateUni) r=-r         // unipolar reduce: 0 to -1 (reduces from base)
+    // else unipolar: 0 to 1 (default, adds to base)
     return base+(r+(off||0))*(sc==null?.5:sc)*(amt==null?1:amt)
   }
 
@@ -1386,11 +1394,12 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
     for(var col=0;col<cols;col++){
 
       // Per-cell RNG using source coordinates
-      var cRot  =rv2(cellRnd(col,row,0),p.rRotEn,   baseRot,    p.rRotSc,  p.rRotBi,  p.rRotAmt,  p.rRotOff)
-      var cScale=rv2(cellRnd(col,row,1),p.rScaleEn, baseScale,  p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
-      var cOpacity=Math.max(0,Math.min(1,rv2(cellRnd(col,row,2),p.rOpEn,baseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff)))
-      var cOX=rv2(cellRnd(col,row,3),p.rOxEn,0,p.rOxSc,p.rOxBi,p.rOxAmt,p.rOxOff)*tileW
-      var cOY=rv2(cellRnd(col,row,4),p.rOyEn,0,p.rOySc,p.rOyBi,p.rOyAmt,p.rOyOff)*tileH
+      var cRot  =rv2(cellRnd(col,row,0,p.rRotSeed),  p.rRotEn,  baseRot,   p.rRotSc,  p.rRotBi,  p.rRotAmt,  p.rRotOff)
+      var cScale=rv2(cellRnd(col,row,1,p.rScaleSeed),p.rScaleEn,baseScale, p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
+      // Opacity: unipolar (0,1) range reduces from base (negateUni=true) so it always darkens
+      var cOpacity=Math.max(0,Math.min(1,rv2(cellRnd(col,row,2,p.rOpSeed),p.rOpEn,baseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff,true)))
+      var cOX=rv2(cellRnd(col,row,3,p.rOxSeed),p.rOxEn,0,p.rOxSc,p.rOxBi,p.rOxAmt,p.rOxOff)*tileW
+      var cOY=rv2(cellRnd(col,row,4,p.rOySeed),p.rOyEn,0,p.rOySc,p.rOyBi,p.rOyAmt,p.rOyOff)*tileH
       var doFlipX=flipXP>0&&cellRnd(col,row,5)()<flipXP
       var doFlipY=flipYP>0&&cellRnd(col,row,6)()<flipYP
 
@@ -3090,14 +3099,14 @@ function PatP(props) {
 function TileP(props) {
   var p=props.p, up=props.up, nodes=props.nodes, selfId=props.selfId, iC=props.iC
   // RandRow factory for per-tile params
-  function tr(enK,baseK,scK,biK,amtK,offK){
+  function tr(enK,baseK,scK,biK,amtK,offK,seedK){
     return {
       enabled:p[enK]||false, onToggle:function(){var o={};o[enK]=!p[enK];up(Object.assign({},p,o))},
       rangeBipolar:p[biK]!==false, onRangeBipolar:function(v){var o={};o[biK]=v;up(Object.assign({},p,o))},
       scale:p[scK], onScale:function(v){var o={};o[scK]=v;up(Object.assign({},p,o))},
       offset:p[offK]||0, onOffset:function(v){var o={};o[offK]=v;up(Object.assign({},p,o))},
       amount:p[amtK]==null?1:p[amtK], onAmount:function(v){var o={};o[amtK]=v;up(Object.assign({},p,o))},
-      seed:p.seed||1, onSeed:function(v){up(Object.assign({},p,{seed:v}))}
+      seed:p[seedK]||0, onSeed:function(v){var o={};o[seedK]=v;up(Object.assign({},p,o))}
     }
   }
   return (
@@ -3137,26 +3146,26 @@ function TileP(props) {
       <Sl l="gap Y" v={p.gapY||0} mn={0} mx={(p.gapMode||"spacing")==="spacing"?4:.98} st={.01}
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapY:v}))}}/>
       {/* Per-tile base + randomise */}
-      <RandRow {...tr("rRotEn","rotation","rRotSc","rRotBi","rRotAmt","rRotOff")}>
+      <RandRow {...tr("rRotEn","rotation","rRotSc","rRotBi","rRotAmt","rRotOff","rRotSeed")}>
         <Sl l="rotation" v={p.rotation||0} mn={-180} mx={180} st={1}
           fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rotation:v}))}}/>
       </RandRow>
-      <RandRow {...tr("rScaleEn","scale","rScaleSc","rScaleBi","rScaleAmt","rScaleOff")}>
+      <RandRow {...tr("rScaleEn","scale","rScaleSc","rScaleBi","rScaleAmt","rScaleOff","rScaleSeed")}>
         <Sl l="scale" v={p.scale==null?1:p.scale} mn={.05} mx={3} st={.01}
           fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
       </RandRow>
-      <RandRow {...tr("rOpEn","opacity","rOpSc","rOpBi","rOpAmt","rOpOff")}>
+      <RandRow {...tr("rOpEn","opacity","rOpSc","rOpBi","rOpAmt","rOpOff","rOpSeed")}>
         <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
           fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
       </RandRow>
       {/* Random position nudge per tile — base is always 0 (cell centre) */}
-      <RandRow {...tr("rOxEn","rOxBase","rOxSc","rOxBi","rOxAmt","rOxOff")}>
+      <RandRow {...tr("rOxEn","rOxBase","rOxSc","rOxBi","rOxAmt","rOxOff","rOxSeed")}>
         <div style={{display:"flex",alignItems:"center",minHeight:36}}>
           <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",minWidth:76,textAlign:"right",paddingRight:12}}>nudge X</span>
           <span style={{fontSize:9,color:"var(--di)"}}>per-tile random offset</span>
         </div>
       </RandRow>
-      <RandRow {...tr("rOyEn","rOyBase","rOySc","rOyBi","rOyAmt","rOyOff")}>
+      <RandRow {...tr("rOyEn","rOyBase","rOySc","rOyBi","rOyAmt","rOyOff","rOySeed")}>
         <div style={{display:"flex",alignItems:"center",minHeight:36}}>
           <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",minWidth:76,textAlign:"right",paddingRight:12}}>nudge Y</span>
           <span style={{fontSize:9,color:"var(--di)"}}>per-tile random offset</span>
