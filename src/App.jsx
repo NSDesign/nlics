@@ -2380,6 +2380,17 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
             }
           }
         }
+        // §1 pixel creators: show intrinsic alpha channel as matte
+        // (shape fillOpacity, gradient alpha stops, image transparency, etc.)
+        if(!em2&&mn.section===1){
+          var pcCv=compAny(dispId,cmap,new Map(),iC,w,h,new Set())
+          if(pcCv){
+            var pcId=pcCv.getContext("2d").getImageData(0,0,w,h)
+            em2=new Float32Array(w*h)
+            for(var pci=0;pci<w*h;pci++) em2[pci]=pcId.data[pci*4+3]/255
+            emLabel="intrinsic alpha"
+          }
+        }
       }
       ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
       if(em2){
