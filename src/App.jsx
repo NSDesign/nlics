@@ -5606,7 +5606,7 @@ function AddMenu(props) {
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
   var anchorRef=useRef(null)
   var menuRef=useRef(null)
-  var pos=usePopoverPosition(anchorRef, open, "below")
+  var pos=usePopoverPosition(anchorRef, open, "above")
   useEffect(function(){
     if(!open)return
     function h(e){
@@ -5617,14 +5617,26 @@ function AddMenu(props) {
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
-  var s1=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"tile",l:"Tile"},{t:"grid",l:"Grid"},{t:"spiral",l:"Spiral"},{t:"polar-grid",l:"Polar Grid"},{t:"phyllotaxis",l:"Phyllotaxis"},{t:"scatter",l:"Scatter"},{t:"image",l:"Image"}]
-  var items=props.sec===1?s1:[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
+  var s1groups=[
+    {label:"Pixel",items:[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Shape"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]},
+    {label:"Geometry",items:[{t:"grid",l:"Grid"},{t:"spiral",l:"Spiral"},{t:"polar-grid",l:"Polar Grid"},{t:"phyllotaxis",l:"Phyllotaxis"},{t:"scatter",l:"Scatter"}]},
+    {label:"Tile",items:[{t:"tile",l:"Tile"}]},
+  ]
+  var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
   return (
     <div ref={anchorRef} style={{position:"relative"}}>
       <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
       {open&&pos&&createPortal(
         <div ref={menuRef} className="drop-menu" style={pos}>
-          {items.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
+          {props.sec===1?s1groups.map(function(grp){return [
+            <div key={grp.label} style={{padding:"6px 14px 3px",fontSize:8,color:"var(--mu)",
+              textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
+              borderBottom:"1px solid var(--bd)",background:"var(--bg)"}}>
+              {grp.label}
+            </div>
+          ].concat(grp.items.map(function(item){
+            return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>
+          }))}):s2items.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
         </div>,
         document.body
       )}
