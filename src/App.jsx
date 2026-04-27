@@ -1186,7 +1186,7 @@ function gShape(ctx,p,w,h) {
       for(var ri3=0;ri3<edgeSegs;ri3++) rpts.push(jv(rw2-ri3*2*rw2/edgeSegs,rh2))
       for(var ri4=0;ri4<edgeSegs;ri4++) rpts.push(jv(-rw2,rh2-ri4*2*rh2/edgeSegs))
       drawPts(rpts)
-    } else if(jitter>0) {
+    } else if(renderMode==="smooth") {
       var rw3=r*rx, rh3=r*ry
       var rjSegs=Math.max(1,Math.round(segs/4))
       var rjpts=[]
@@ -1222,7 +1222,7 @@ function gShape(ctx,p,w,h) {
       var a=(i*2*Math.PI/sides)-Math.PI/2
       polyPts.push(jv(Math.cos(a)*r, Math.sin(a)*r))
     }
-    if(renderMode==="smooth"&&jitter>0) drawSmooth(polyPts)
+    if(renderMode==="smooth") drawSmooth(polyPts)
     else drawPts(polyPts)
   }
   else if(s==="star"){
@@ -1245,11 +1245,41 @@ function gShape(ctx,p,w,h) {
       geoPts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,dr,0,Math.PI*2);ctx.fill()})
       ctx.restore()
     }
-    // Also draw connecting lines in smooth mode
-    if(geoPts&&geoPts.length>1&&renderMode==="smooth"&&(s==="spiral"||s==="polar-grid")){
+    // Connect points for structure types (not scatter — random positions make lines meaningless)
+    if(geoPts&&geoPts.length>1&&s!=="scatter"){
       ctx.save();ctx.strokeStyle=p.color||"#ffffff";ctx.lineWidth=p.strokeW||1.5
-      ctx.globalAlpha=p.opacity==null?1:p.opacity;ctx.beginPath()
-      geoPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+      ctx.globalAlpha=(p.opacity==null?1:p.opacity)*.6;ctx.beginPath()
+      if(s==="grid"){
+        // Draw row and column lines
+        var gcols=p.cols||4,grows=p.rows||4
+        for(var gr=0;gr<grows;gr++){
+          var rowPts=geoPts.filter(function(pt){return pt.row===gr})
+          rowPts.sort(function(a,b){return a.col-b.col})
+          rowPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+        }
+        for(var gc=0;gc<gcols;gc++){
+          var colPts=geoPts.filter(function(pt){return pt.col===gc})
+          colPts.sort(function(a,b){return a.row-b.row})
+          colPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+        }
+      } else if(s==="polar-grid"){
+        // Connect each ring as a closed loop, then draw radial spokes
+        var maxRing=Math.max.apply(null,geoPts.map(function(pt){return pt.ringIndex||0}))
+        for(var ri=0;ri<=maxRing;ri++){
+          var ringPts=geoPts.filter(function(pt){return pt.ringIndex===ri}).sort(function(a,b){return (a.angleNorm||0)-(b.angleNorm||0)})
+          if(ringPts.length>1){ringPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)});ctx.closePath()}
+        }
+        // Radial spokes
+        var spokeCount=geoPts.filter(function(pt){return (pt.ringIndex||0)===0}).length
+        for(var si=0;si<spokeCount;si++){
+          var spoke=geoPts.filter(function(pt){return (pt.pointIndex%spokeCount)===si}).sort(function(a,b){return (a.ringIndex||0)-(b.ringIndex||0)})
+          spoke.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+        }
+      } else {
+        // spiral, phyllotaxis — connect in order
+        geoPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+        if(s==="phyllotaxis") ctx.closePath()
+      }
       ctx.stroke();ctx.restore()
     }
   }
@@ -1261,16 +1291,17 @@ function gShape(ctx,p,w,h) {
       tc2.moveTo(innerPts[0][0],innerPts[0][1])
       for(var ik=1;ik<innerPts.length;ik++) tc2.lineTo(innerPts[ik][0],innerPts[ik][1])
       tc2.closePath()
-    } else if(jitter>0) {
-      // Smooth jitter on ring — both outer and inner drawn as smooth curves
+    } else if(renderMode==="smooth") {
+      // Smooth ring: outer and inner each sampled as points, drawn as separate smooth curves
+      // Outer and inner use offset seeds so their jitter is independent
       var rOutPts=[]; for(var ro=0;ro<segs;ro++) rOutPts.push(jv(Math.cos(ro*Math.PI*2/segs)*r,Math.sin(ro*Math.PI*2/segs)*r))
       drawSmooth(rOutPts)
-      // Inner ring as separate smooth path (evenodd cuts hole)
-      var rInPts=[]; var rndInner=seededRand(jitterSeed+9999)
+      var rndInner=seededRand(jitterSeed+9999)
       function jvI(vx,vy){if(!jitter)return[vx,vy];return[vx+(rndInner()-0.5)*2*jitter*r*ringR,vy+(rndInner()-0.5)*2*jitter*r*ringR]}
-      for(var ri5=0;ri5<segs;ri5++) rInPts.push(jvI(Math.cos(ri5*Math.PI*2/segs)*r*ringR,Math.sin(ri5*Math.PI*2/segs)*r*ringR))
+      var rInPts=[]; for(var ri5=0;ri5<segs;ri5++) rInPts.push(jvI(Math.cos(ri5*Math.PI*2/segs)*r*ringR,Math.sin(ri5*Math.PI*2/segs)*r*ringR))
       drawSmooth(rInPts)
     } else {
+      // Default smooth (no jitter, not faceted) — clean arcs
       tc2.arc(0,0,r,0,Math.PI*2); tc2.moveTo(r*ringR,0); tc2.arc(0,0,r*ringR,0,Math.PI*2,true)
     }
   }
@@ -3199,7 +3230,7 @@ function ShapeP(props) {
   return (
     <div>
       <Se l="type" v={s} opts={SHAPES} fn={function(v){up(Object.assign({},p,{shapeType:v}))}}/>
-      <Se l="render" v={rm} opts={isPointGeo?["smooth","points"]:["smooth","faceted","points"]}
+      <Se l="render" v={rm} opts={isPointGeo?["points"]:["smooth","faceted","points"]}
         fn={function(v){up(Object.assign({},p,{renderMode:v}))}}/>
       {!isPointGeo&&<Sl l="x" v={p.x||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x:v}))}}/>}
       {!isPointGeo&&<Sl l="y" v={p.y||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y:v}))}}/>}
