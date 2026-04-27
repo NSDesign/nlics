@@ -2387,7 +2387,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   if(vis.has(id))return null
   var n=cmap.get(id);if(!n||!n.enabled)return null
 
-  // ── Pixel Creators ───────────────────────────────────────
+  // ── Creators ───────────────────────────────────────
   if(n.section===1){
     var cv=mkCv(w,h),ctx=cv.getContext("2d")
     if(n.type==="solid")gSolid(ctx,n.props,w,h)
@@ -3031,7 +3031,7 @@ function NRef(props) {
         <div>
           <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
             letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
-            Pixel Creators
+            Creators
           </div>
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
             {creators.map(function(n,ci){
@@ -6644,7 +6644,7 @@ function UnifiedLayout(props) {
           {resizeHandle}
         </div>
         <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-          <Section sec={1} title="§1 · Pixel Creators" {...props.sp}
+          <Section sec={1} title="§1 · Creators" {...props.sp}
             collapsed={props.s1Col} onToggle={function(){props.setS1Col(!props.s1Col)}}
             stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
           <Section sec={2} title="§2 · Compositors" {...props.sp}
@@ -6661,7 +6661,7 @@ function UnifiedLayout(props) {
     <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
       {previewBlock}
       {resizeHandle}
-      <Section sec={1} title="§1 · Pixel Creators" {...props.sp}
+      <Section sec={1} title="§1 · Creators" {...props.sp}
         collapsed={props.s1Col} onToggle={function(){props.setS1Col(!props.s1Col)}}
         stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
       <Section sec={2} title="§2 · Compositors" {...props.sp}
@@ -7080,7 +7080,7 @@ function App() {
             {flipped&&isVert
               ? <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport}/>
               : <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",position:"relative"}}>
-                  <Section sec={1} title="§1 · Pixel Creators" {...sp}
+                  <Section sec={1} title="§1 · Creators" {...sp}
                     collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
                     stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
                   <Section sec={2} title="§2 · Compositors" {...sp}
@@ -7104,7 +7104,7 @@ function App() {
             }
             {flipped&&isVert
               ? <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",position:"relative"}}>
-                  <Section sec={1} title="§1 · Pixel Creators" {...sp}
+                  <Section sec={1} title="§1 · Creators" {...sp}
                     collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
                     stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
                   <Section sec={2} title="§2 · Compositors" {...sp}
