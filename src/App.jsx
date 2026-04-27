@@ -1035,6 +1035,71 @@ function applyTransform(ctx, p, w, h) {
 
 /* ─── GENERATORS ─────────────────────────────────────────── */
 function gSolid(ctx,p,w,h) { ctx.save();ctx.globalAlpha=p.alpha==null?1:p.alpha;ctx.fillStyle=p.color||"#000";ctx.fillRect(0,0,w,h);ctx.restore() }
+// Generate normalised points (0-1) for any shape type
+// Returns [{x,y,rotation,scale,opacity,id,pointIndex,pointCount,...}]
+function shapePoints(p,w,h) {
+  var s=p.shapeType||"ellipse"
+  var x=p.x||.5, y=p.y||.5, sz=p.sz||.6, rot=(p.rot||0)*Math.PI/180
+  var pts2=p.pts||5, innerR=p.innerR||.45, sides=p.sides||5, ringR=p.ringR||.62
+  var rx=p.rx==null?1:p.rx, ry=p.ry==null?1:p.ry
+  var cornerR=p.cornerR||0.2
+  var jitter=p.jitter||0, jitterSeed=p.jitterSeed||1
+  var segs=Math.max(3,Math.round(p.segments||32))
+  var rnd=seededRand(jitterSeed)
+  var r=sz*Math.min(w,h)/2
+  var out=[]
+
+  function mkPt2(nx,ny,extra) {
+    // nx,ny in canvas pixels relative to shape centre — normalise to 0-1
+    var ca=Math.cos(rot),sa=Math.sin(rot)
+    var rx2=nx*ca-ny*sa, ry2=nx*sa+ny*ca
+    return Object.assign({x:x+rx2/w, y:y+ry2/h, rotation:0, scale:1, opacity:1},extra||{})
+  }
+  function jv2(vx,vy) {
+    if(!jitter)return[vx,vy]
+    return[vx+(rnd()-.5)*2*jitter*r, vy+(rnd()-.5)*2*jitter*r]
+  }
+
+  if(s==="ellipse"||s==="circle") {
+    for(var i=0;i<segs;i++){
+      var a=i*Math.PI*2/segs
+      var v=jv2(Math.cos(a)*r*rx, Math.sin(a)*r*ry)
+      out.push(mkPt2(v[0],v[1]))
+    }
+  } else if(s==="rectangle") {
+    var rw=r*rx,rh=r*ry, es=Math.max(1,Math.round(segs/4))
+    var edges=[
+      function(t){return jv2(-rw+t*2*rw,-rh)},
+      function(t){return jv2(rw,-rh+t*2*rh)},
+      function(t){return jv2(rw-t*2*rw,rh)},
+      function(t){return jv2(-rw,rh-t*2*rh)}
+    ]
+    edges.forEach(function(ef){for(var i=0;i<es;i++){var v=ef(i/es);out.push(mkPt2(v[0],v[1]))}})
+  } else if(s==="rounded-rect") {
+    var rrW=r*rx,rrH=r*ry,cr=Math.min(rrW,rrH)*Math.max(0,Math.min(1,cornerR))
+    var cs=Math.max(2,Math.round(segs/8))
+    var corners2=[[-rrW+cr,-rrH+cr,Math.PI,3*Math.PI/2],[rrW-cr,-rrH+cr,3*Math.PI/2,2*Math.PI],[rrW-cr,rrH-cr,0,Math.PI/2],[-rrW+cr,rrH-cr,Math.PI/2,Math.PI]]
+    corners2.forEach(function(co){
+      for(var i=0;i<=cs;i++){var ca2=co[2]+(co[3]-co[2])*i/cs;var v=jv2(co[0]+Math.cos(ca2)*cr,co[1]+Math.sin(ca2)*cr);out.push(mkPt2(v[0],v[1]))}
+    })
+  } else if(s==="polygon") {
+    for(var i=0;i<sides;i++){var a=(i*2*Math.PI/sides)-Math.PI/2;var v=jv2(Math.cos(a)*r,Math.sin(a)*r);out.push(mkPt2(v[0],v[1]))}
+  } else if(s==="star") {
+    var ir=r*innerR
+    for(var j=0;j<pts2*2;j++){var a2=(j*Math.PI/pts2)-Math.PI/2,rr=j%2===0?r:ir;var v=j%2===0?jv2(Math.cos(a2)*rr,Math.sin(a2)*rr):[Math.cos(a2)*rr,Math.sin(a2)*rr];out.push(mkPt2(v[0],v[1]))}
+  } else if(s==="ring") {
+    var rnd2=seededRand(jitterSeed+9999)
+    function jvI(vx,vy){if(!jitter)return[vx,vy];return[vx+(rnd2()-.5)*2*jitter*r*ringR,vy+(rnd2()-.5)*2*jitter*r*ringR]}
+    for(var i=0;i<segs;i++){var a=i*Math.PI*2/segs;var v=jv2(Math.cos(a)*r,Math.sin(a)*r);out.push(mkPt2(v[0],v[1],{ring:"outer"}))}
+    for(var i=0;i<segs;i++){var a=i*Math.PI*2/segs;var v=jvI(Math.cos(a)*r*ringR,Math.sin(a)*r*ringR);out.push(mkPt2(v[0],v[1],{ring:"inner"}))}
+  }
+
+  // Attach intrinsic point info
+  var n=out.length
+  out.forEach(function(pt,i){pt.id=i;pt.pointIndex=i;pt.pointCount=n})
+  return out
+}
+
 function gShape(ctx,p,w,h) {
   var s=p.shapeType||"ellipse",x=p.x||.5,y=p.y||.5,sz=p.sz||.6,rot=p.rot||0
   var fill=p.fill||"#fff",stroke=p.stroke||"#000",strokeW=p.strokeW||0
@@ -1052,6 +1117,10 @@ function gShape(ctx,p,w,h) {
   var tc2=tc.getContext("2d")
   var r=sz*Math.min(sw2,sh2)/2
   tc2.translate(x*sw2,y*sh2); tc2.rotate(rot*Math.PI/180)
+
+  // If _points set on canvas (from shapePoints or modified by effects), use them
+  var extPts=ctx.canvas&&ctx.canvas._points
+  var hasPts=extPts&&extPts.length>0&&!GEO_POINT_TYPES.includes(s)
 
   // Helper: jittered vertex
   function jv(vx,vy) {
@@ -1085,12 +1154,24 @@ function gShape(ctx,p,w,h) {
     tc2.closePath()
   }
 
-  if(s==="ellipse") {
-    if(renderMode==="faceted") {
+  // Render mode = points: draw dots at _points positions (works for all shape types)
+  if(renderMode==="points") {
+    var ptSrc=extPts||shapePoints(p,w,h)
+    var dr=Math.max(1,(p.dotSize||4)*sc/2)
+    tc2.save();tc2.setTransform(1,0,0,1,0,0)  // reset transform — draw in canvas coords
+    tc2.globalAlpha=opacity;tc2.fillStyle=p.color||fill||"#ffffff"
+    ptSrc.forEach(function(pt){tc2.beginPath();tc2.arc(pt.x*sw2,pt.y*sh2,dr,0,Math.PI*2);tc2.fill()})
+    tc2.restore()
+    // Skip the path drawing below
+  } else if(s==="ellipse") {
+    if(hasPts) {
+      // Use effect-modified points for render
+      var epts2=extPts.map(function(pt){return [(pt.x-x)*w*sc,(pt.y-y)*h*sc]})
+      renderMode==="faceted"?drawPts(epts2):drawSmooth(epts2)
+    } else if(renderMode==="faceted") {
       var epts=[]; for(var ei=0;ei<segs;ei++) epts.push(ev(ei*Math.PI*2/segs))
       drawPts(epts)
     } else if(jitter>0) {
-      // Smooth jitter: sample ellipse as points, draw smooth curve through them
       var ejpts=[]; for(var eji=0;eji<segs;eji++) ejpts.push(ev(eji*Math.PI*2/segs))
       drawSmooth(ejpts)
     } else { tc2.ellipse(0,0,r*rx,r*ry,0,0,Math.PI*2) }
@@ -2392,13 +2473,15 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     var cv=mkCv(w,h),ctx=cv.getContext("2d")
     if(n.type==="solid")gSolid(ctx,n.props,w,h)
     else if(n.type==="shape"){
-      // For geometry sub-types, generate _points first then render
       var sType=n.props&&n.props.shapeType
-      if(sType==="grid")        { gGrid(ctx,n.props,w,h);        cv._points=ctx.canvas._points||cv._points }
-      else if(sType==="spiral") { gSpiral(ctx,n.props,w,h);      cv._points=ctx.canvas._points||cv._points }
-      else if(sType==="polar-grid"){ gPolarGrid(ctx,n.props,w,h);cv._points=ctx.canvas._points||cv._points }
-      else if(sType==="phyllotaxis"){ gPhyllotaxis(ctx,n.props,w,h);cv._points=ctx.canvas._points||cv._points }
-      else if(sType==="scatter"){ gScatter(ctx,n.props,w,h);     cv._points=ctx.canvas._points||cv._points }
+      // Generate _points for ALL shape types first
+      if(sType==="grid")           gGrid(ctx,n.props,w,h)
+      else if(sType==="spiral")    gSpiral(ctx,n.props,w,h)
+      else if(sType==="polar-grid")gPolarGrid(ctx,n.props,w,h)
+      else if(sType==="phyllotaxis")gPhyllotaxis(ctx,n.props,w,h)
+      else if(sType==="scatter")   gScatter(ctx,n.props,w,h)
+      else cv._points=shapePoints(n.props,w,h)  // classic shapes: vertices/perimeter
+      // gShape renders using cv._points (which effects may have already modified)
       gShape(ctx,n.props,w,h)
     }
     else if(n.type==="gradient")gGrad(ctx,n.props,w,h)
