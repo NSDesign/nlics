@@ -1140,9 +1140,9 @@ function gShape(ctx,p,w,h) {
   tc2.beginPath()
   // Smooth closed curve through jittered points (midpoint bezier method)
   // Used when smooth mode + jitter>0, giving organic warped smooth shapes
-  function drawSmooth(pts2) {
-    if(pts2.length<3){drawPts(pts2);return}
-    tc2.beginPath()
+  // Appends a smooth closed bezier subpath to the current path (no beginPath)
+  function addSmooth(pts2) {
+    if(pts2.length<3){var ap=pts2;tc2.moveTo(ap[0][0],ap[0][1]);for(var ak=1;ak<ap.length;ak++)tc2.lineTo(ap[ak][0],ap[ak][1]);tc2.closePath();return}
     var n=pts2.length
     for(var si=0;si<n;si++){
       var p0=pts2[(si-1+n)%n], p1=pts2[si], p2=pts2[(si+1)%n]
@@ -1153,6 +1153,7 @@ function gShape(ctx,p,w,h) {
     }
     tc2.closePath()
   }
+  function drawSmooth(pts2) { tc2.beginPath(); addSmooth(pts2) }
 
   // Render mode = points: draw dots at _points positions (works for all shape types)
   if(renderMode==="points") {
@@ -1232,8 +1233,8 @@ function gShape(ctx,p,w,h) {
       var v=j%2===0?jv(Math.cos(a2)*rr,Math.sin(a2)*rr):[Math.cos(a2)*rr,Math.sin(a2)*rr]
       starPts.push(v)
     }
-    // Stars keep straight lines between points even in smooth mode — otherwise tips disappear
-    drawPts(starPts)
+    if(renderMode==="smooth") drawSmooth(starPts)
+    else drawPts(starPts)
   }
   else if(s==="grid"||s==="spiral"||s==="polar-grid"||s==="phyllotaxis"||s==="scatter"){
     // Geometry types: generate _points and render as dots or path line
@@ -1245,40 +1246,42 @@ function gShape(ctx,p,w,h) {
       geoPts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,dr,0,Math.PI*2);ctx.fill()})
       ctx.restore()
     }
-    // Connect points for structure types (not scatter — random positions make lines meaningless)
-    if(geoPts&&geoPts.length>1&&s!=="scatter"){
-      ctx.save();ctx.strokeStyle=p.color||"#ffffff";ctx.lineWidth=p.strokeW||1.5
-      ctx.globalAlpha=(p.opacity==null?1:p.opacity)*.6;ctx.beginPath()
+    // Connected toggle — draw lines between points
+    if(geoPts&&geoPts.length>1&&s!=="scatter"&&(p.connected!==false)){
+      ctx.save();ctx.strokeStyle=p.color||"#ffffff"
+      ctx.lineWidth=Math.max(.5,p.strokeW||1);ctx.globalAlpha=(p.opacity==null?1:p.opacity)
+      ctx.beginPath()
       if(s==="grid"){
-        // Draw row and column lines
-        var gcols=p.cols||4,grows=p.rows||4
+        var gcols=Math.round(p.cols||4), grows=Math.round(p.rows||4)
         for(var gr=0;gr<grows;gr++){
-          var rowPts=geoPts.filter(function(pt){return pt.row===gr})
-          rowPts.sort(function(a,b){return a.col-b.col})
-          rowPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+          for(var gc2=0;gc2<gcols;gc2++){
+            var gidx=gr*gcols+gc2, pt2=geoPts[gidx]; if(!pt2)continue
+            gc2===0?ctx.moveTo(pt2.x*w,pt2.y*h):ctx.lineTo(pt2.x*w,pt2.y*h)
+          }
         }
         for(var gc=0;gc<gcols;gc++){
-          var colPts=geoPts.filter(function(pt){return pt.col===gc})
-          colPts.sort(function(a,b){return a.row-b.row})
-          colPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+          for(var gr2=0;gr2<grows;gr2++){
+            var gidx2=gr2*gcols+gc, pt3=geoPts[gidx2]; if(!pt3)continue
+            gr2===0?ctx.moveTo(pt3.x*w,pt3.y*h):ctx.lineTo(pt3.x*w,pt3.y*h)
+          }
         }
       } else if(s==="polar-grid"){
-        // Connect each ring as a closed loop, then draw radial spokes
-        var maxRing=Math.max.apply(null,geoPts.map(function(pt){return pt.ringIndex||0}))
-        for(var ri=0;ri<=maxRing;ri++){
-          var ringPts=geoPts.filter(function(pt){return pt.ringIndex===ri}).sort(function(a,b){return (a.angleNorm||0)-(b.angleNorm||0)})
-          if(ringPts.length>1){ringPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)});ctx.closePath()}
+        var ppr=Math.round(p.pointsPerRing||8), prings=Math.round(p.rings||4)
+        for(var ri=0;ri<prings;ri++){
+          for(var pi=0;pi<=ppr;pi++){
+            var pidx=ri*ppr+(pi%ppr), rpt=geoPts[pidx]; if(!rpt)continue
+            pi===0?ctx.moveTo(rpt.x*w,rpt.y*h):ctx.lineTo(rpt.x*w,rpt.y*h)
+          }
+          ctx.closePath()
         }
-        // Radial spokes
-        var spokeCount=geoPts.filter(function(pt){return (pt.ringIndex||0)===0}).length
-        for(var si=0;si<spokeCount;si++){
-          var spoke=geoPts.filter(function(pt){return (pt.pointIndex%spokeCount)===si}).sort(function(a,b){return (a.ringIndex||0)-(b.ringIndex||0)})
-          spoke.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+        for(var si2=0;si2<ppr;si2++){
+          for(var ri2=0;ri2<prings;ri2++){
+            var sidx=ri2*ppr+si2, spt=geoPts[sidx]; if(!spt)continue
+            ri2===0?ctx.moveTo(spt.x*w,spt.y*h):ctx.lineTo(spt.x*w,spt.y*h)
+          }
         }
       } else {
-        // spiral, phyllotaxis — connect in order
         geoPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
-        if(s==="phyllotaxis") ctx.closePath()
       }
       ctx.stroke();ctx.restore()
     }
@@ -1292,14 +1295,12 @@ function gShape(ctx,p,w,h) {
       for(var ik=1;ik<innerPts.length;ik++) tc2.lineTo(innerPts[ik][0],innerPts[ik][1])
       tc2.closePath()
     } else if(renderMode==="smooth") {
-      // Smooth ring: outer and inner each sampled as points, drawn as separate smooth curves
-      // Outer and inner use offset seeds so their jitter is independent
+      // Both rings added as subpaths in one beginPath — evenodd fill cuts the hole
       var rOutPts=[]; for(var ro=0;ro<segs;ro++) rOutPts.push(jv(Math.cos(ro*Math.PI*2/segs)*r,Math.sin(ro*Math.PI*2/segs)*r))
-      drawSmooth(rOutPts)
       var rndInner=seededRand(jitterSeed+9999)
       function jvI(vx,vy){if(!jitter)return[vx,vy];return[vx+(rndInner()-0.5)*2*jitter*r*ringR,vy+(rndInner()-0.5)*2*jitter*r*ringR]}
       var rInPts=[]; for(var ri5=0;ri5<segs;ri5++) rInPts.push(jvI(Math.cos(ri5*Math.PI*2/segs)*r*ringR,Math.sin(ri5*Math.PI*2/segs)*r*ringR))
-      drawSmooth(rInPts)
+      tc2.beginPath(); addSmooth(rOutPts); addSmooth(rInPts)
     } else {
       // Default smooth (no jitter, not faceted) — clean arcs
       tc2.arc(0,0,r,0,Math.PI*2); tc2.moveTo(r*ringR,0); tc2.arc(0,0,r*ringR,0,Math.PI*2,true)
@@ -3293,6 +3294,8 @@ function ShapeP(props) {
         {(p.stagger||0)>0&&<Se l="axis" v={p.staggerAxis||"row"} opts={["row","col"]} fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>}
         <Sl l="offset X" v={p.offX||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
         <Sl l="offset Y" v={p.offY||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
       </div>)}
       {s==="spiral"&&(<div>
         <Sl l="points" v={p.pointCount||32} mn={4} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
@@ -3301,6 +3304,8 @@ function ShapeP(props) {
         <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
         <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
         <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
       </div>)}
       {s==="polar-grid"&&(<div>
         <Sl l="rings" v={p.rings||4} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rings:v}))}}/>
@@ -3309,6 +3314,8 @@ function ShapeP(props) {
         <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
         <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
         <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
       </div>)}
       {s==="phyllotaxis"&&(<div>
         <Sl l="points" v={p.pointCount||64} mn={4} mx={1024} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
@@ -3316,6 +3323,8 @@ function ShapeP(props) {
         <Sl l="spread" v={p.scale||.45} mn={.05} mx={.5} st={.005} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
         <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
         <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
       </div>)}
       {s==="scatter"&&(<div>
         <Sl l="points" v={p.pointCount||32} mn={2} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
@@ -3324,6 +3333,7 @@ function ShapeP(props) {
         <Sl l="x max" v={p.x1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x1:v}))}}/>
         <Sl l="y min" v={p.y0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y0:v}))}}/>
         <Sl l="y max" v={p.y1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y1:v}))}}/>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
       </div>)}
       {isPointGeo&&<div>
         <Se l="style" v={p.pointStyle||"dots"} opts={["dots","hidden"]}
