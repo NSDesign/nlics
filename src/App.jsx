@@ -1603,6 +1603,7 @@ function gGrid(ctx,p,w,h) {
   var cols=Math.max(1,Math.round(p.cols||4)),rows=Math.max(1,Math.round(p.rows||4))
   var offX=p.offX||0,offY=p.offY||0,stagger=p.stagger||0
   var staggerAxis=p.staggerAxis||"row",sp=p.staggerParity||"odd"
+  var sc=p.scale==null?1:p.scale,cx=.5,cy=.5
   var pts=[],total=cols*rows,idx=0
   for(var row=0;row<rows;row++) for(var col=0;col<cols;col++){
     var rP=((row%2)+2)%2,cP=((col%2)+2)%2,sOff=0
@@ -1610,19 +1611,34 @@ function gGrid(ctx,p,w,h) {
     else if(staggerAxis==="col"&&cP===(sp==="odd"?1:0)) sOff=stagger*(1/rows)
     var nx=(col+0.5)/cols+offX+(staggerAxis==="row"?sOff:0)
     var ny=(row+0.5)/rows+offY+(staggerAxis==="col"?sOff:0)
-    pts.push(mkPt(idx++,total,nx,ny,{row:row,col:col,rowCount:rows,colCount:cols,
+    // Apply scale from centre
+    var sx=cx+(nx-cx)*sc, sy=cy+(ny-cy)*sc
+    pts.push(mkPt(idx++,total,sx,sy,{row:row,col:col,rowCount:rows,colCount:cols,
       rowNorm:rows>1?row/(rows-1):0,colNorm:cols>1?col/(cols-1):0}))
   }
+  var color=p.color||"#ffffff",alpha=p.opacity==null?1:p.opacity
+  var dR=Math.max(1,(p.dotSize||4)/2)
+  ctx.save();ctx.globalAlpha=alpha
   if(p.renderMode!=="hidden"){
-    var dR=Math.max(1,(p.dotSize||4)/2)
-    ctx.fillStyle=p.color||"#ffffff";ctx.globalAlpha=p.opacity==null?1:p.opacity
+    ctx.fillStyle=color
     pts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,dR,0,Math.PI*2);ctx.fill()})
   }
-  ctx.canvas._points=pts
+  if(p.connected!==false){
+    ctx.strokeStyle=color;ctx.lineWidth=Math.max(.5,p.strokeW||1);ctx.beginPath()
+    for(var r2=0;r2<rows;r2++){
+      for(var c2=0;c2<cols;c2++){var pt=pts[r2*cols+c2];c2===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)}
+    }
+    for(var c3=0;c3<cols;c3++){
+      for(var r3=0;r3<rows;r3++){var pt=pts[r3*cols+c3];r3===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)}
+    }
+    ctx.stroke()
+  }
+  ctx.restore();ctx.canvas._points=pts
 }
 function gSpiral(ctx,p,w,h) {
   var n=Math.max(2,Math.round(p.pointCount||32)),turns=p.turns||3
-  var r0=p.startRadius||0,r1=p.endRadius||.45
+  var sc=p.scale==null?1:p.scale
+  var r0=(p.startRadius||0)*sc,r1=(p.endRadius||.45)*sc
   var cx=p.cx==null?.5:p.cx,cy=p.cy==null?.5:p.cy
   var pts=[]
   for(var i=0;i<n;i++){
@@ -1630,16 +1646,24 @@ function gSpiral(ctx,p,w,h) {
     pts.push(mkPt(i,n,cx+Math.cos(angle)*r,cy+Math.sin(angle)*r,
       {spiralT:t,windingNumber:Math.floor(t*turns),angleNorm:(angle%(Math.PI*2))/(Math.PI*2),radiusNorm:r1>r0?(r-r0)/(r1-r0):0}))
   }
+  var color=p.color||"#ffffff",alpha=p.opacity==null?1:p.opacity
+  var dR2=Math.max(1,(p.dotSize||4)/2)
+  ctx.save();ctx.globalAlpha=alpha
   if(p.renderMode!=="hidden"){
-    var dR2=Math.max(1,(p.dotSize||4)/2)
-    ctx.fillStyle=p.color||"#ffffff";ctx.globalAlpha=p.opacity==null?1:p.opacity
+    ctx.fillStyle=color
     pts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,dR2,0,Math.PI*2);ctx.fill()})
   }
-  ctx.canvas._points=pts
+  if(p.connected!==false&&pts.length>1){
+    ctx.strokeStyle=color;ctx.lineWidth=Math.max(.5,p.strokeW||1);ctx.beginPath()
+    pts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+    ctx.stroke()
+  }
+  ctx.restore();ctx.canvas._points=pts
 }
 function gPolarGrid(ctx,p,w,h) {
   var rings=Math.max(1,Math.round(p.rings||4)),ppr=Math.max(2,Math.round(p.pointsPerRing||8))
-  var r0=p.startRadius||.05,r1=p.endRadius||.45
+  var sc=p.scale==null?1:p.scale
+  var r0=(p.startRadius||.05)*sc,r1=(p.endRadius||.45)*sc
   var cx=p.cx==null?.5:p.cx,cy=p.cy==null?.5:p.cy
   var pts=[],idx=0,total=rings*ppr
   for(var ri=0;ri<rings;ri++) for(var pi=0;pi<ppr;pi++){
@@ -1647,12 +1671,27 @@ function gPolarGrid(ctx,p,w,h) {
     pts.push(mkPt(idx++,total,cx+Math.cos(angle)*r,cy+Math.sin(angle)*r,
       {ringIndex:ri,ringCount:rings,angleNorm:pi/ppr,radiusNorm:rn}))
   }
+  var color=p.color||"#ffffff",alpha=p.opacity==null?1:p.opacity
+  var dR3=Math.max(1,(p.dotSize||4)/2)
+  ctx.save();ctx.globalAlpha=alpha
   if(p.renderMode!=="hidden"){
-    var dR3=Math.max(1,(p.dotSize||4)/2)
-    ctx.fillStyle=p.color||"#ffffff";ctx.globalAlpha=p.opacity==null?1:p.opacity
+    ctx.fillStyle=color
     pts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,dR3,0,Math.PI*2);ctx.fill()})
   }
-  ctx.canvas._points=pts
+  if(p.connected!==false){
+    ctx.strokeStyle=color;ctx.lineWidth=Math.max(.5,p.strokeW||1);ctx.beginPath()
+    // Rings
+    for(var ri2=0;ri2<rings;ri2++){
+      for(var pi2=0;pi2<=ppr;pi2++){var pt=pts[ri2*ppr+(pi2%ppr)];pi2===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)}
+      ctx.closePath()
+    }
+    // Spokes
+    for(var si=0;si<ppr;si++){
+      for(var ri3=0;ri3<rings;ri3++){var pt=pts[ri3*ppr+si];ri3===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)}
+    }
+    ctx.stroke()
+  }
+  ctx.restore();ctx.canvas._points=pts
 }
 function gPhyllotaxis(ctx,p,w,h) {
   var n=Math.max(1,Math.round(p.pointCount||64))
@@ -1664,23 +1703,36 @@ function gPhyllotaxis(ctx,p,w,h) {
     pts.push(mkPt(i,n,cx+Math.cos(a)*r,cy+Math.sin(a)*r,
       {fibIndex:i,angleNorm:(a%(Math.PI*2))/(Math.PI*2),radiusNorm:r/sc}))
   }
+  var color=p.color||"#ffffff",alpha=p.opacity==null?1:p.opacity
+  var dR4=Math.max(1,(p.dotSize||4)/2)
+  ctx.save();ctx.globalAlpha=alpha
   if(p.renderMode!=="hidden"){
-    var dR4=Math.max(1,(p.dotSize||4)/2)
-    ctx.fillStyle=p.color||"#ffffff";ctx.globalAlpha=p.opacity==null?1:p.opacity
+    ctx.fillStyle=color
     pts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,dR4,0,Math.PI*2);ctx.fill()})
   }
-  ctx.canvas._points=pts
+  if(p.connected!==false&&pts.length>1){
+    ctx.strokeStyle=color;ctx.lineWidth=Math.max(.5,p.strokeW||1);ctx.beginPath()
+    pts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+    ctx.stroke()
+  }
+  ctx.restore();ctx.canvas._points=pts
 }
 function gScatter(ctx,p,w,h) {
   var n=Math.max(1,Math.round(p.pointCount||32)),seed=p.seed||1
+  var sc=p.scale==null?1:p.scale
   var rnd=seededRand(seed)
   var x0=p.x0||0,y0=p.y0||0,x1=p.x1||1,y1=p.y1||1
+  var scx=.5,scy=.5  // scale from centre
   var pts=[]
-  for(var i=0;i<n;i++) pts.push(mkPt(i,n,x0+(x1-x0)*rnd(),y0+(y1-y0)*rnd(),{scatterIndex:i}))
+  for(var i=0;i<n;i++){
+    var rx=x0+(x1-x0)*rnd(),ry=y0+(y1-y0)*rnd()
+    pts.push(mkPt(i,n,scx+(rx-scx)*sc,scy+(ry-scy)*sc,{scatterIndex:i}))
+  }
   if(p.renderMode!=="hidden"){
     var dR5=Math.max(1,(p.dotSize||4)/2)
-    ctx.fillStyle=p.color||"#ffffff";ctx.globalAlpha=p.opacity==null?1:p.opacity
+    ctx.save();ctx.fillStyle=p.color||"#ffffff";ctx.globalAlpha=p.opacity==null?1:p.opacity
     pts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,dR5,0,Math.PI*2);ctx.fill()})
+    ctx.restore()
   }
   ctx.canvas._points=pts
 }
