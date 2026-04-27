@@ -5702,26 +5702,23 @@ function AddMenu(props) {
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
-  var s1groups=[
-    {label:"Pixel",items:[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Geometry"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]},
-
-    {label:"Tile",items:[{t:"tile",l:"Tile"}]},
-  ]
+  var s1standard=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Geometry"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
+  var s1advanced=[{t:"tile",l:"Tile"}]
   var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
   return (
     <div ref={anchorRef} style={{position:"relative"}}>
       <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
       {open&&pos&&createPortal(
         <div ref={menuRef} className="drop-menu" style={pos}>
-          {props.sec===1?s1groups.map(function(grp){return [
-            <div key={grp.label} style={{padding:"6px 14px 3px",fontSize:8,color:"var(--mu)",
+          {props.sec===1?[
+            s1standard.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>}),
+            <div key="__adv__" style={{padding:"5px 14px 4px",fontSize:8,color:"var(--mu)",
               textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
-              borderBottom:"1px solid var(--bd)",background:"var(--bg)"}}>
-              {grp.label}
-            </div>
-          ].concat(grp.items.map(function(item){
-            return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>
-          }))}):s2items.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
+              borderTop:"1px solid var(--bd)",borderBottom:"1px solid var(--bd)",background:"var(--bg)"}}>
+              Advanced
+            </div>,
+            s1advanced.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})
+          ]:s2items.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
         </div>,
         document.body
       )}
