@@ -2668,7 +2668,7 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
             }
           }
         }
-        // §1 pixel creators: show intrinsic alpha channel as matte
+        // §1 creators: show intrinsic alpha channel as matte
         // (shape fillOpacity, gradient alpha stops, image transparency, etc.)
         if(!em2&&mn.section===1){
           var pcCv=compAny(dispId,cmap,new Map(),iC,w,h,new Set())
