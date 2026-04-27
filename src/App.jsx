@@ -3133,7 +3133,7 @@ function ShapeP(props) {
           <Sl l="corner y" v={p.ry==null?1:p.ry} mn={0} mx={2} st={.01} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>
         </div>
       )}
-      <Sl l="rotation" v={p.rot} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rot:v}))}}/>
+      {!isPointGeo&&<Sl l="rotation" v={p.rot||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rot:v}))}}/>}
       {s==="star" && (
         <div>
           <Sl l="points" v={p.pts} mn={3} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pts:v}))}}/>
@@ -3155,14 +3155,7 @@ function ShapeP(props) {
           {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
         </div>
       )}
-      {/* Render mode: smooth (arcs) vs faceted (line segments — enables jitter on all shapes) */}
-      <PR l="render">
-        {["smooth","faceted"].map(function(m){
-          return <button key={m} className={(p.renderMode||"smooth")===m?"ac":"ghost"}
-            onClick={function(){up(Object.assign({},p,{renderMode:m}))}}
-            style={{flex:1,fontSize:10,minHeight:32}}>{m}</button>
-        })}
-      </PR>
+
       {(p.renderMode==="faceted")&&(
         <Sl l="segments" v={p.segments||32} mn={3} mx={128} st={1}
           fmt={function(v){return Math.round(v)}}
@@ -3230,11 +3223,11 @@ function ShapeP(props) {
         </div>}
       </div>}
       {!isPointGeo&&<Co l="fill" v={p.fill} fn={function(v){up(Object.assign({},p,{fill:v}))}}/>}
-      <Sl l="fill op" v={p.fillOpacity==null?1:p.fillOpacity} mn={0} mx={1} st={.01}
+      {!isPointGeo&&<Sl l="fill op" v={p.fillOpacity==null?1:p.fillOpacity} mn={0} mx={1} st={.01}
         fmt={function(v){return Math.round(v*100)+"%"}}
-        fn={function(v){up(Object.assign({},p,{fillOpacity:v}))}}/>
-      <Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>
-      {p.strokeW>0 && (
+        fn={function(v){up(Object.assign({},p,{fillOpacity:v}))}}/>}
+      {!isPointGeo&&<Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>
+      {!isPointGeo&&p.strokeW>0 && (
         <div>
           <Co l="stroke" v={p.stroke} fn={function(v){up(Object.assign({},p,{stroke:v}))}}/>
           <Sl l="stroke op" v={p.strokeOpacity==null?1:p.strokeOpacity} mn={0} mx={1} st={.01}
