@@ -3226,7 +3226,7 @@ function ShapeP(props) {
       {!isPointGeo&&<Sl l="fill op" v={p.fillOpacity==null?1:p.fillOpacity} mn={0} mx={1} st={.01}
         fmt={function(v){return Math.round(v*100)+"%"}}
         fn={function(v){up(Object.assign({},p,{fillOpacity:v}))}}/>}
-      {!isPointGeo&&<Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>
+      {!isPointGeo&&<Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>}
       {!isPointGeo&&p.strokeW>0 && (
         <div>
           <Co l="stroke" v={p.stroke} fn={function(v){up(Object.assign({},p,{stroke:v}))}}/>
@@ -3235,9 +3235,9 @@ function ShapeP(props) {
             fn={function(v){up(Object.assign({},p,{strokeOpacity:v}))}}/>
         </div>
       )}
-      <Sl l="opacity" v={p.opacity==null?(p.alpha==null?1:p.alpha):p.opacity} mn={0} mx={1} st={.01}
+      {!isPointGeo&&<Sl l="opacity" v={p.opacity==null?(p.alpha==null?1:p.alpha):p.opacity} mn={0} mx={1} st={.01}
         fmt={function(v){return Math.round(v*100)+"%"}}
-        fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
+        fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>}
     </div>
   )
 }
