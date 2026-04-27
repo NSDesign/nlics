@@ -5929,7 +5929,7 @@ function LivePreview(props) {
         <span style={{fontSize:9,color:"var(--mu)"}}>{props.sz}x{props.sz}px</span>
         {props.active && <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>[{props.active.type}]</span>}
         <span style={{flex:1}}/>
-        <span style={{fontSize:9,color:"var(--mu)",letterSpacing:".08em",fontFamily:"'IBM Plex Mono',monospace"}}>{(typeof __BUILD_HASH__!=="undefined"?__BUILD_HASH__:"dev")+" · NLICS"}</span>
+        <span style={{fontSize:9,color:"var(--mu)",letterSpacing:".08em",fontFamily:"'IBM Plex Mono',monospace"}}>{(typeof __BUILD_HASH__!=="undefined"?__BUILD_HASH__:"dev")+" · Selena"}</span>
       </div>
     </div>
   )
@@ -6056,6 +6056,20 @@ function SettingsSheet(props) {
           )}
 
           <div className="setting-grp">
+            <div className="setting-grp-lbl">Project</div>
+            <div className="setting-row">
+              <span className="setting-lbl">Auto-save interval</span>
+              <select value={autoSaveInt} onChange={function(e){setAutoSaveInt(Number(e.target.value))}}
+                style={{background:"var(--el)",color:"var(--tx)",border:"1px solid var(--bd)",
+                  borderRadius:4,padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}>
+                <option value={0}>Off</option>
+                <option value={1}>1 min</option>
+                <option value={2}>2 min</option>
+                <option value={5}>5 min</option>
+                <option value={10}>10 min</option>
+              </select>
+            </div>
+            <div className="setting-desc">Auto-saves locally on interval and on app close. Use ↓ to save a file.</div>
             <div className="setting-grp-lbl">Node settings panel</div>
             <div className="setting-row">
               <div style={{flex:1}}>
@@ -6869,6 +6883,10 @@ function App() {
   var histRef  = useRef([])        // undo ring: array of {nodes} snapshots
   var toastSt  = useState(false);  var toastOn=toastSt[0], setToastOn=toastSt[1]
   var toastTmr = useRef(null)
+  var projNameSt=useState("Untitled"); var projName=projNameSt[0],setProjName=projNameSt[1]
+  var autoSaveIntSt=useState(0); var autoSaveInt=autoSaveIntSt[0],setAutoSaveInt=autoSaveIntSt[1]
+  var autoSaveTmr=useRef(null)
+  var fileInputRef=useRef(null)
 
   function pushHistory(snapshot) {
     var ring = histRef.current
@@ -6880,6 +6898,59 @@ function App() {
     if (toastTmr.current) clearTimeout(toastTmr.current)
     toastTmr.current = setTimeout(function(){ setToastOn(false) }, 1600)
   }
+  // ── Project save / load ──────────────────────────────────────────────────
+  function saveProject() {
+    try {
+      var data = JSON.stringify({
+        version:"1.0", appName:"Selena",
+        name:projName,
+        savedAt:new Date().toISOString(),
+        nodes:nodes
+      }, null, 2)
+      var blob = new Blob([data], {type:"application/json"})
+      var url = URL.createObjectURL(blob)
+      var a = document.createElement("a")
+      a.href=url; a.download=(projName||"Untitled").replace(/[^a-z0-9_-]/gi,"_")+".selena"
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch(e) { console.error("Save failed",e) }
+  }
+  function loadProject(file) {
+    if(!file) return
+    var reader = new FileReader()
+    reader.onload = function(ev) {
+      try {
+        var data = JSON.parse(ev.target.result)
+        if(data.nodes) {
+          pushHistory({nodes:nodes})
+          setNodes(data.nodes)
+          if(data.name) setProjName(data.name)
+          iC.current = new Map()  // clear image cache
+        }
+      } catch(e) { alert("Could not load project file — invalid format") }
+    }
+    reader.readAsText(file)
+  }
+  function autoSaveNow() {
+    try {
+      var data = JSON.stringify({version:"1.0",name:projName,nodes:nodes,savedAt:new Date().toISOString()})
+      localStorage.setItem("selena:autosave",data)
+      localStorage.setItem("selena:autosave:name",projName)
+    } catch(e) {}
+  }
+  // Auto-save interval
+  useEffect(function(){
+    if(autoSaveTmr.current) clearInterval(autoSaveTmr.current)
+    if(autoSaveInt>0) autoSaveTmr.current=setInterval(autoSaveNow, autoSaveInt*60000)
+    return function(){if(autoSaveTmr.current)clearInterval(autoSaveTmr.current)}
+  },[autoSaveInt, nodes, projName])
+  // Auto-save on page unload
+  useEffect(function(){
+    function onUnload(){autoSaveNow()}
+    window.addEventListener("beforeunload",onUnload)
+    return function(){window.removeEventListener("beforeunload",onUnload)}
+  },[nodes,projName])
+
   function doUndo() {
     var ring = histRef.current
     if (ring.length === 0) return
@@ -7171,8 +7242,17 @@ function App() {
   function HeaderBar(hProps) {
     return (
       <div style={{display:"flex",alignItems:"center",padding:"8px 12px",gap:8,background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
-        <span style={{fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:800,color:"var(--ac)",letterSpacing:".2em"}}>NLICS</span>
-        <span style={{fontSize:7,color:"var(--mu)",marginTop:1}}>Non-Linear Image Compositing</span>
+        <span style={{fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:800,color:"var(--ac)",letterSpacing:".2em"}}>Selena</span>
+        <input value={projName} onChange={function(e){setProjName(e.target.value)}}
+          style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"var(--tx)",
+            background:"none",border:"none",borderBottom:"1px solid var(--bd)",
+            outline:"none",width:90,padding:"1px 4px",marginLeft:4}}
+          placeholder="project name"/>
+        <button onClick={saveProject} className="hico" title="Save project (↓)">↓</button>
+        <button onClick={function(){fileInputRef.current&&fileInputRef.current.click()}}
+          className="hico" title="Load project (↑)">↑</button>
+        <input ref={fileInputRef} type="file" accept=".selena,.json"
+          style={{display:"none"}} onChange={function(e){loadProject(e.target.files[0]);e.target.value=""}}/>
         <span style={{flex:1}}/>
         <button className="hico" title="Layout settings" onClick={function(){setSettingsOpen(true)}}>⚙</button>
         {hProps.showExpand && <button className={"hico"+(leftFS?" exit":"")} onClick={function(){setLeftFS(!leftFS)}}>{leftFS?"⊠":"⊞"}</button>}
@@ -7187,7 +7267,8 @@ function App() {
           ? <span style={{fontSize:9,padding:"2px 8px",borderRadius:4,background:"rgba(176,96,240,.14)",color:"#c87aff",border:"1px solid rgba(176,96,240,.28)"}}>◉ {active.name}</span>
           : <span style={{fontSize:9,color:"var(--mu)"}}>none selected</span>}
         <span style={{flex:1}}/>
-        <button className={"hico"+(rightFS?" exit":"")} onClick={function(){setRightFS(!rightFS)}}>{rightFS?"⊠":"⊡"}</button>
+        <button className={"hico"+(rightFS?" exit":"")} title={rightFS?"Exit full screen":"Full screen preview"}
+          onClick={function(){setRightFS(!rightFS)}}>{rightFS?"⊠":"⊡"}</button>
       </div>
     )
   }
