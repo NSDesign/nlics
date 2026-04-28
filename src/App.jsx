@@ -2428,6 +2428,27 @@ function blendCv(ctx,srcCv,mode,amount,w,h,maskMode,maskAmount,blendChannels,ble
     ctx.globalCompositeOperation=BM[mode]||"source-over"
     ctx.drawImage(srcCv,0,0);ctx.restore()
   }
+  // Show-points deferred — apply all last so they always render on top
+  for(var spi=0;spi<stack.length;spi++){
+    var spefx=stack[spi]; if(!spefx.enabled||spefx.type!=="show-points")continue
+    if(ctx.canvas&&ctx.canvas._points){
+      var spp=spefx.params||{},spts2=ctx.canvas._points
+      var spDr=Math.max(1,(spp.size||6)/2),spC2=spp.color||"#00ccff"
+      ctx.save();ctx.globalAlpha=spp.opacity==null?.8:spp.opacity
+      ctx.fillStyle=spC2
+      spts2.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,spDr,0,Math.PI*2);ctx.fill()})
+      if(spp.labelAttr&&spp.labelAttr!=="none"){
+        ctx.fillStyle=spp.labelColor||"#ffffff"
+        ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
+        ctx.textBaseline="bottom"
+        spts2.forEach(function(pt){
+          var val=pt[spp.labelAttr]; if(val==null)return
+          ctx.fillText(typeof val==="number"?val.toFixed(2):String(val),pt.x*w+spDr+2,pt.y*h-spDr-1)
+        })
+      }
+      ctx.restore()
+    }
+  }
 }
 // Partially evaluate an effect stack up to and including a given effect id.
 // withSub: if true, also apply that effect's own maskStack (for promoted taps that include the masked result).
