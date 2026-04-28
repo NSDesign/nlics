@@ -2577,6 +2577,11 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       // gShape now renders using the (possibly modified) _points
       ctx.clearRect(0,0,w,h)
       gShape(ctx,n.props,w,h)
+      // Apply pixel-domain effects from creator's own effectStack
+      if(n.effectStack&&n.effectStack.length>0){
+        var pixEfx=n.effectStack.filter(function(e){return e.enabled&&e.domain!=="points"})
+        if(pixEfx.length>0) applyEfxStk(ctx,pixEfx,cmap,cache,iC,w,h,new Set(vis))
+      }
     }
     else if(n.type==="gradient")gGrad(ctx,n.props,w,h)
     else if(n.type==="noise")gNoise(ctx,n.props,w,h)
@@ -5912,7 +5917,8 @@ function LivePreview(props) {
   var zSt=useState(1); var zoom=zSt[0], setZoom=zSt[1]
   var fSt=useState("png"); var fmt=fSt[0], setFmt=fSt[1]
   var fsStyle = props.fullscreen
-    ? {position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:500,background:"var(--bg)"}
+    ? {position:"fixed",top:0,left:0,width:"100%",height:"100%",
+       zIndex:500,background:"var(--bg)",WebkitOverflowScrolling:"touch"}
     : {flex:1,minHeight:0}
   return (
     <div style={Object.assign({display:"flex",flexDirection:"column",overflow:"hidden"},fsStyle)}>
@@ -6079,7 +6085,7 @@ function SettingsSheet(props) {
             <div className="setting-grp-lbl">Project</div>
             <div className="setting-row">
               <span className="setting-lbl">Auto-save interval</span>
-              <select value={autoSaveInt} onChange={function(e){setAutoSaveInt(Number(e.target.value))}}
+              <select value={props.autoSaveInt||0} onChange={function(e){props.onAutoSaveInt(Number(e.target.value))}}
                 style={{background:"var(--el)",color:"var(--tx)",border:"1px solid var(--bd)",
                   borderRadius:4,padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}>
                 <option value={0}>Off</option>
@@ -7386,7 +7392,8 @@ function App() {
       <SettingsSheet open={settingsOpen} onClose={function(){setSettingsOpen(false)}}
         settings={settings} onSettings={setSettings}
         isVert={isVert} onIsVert={setIsVert}
-        flipped={flipped} onFlipped={setFlipped}/>
+        flipped={flipped} onFlipped={setFlipped}
+        autoSaveInt={autoSaveInt} onAutoSaveInt={setAutoSaveInt}/>
 
       <NodeDetailSheet
         open={settings.panelStyle==="sheet" && sheetNode!==null}
