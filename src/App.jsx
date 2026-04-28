@@ -2072,6 +2072,35 @@ function applyEfxToPoints(pts,efx,w,h) {
       var ang=pt.x*Math.PI*2,r=pt.y*.5
       pt.x=.5+Math.cos(ang)*r; pt.y=.5+Math.sin(ang)*r
     })
+  } else if(t==="uv-distort"){
+    // UV-distort in points domain: sample UV source at point position, displace x/y
+    // Requires the UV source canvas to be pre-rendered — we use a placeholder
+    // that reads from the UV ref if available via the efx._uvCanvas cache
+    var uvMode2=p.mode||"displacement"
+    var uvAmtX2=(p.amtX==null?.1:p.amtX), uvAmtY2=(p.amtY==null?.1:p.amtY)
+    var uvChX2=p.chX||"R", uvChY2=p.chY||"G"
+    var uvCv2=efx._uvCanvas  // pre-rendered UV source, set by applyEfxStk
+    if(uvCv2){
+      var uvD2=uvCv2.getContext("2d").getImageData(0,0,uvCv2.width,uvCv2.height).data
+      var uvW2=uvCv2.width, uvH2=uvCv2.height
+      function uvRd2(px2,py2,ch2){
+        var ix2=Math.max(0,Math.min(uvW2-1,Math.round(px2*(uvW2-1))))
+        var iy2=Math.max(0,Math.min(uvH2-1,Math.round(py2*(uvH2-1))))
+        var id2=(iy2*uvW2+ix2)*4
+        if(ch2==="R")return uvD2[id2]/255;if(ch2==="G")return uvD2[id2+1]/255
+        if(ch2==="B")return uvD2[id2+2]/255
+        return(.299*uvD2[id2]+.587*uvD2[id2+1]+.114*uvD2[id2+2])/255
+      }
+      out.forEach(function(pt){
+        var vx2=uvRd2(pt.x,pt.y,uvChX2), vy2=uvRd2(pt.x,pt.y,uvChY2)
+        if(uvMode2==="absolute"){
+          pt.x=Math.max(0,Math.min(1,vx2)); pt.y=Math.max(0,Math.min(1,vy2))
+        } else {
+          pt.x=Math.max(0,Math.min(1,pt.x+(vx2-.5)*uvAmtX2))
+          pt.y=Math.max(0,Math.min(1,pt.y+(vy2-.5)*uvAmtY2))
+        }
+      })
+    }
   } else if(t==="point-map"){
     var mappings=p.mappings||[]
     out.forEach(function(pt){
@@ -2108,8 +2137,13 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
     if(efx.type==="show-points"){spDeferred.push(efx);continue}
     // Points-domain effects: transform _points, skip canvas
     if(efx.domain==="points"&&efx.type!=="show-points"&&efx.type!=="source-at-points"){
-      if(ctx.canvas&&ctx.canvas._points)
+      if(ctx.canvas&&ctx.canvas._points){
+        // For uv-distort in pt mode: pre-render UV source and attach to efx
+        if(efx.type==="uv-distort"&&efx.params&&efx.params.uvRefId&&cmap){
+          efx._uvCanvas=compAny(efx.params.uvRefId,cmap,new Map(),iC,w,h,new Set(vis))||null
+        }
         ctx.canvas._points=applyEfxToPoints(ctx.canvas._points,efx,w,h)
+      }
       continue
     }
     // Stack reference — apply referenced Effect Stack with opacity/blendMode control
@@ -2619,7 +2653,8 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
           if(cv._points) cv._points=applyEfxToPoints(cv._points,pefx,w,h)
         }
       }
-      // gShape now renders using the (possibly modified) _points
+      // Write modified _points back so gShape reads them via ctx.canvas._points
+      ctx.canvas._points=cv._points
       ctx.clearRect(0,0,w,h)
       gShape(ctx,n.props,w,h)
       // Apply pixel-domain effects from creator's own effectStack
@@ -2647,6 +2682,8 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
           if(cv._points) cv._points=applyEfxToPoints(cv._points,gpefx,w,h)
         }
       }
+      // Write modified _points back so gShape reads them via ctx.canvas._points
+      ctx.canvas._points=cv._points
       ctx.clearRect(0,0,w,h); gShape(ctx,synProps,w,h)
       if(n.effectStack&&n.effectStack.length>0){
         var gpx=n.effectStack.filter(function(e){return e.enabled&&e.domain!=="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
@@ -4807,7 +4844,7 @@ function EfxCard(props) {
         <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},efx,{enabled:!efx.enabled}))}} style={{color:efx.enabled?"var(--ac)":"var(--mu)",fontSize:18}}>
           {efx.enabled?"●":"○"}
         </button>
-        {["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart"].includes(efx.type)&&(
+        {["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","uv-distort"].includes(efx.type)&&(
           <button onClick={function(){props.onChange(Object.assign({},efx,{domain:efx.domain==="points"?"pixels":"points"}))}}
             style={{fontSize:8,padding:"2px 6px",borderRadius:3,cursor:"pointer",
               fontFamily:"'IBM Plex Mono',monospace",
