@@ -2659,7 +2659,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       gShape(ctx,n.props,w,h)
       // Apply pixel-domain effects from creator's own effectStack
       if(n.effectStack&&n.effectStack.length>0){
-        var pixEfx=n.effectStack.filter(function(e){return e.enabled&&e.domain!=="points"})
+        var pixEfx=(n.outEfx||n.effectStack||[]).filter(function(e){return e.enabled&&e.domain!=="points"})
         if(pixEfx.length>0) applyEfxStk(ctx,pixEfx,cmap,cache,iC,w,h,new Set(vis))
       }
     }
@@ -2675,9 +2675,10 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       var synProps=Object.assign({},n.props,{shapeType:n.type})
       cv._shapeProps=synProps
       // Pre-pass: apply pt-domain effects FORWARD before rendering
-      if(n.effectStack&&n.effectStack.length>0){
-        for(var gpi=0;gpi<n.effectStack.length;gpi++){
-          var gpefx=n.effectStack[gpi]; if(!gpefx.enabled||gpefx.domain!=="points")continue
+      var geoEfx=(n.outEfx||n.effectStack||[])
+      if(geoEfx.length>0){
+        for(var gpi=0;gpi<geoEfx.length;gpi++){
+          var gpefx=geoEfx[gpi]; if(!gpefx.enabled||gpefx.domain!=="points")continue
           if(gpefx.type==="show-points"||gpefx.type==="source-at-points")continue
           if(cv._points) cv._points=applyEfxToPoints(cv._points,gpefx,w,h)
         }
@@ -2685,10 +2686,10 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       // Write modified _points back so gShape reads them via ctx.canvas._points
       ctx.canvas._points=cv._points
       ctx.clearRect(0,0,w,h); gShape(ctx,synProps,w,h)
-      if(n.effectStack&&n.effectStack.length>0){
-        var gpx=n.effectStack.filter(function(e){return e.enabled&&e.domain!=="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
+      if(geoEfx.length>0){
+        var gpx=geoEfx.filter(function(e){return e.enabled&&e.domain!=="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
         if(gpx.length) applyEfxStk(ctx,gpx,cmap,cache,iC,w,h,new Set(vis))
-        var gsat=n.effectStack.filter(function(e){return e.enabled&&(e.type==="source-at-points"||e.type==="show-points")})
+        var gsat=geoEfx.filter(function(e){return e.enabled&&(e.type==="source-at-points"||e.type==="show-points")})
         if(gsat.length) applyEfxStk(ctx,gsat,cmap,cache,iC,w,h,new Set(vis))
       }
     }
