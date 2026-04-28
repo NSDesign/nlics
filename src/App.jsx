@@ -5913,6 +5913,11 @@ function LivePreview(props) {
           {["png","jpeg","webp"].map(function(f){return <option key={f}>{f}</option>})}
         </select>
         <button className="ac" onClick={function(){props.onExport(fmt)}} style={{padding:"0 10px",fontSize:11,flexShrink:0}}>↓</button>
+        <span style={{flex:1}}/>
+        <button className={"hico"+(props.fullscreen?" exit":"")}
+          title={props.fullscreen?"Exit fullscreen":"Fullscreen preview"}
+          onClick={props.onFullscreen}
+          style={{fontSize:16,width:32,height:32,flexShrink:0}}>{props.fullscreen?"⊠":"⊡"}</button>
       </div>
       <div className="checker" style={{flex:1,overflow:"auto",display:"flex",alignItems:"center",justifyContent:"center",padding:20,position:"relative"}}>
         {!props.active && (
@@ -7263,7 +7268,9 @@ function App() {
     return (
       <div style={{display:"flex",alignItems:"center",padding:"8px 12px",gap:8,background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
         <span style={{fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:800,color:"var(--ac)",letterSpacing:".2em"}}>Selena</span>
-        <input value={projName} onChange={function(e){setProjName(e.target.value)}}
+        <input defaultValue={projName}
+          onBlur={function(e){setProjName(e.target.value)}}
+          onKeyDown={function(e){if(e.key==="Enter"||e.key==="Escape")e.target.blur()}}
           style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"var(--tx)",
             background:"none",border:"none",borderBottom:"1px solid var(--bd)",
             outline:"none",width:90,padding:"1px 4px",marginLeft:4}}
@@ -7306,20 +7313,30 @@ function App() {
         <div style={{overflowY:"auto",flex:1,padding:"8px 0"}}>
           {recentProj.length>0&&<div>
             <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace"}}>Recent</div>
-            {recentProj.map(function(r,i){return (
-              <div key={i} style={{padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
-                <div style={{fontSize:12,color:"var(--tx)"}}>{r.name}</div>
-                <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
-                  {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}
+            {recentProj.map(function(r,i){
+              var isDefault=r.name===(localStorage.getItem("nlics:default-project-name")||"")
+              return (
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
+                  <button onClick={function(){
+                    try{var def=localStorage.getItem("nlics:default-project");if(def){var d=JSON.parse(def);if(d.name===r.name)localStorage.setItem("nlics:default-project-name",r.name)}}catch(e){}
+                    // Set this as default by name — user must have the file
+                    try{localStorage.setItem("nlics:default-project-name",r.name)}catch(e){}
+                  }} style={{width:18,height:18,borderRadius:"50%",border:"2px solid "+(isDefault?"var(--lv)":"var(--bd)"),background:isDefault?"var(--lv)":"none",flexShrink:0,cursor:"pointer",padding:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,color:"var(--tx)"}}>{r.name}</div>
+                    <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
+                      {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )})}
+              )
+            })}
           </div>}
           <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",marginTop:8}}>Current project</div>
           <div style={{padding:"10px 16px",display:"flex",gap:10,alignItems:"center"}}>
             <div style={{flex:1,fontSize:12,color:"var(--tx)"}}>{projName} <span style={{fontSize:9,color:"var(--mu)"}}>({nodes.length} nodes)</span></div>
-            <button onClick={function(){saveProject(true)}} style={{fontSize:10,padding:"4px 12px",borderRadius:4,border:"1px solid var(--lv)",color:"var(--lv)",background:"rgba(176,96,240,.1)",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}}>
-              save &amp; set default
+            <button onClick={function(){saveProject(false)}} style={{fontSize:10,padding:"4px 12px",borderRadius:4,border:"1px solid var(--ac)",color:"var(--ac)",background:"rgba(36,204,168,.08)",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}}>
+              save
             </button>
           </div>
           <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",marginTop:8}}>Browse files</div>
