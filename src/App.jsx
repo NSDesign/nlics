@@ -410,7 +410,7 @@ var MBMS   = ["multiply","screen","add","subtract","normal"]
 var MCH    = ["luminosity","R","G","B","A"]
 var SHAPES = ["ellipse","rectangle","rounded-rect","polygon","star","ring","grid","spiral","polar-grid","phyllotaxis","scatter"]
 var GTYPES = ["linear","radial","conic"]
-var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value"]
+var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value","crystal","phasor"]
 var PTYPES = ["checkerboard","stripes","dots","diamond"]
 var ECFG   = {
   brightness: ["value",0,300,1,150],
@@ -610,6 +610,38 @@ function worley(x,y,s,jitter) {
     if(d<minD)minD=d
   }
   return Math.max(0,Math.min(1,Math.sqrt(minD)))
+}
+// ── Crystal noise — Voronoi F2-F1 (highlights cell borders as bright ridges) ──
+function crystal(x,y,s,jitter,mode) {
+  jitter=jitter==null?1:jitter; mode=mode||"f2f1"
+  var ix=Math.floor(x), iy=Math.floor(y)
+  var f1=1e9, f2=1e9
+  for(var dy=-2;dy<=2;dy++) for(var dx=-2;dx<=2;dx++){
+    var cx=ix+dx, cy=iy+dy
+    var px=cx+vh(cx,cy,s)*jitter, py=cy+vh(cx+31.4,cy+27.8,s)*jitter
+    var d=Math.sqrt((x-px)*(x-px)+(y-py)*(y-py))
+    if(d<f1){f2=f1;f1=d} else if(d<f2){f2=d}
+  }
+  if(mode==="f2")   return Math.max(0,Math.min(1,f2*.8))
+  if(mode==="f2f1") return Math.max(0,Math.min(1,(f2-f1)*2.5))
+  if(mode==="f1f2") return Math.max(0,Math.min(1,f1*f2*4))
+  if(mode==="f2df1")return Math.max(0,Math.min(1,f1>0?f2/f1*.5:0))
+  return Math.max(0,Math.min(1,f2-f1))
+}
+// ── Phasor noise — oriented sinusoidal bands (Tricard et al. 2019) ───────────
+// Anisotropic stripe/ripple pattern with controllable frequency and direction
+function phasor(x,y,s,freq,angle,bandwidth,oct) {
+  freq=freq||8; angle=(angle||0)*Math.PI/180; bandwidth=bandwidth||1; oct=oct||3
+  var v=0,a=1,f=1,m=0
+  for(var i=0;i<oct;i++){
+    // Oriented kernel: project position onto direction, add value noise phase
+    var nx=x*f, ny=y*f
+    var pn=vn(nx,ny,s+i)*bandwidth*Math.PI*2  // value noise as phase offset
+    var proj=Math.cos(angle)*nx+Math.sin(angle)*ny  // oriented projection
+    v+=Math.sin(proj*freq*Math.PI*2+pn)*a
+    m+=a; a*=.5; f*=2.08
+  }
+  return Math.max(0,Math.min(1,(v/m+1)*.5))
 }
 // ── Simplex-style noise (gradient noise, fewer artefacts than value noise) ────
 function simplex2(x,y,s) {
@@ -1367,6 +1399,8 @@ function gNoise(ctx,p,w,h) {
       case "marble":     v=marble(sx,sy,oct,seed,mFreq,mTurb); break
       case "wood":       v=wood(sx,sy,oct,seed,mFreq,mTurb); break
       case "value":      v=vn(sx,sy,seed); break
+      case "crystal":    v=crystal(sx,sy,seed,p.wJitter,p.crystalMode||"f2f1"); break
+      case "phasor":     v=phasor(sx,sy,seed,p.pFreq,p.pAngle,p.pBandwidth,oct); break
       default:           v=vh(px,py,seed)
     }
     v=Math.max(0,Math.min(1,v))
@@ -3665,6 +3699,19 @@ function NoiseP(props) {
       )}
       {p.nType==="worley"&&(
         <Sl l="jitter" v={p.wJitter==null?1:p.wJitter} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{wJitter:v}))}}/>
+      )}
+      {p.nType==="crystal"&&(
+        <div>
+          <Se l="mode" v={p.crystalMode||"f2f1"} opts={["f2f1","f2","f1f2","f2df1"]} fn={function(v){up(Object.assign({},p,{crystalMode:v}))}}/>
+          <Sl l="jitter" v={p.wJitter==null?1:p.wJitter} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{wJitter:v}))}}/>
+        </div>
+      )}
+      {p.nType==="phasor"&&(
+        <div>
+          <Sl l="frequency" v={p.pFreq||8} mn={1} mx={40} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{pFreq:v}))}}/>
+          <Sl l="angle" v={p.pAngle||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{pAngle:v}))}}/>
+          <Sl l="bandwidth" v={p.pBandwidth||1} mn={0} mx={4} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{pBandwidth:v}))}}/>
+        </div>
       )}
       {(p.nType==="marble"||p.nType==="wood")&&(
         <div>
