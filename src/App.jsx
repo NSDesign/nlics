@@ -7408,7 +7408,7 @@ function App() {
               : <HeaderBar showExpand={true}/>
             }
             {flipped&&isVert
-              ? <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport}/>
+              ? <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport} fullscreen={rightFS} onFullscreen={function(){setRightFS(!rightFS)}}/>
               : <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",position:"relative"}}>
                   <Section sec={1} title="§1 · Creators" {...sp}
                     collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
@@ -7446,7 +7446,7 @@ function App() {
                       onClick={function(){setSheetNode(null);setSelId(null)}}/>
                   )}
                 </div>
-              : <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport}/>
+              : <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport} fullscreen={rightFS} onFullscreen={function(){setRightFS(!rightFS)}}/>
             }
           </div>
         </div>
