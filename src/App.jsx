@@ -4255,13 +4255,12 @@ function EfxPrimary(props) {
         fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up({size:v})}}/>
       <Sl l="opacity" v={p.opacity==null?.8:p.opacity} mn={0} mx={1} st={.01}
         fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({opacity:v})}}/>
-      <PR l="labels">
-        <button className={p.showLabels?"ac":"ghost"} style={{flex:1,minHeight:32,fontSize:11}}
-          onClick={function(){up({showLabels:!p.showLabels})}}>
-          {p.showLabels?"on":"off"}
-        </button>
-      </PR>
-      {p.showLabels&&<div>
+      <Se l="label" v={p.labelAttr||"none"}
+        opts={["none","pointIndex","pointCount","x","y","rowNorm","colNorm","row","col",
+          "ringIndex","angleNorm","radiusNorm","spiralT","fibIndex","scatterIndex",
+          "scale","rotation","opacity","sourceIndex"]}
+        fn={function(v){up({labelAttr:v==="none"?null:v})}}/>
+      {p.labelAttr&&p.labelAttr!=="none"&&<div>
         <Sl l="label size" v={p.labelSize||9} mn={6} mx={20} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>
         <Co l="label col" v={p.labelColor||"#ffffff"} fn={function(v){up({labelColor:v})}}/>
       </div>}
