@@ -6062,7 +6062,7 @@ function AddMenu(props) {
               Advanced
             </div>,
             s1advanced.map(function(item){return <div key={item.t} className="drop-item" onClick={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})
-          ]:s2items.map(function(item){return <div key={item.t} className="drop-item" onClick={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
+          ]:s2items.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
         </div>,
         document.body
       )}
