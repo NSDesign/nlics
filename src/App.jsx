@@ -1236,54 +1236,45 @@ function gShape(ctx,p,w,h) {
     if(renderMode==="smooth") drawSmooth(starPts)
     else drawPts(starPts)
   }
-  else if(s==="grid"||s==="spiral"||s==="polar-grid"||s==="phyllotaxis"||s==="scatter"){
-    // Geometry types: generate _points and render as dots or path line
-    // _points are set in compAny after gShape runs; here we just draw markers if needed
+  else if(GEO_POINT_TYPES.includes(s)){
+    // Geometry types: render ENTIRELY from ctx.canvas._points (which may be pt-effect modified)
+    // Generators set _points; gShape draws from those points — never regenerates positions here
     var geoPts=ctx.canvas&&ctx.canvas._points
-    if(geoPts&&geoPts.length>0&&(p.pointStyle||"dots")==="dots"){
-      var dr=Math.max(1,(p.dotSize||4)/2),gc=p.color||"#ffffff"
-      ctx.save();ctx.globalAlpha=p.opacity==null?1:p.opacity;ctx.fillStyle=gc
-      geoPts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,dr,0,Math.PI*2);ctx.fill()})
-      ctx.restore()
-    }
-    // Connected toggle — draw lines between points
-    if(geoPts&&geoPts.length>1&&s!=="scatter"&&(p.connected!==false)){
-      ctx.save();ctx.strokeStyle=p.color||"#ffffff"
-      ctx.lineWidth=Math.max(.5,p.strokeW||1);ctx.globalAlpha=(p.opacity==null?1:p.opacity)
-      ctx.beginPath()
-      if(s==="grid"){
-        var gcols=Math.round(p.cols||4), grows=Math.round(p.rows||4)
-        for(var gr=0;gr<grows;gr++){
-          for(var gc2=0;gc2<gcols;gc2++){
-            var gidx=gr*gcols+gc2, pt2=geoPts[gidx]; if(!pt2)continue
-            gc2===0?ctx.moveTo(pt2.x*w,pt2.y*h):ctx.lineTo(pt2.x*w,pt2.y*h)
-          }
-        }
-        for(var gc=0;gc<gcols;gc++){
-          for(var gr2=0;gr2<grows;gr2++){
-            var gidx2=gr2*gcols+gc, pt3=geoPts[gidx2]; if(!pt3)continue
-            gr2===0?ctx.moveTo(pt3.x*w,pt3.y*h):ctx.lineTo(pt3.x*w,pt3.y*h)
-          }
-        }
-      } else if(s==="polar-grid"){
-        var ppr=Math.round(p.pointsPerRing||8), prings=Math.round(p.rings||4)
-        for(var ri=0;ri<prings;ri++){
-          for(var pi=0;pi<=ppr;pi++){
-            var pidx=ri*ppr+(pi%ppr), rpt=geoPts[pidx]; if(!rpt)continue
-            pi===0?ctx.moveTo(rpt.x*w,rpt.y*h):ctx.lineTo(rpt.x*w,rpt.y*h)
-          }
-          ctx.closePath()
-        }
-        for(var si2=0;si2<ppr;si2++){
-          for(var ri2=0;ri2<prings;ri2++){
-            var sidx=ri2*ppr+si2, spt=geoPts[sidx]; if(!spt)continue
-            ri2===0?ctx.moveTo(spt.x*w,spt.y*h):ctx.lineTo(spt.x*w,spt.y*h)
-          }
-        }
-      } else {
-        geoPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+    if(!geoPts||!geoPts.length) { /* nothing to draw */ } else {
+      var gColor=p.color||"#ffffff", gAlpha=p.opacity==null?1:p.opacity
+      var gDr=Math.max(.5,(p.dotSize||4)/2)
+      // Dots
+      if((p.pointStyle||"dots")==="dots"){
+        ctx.save();ctx.globalAlpha=gAlpha;ctx.fillStyle=gColor
+        geoPts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,gDr,0,Math.PI*2);ctx.fill()})
+        ctx.restore()
       }
-      ctx.stroke();ctx.restore()
+      // Connections — drawn using actual (possibly modified) point positions
+      if(s!=="scatter"&&(p.connected!==false)){
+        ctx.save();ctx.strokeStyle=gColor
+        ctx.lineWidth=Math.max(.5,p.strokeW||1);ctx.globalAlpha=gAlpha;ctx.beginPath()
+        if(s==="grid"){
+          var gcols=Math.round(p.cols||4),grows=Math.round(p.rows||4)
+          for(var gr=0;gr<grows;gr++){
+            for(var gc2=0;gc2<gcols;gc2++){var gpt=geoPts[gr*gcols+gc2];if(!gpt)continue;gc2===0?ctx.moveTo(gpt.x*w,gpt.y*h):ctx.lineTo(gpt.x*w,gpt.y*h)}
+          }
+          for(var gc=0;gc<gcols;gc++){
+            for(var gr2=0;gr2<grows;gr2++){var gpt2=geoPts[gr2*gcols+gc];if(!gpt2)continue;gr2===0?ctx.moveTo(gpt2.x*w,gpt2.y*h):ctx.lineTo(gpt2.x*w,gpt2.y*h)}
+          }
+        } else if(s==="polar-grid"){
+          var ppr=Math.round(p.pointsPerRing||8),prings=Math.round(p.rings||4)
+          for(var ri=0;ri<prings;ri++){
+            for(var pi=0;pi<=ppr;pi++){var rpt2=geoPts[ri*ppr+(pi%ppr)];if(!rpt2)continue;pi===0?ctx.moveTo(rpt2.x*w,rpt2.y*h):ctx.lineTo(rpt2.x*w,rpt2.y*h)}
+            ctx.closePath()
+          }
+          for(var si2=0;si2<ppr;si2++){
+            for(var ri2=0;ri2<prings;ri2++){var spt2=geoPts[ri2*ppr+si2];if(!spt2)continue;ri2===0?ctx.moveTo(spt2.x*w,spt2.y*h):ctx.lineTo(spt2.x*w,spt2.y*h)}
+          }
+        } else {
+          geoPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
+        }
+        ctx.stroke();ctx.restore()
+      }
     }
   }
   else if(s==="ring"){
@@ -2103,7 +2094,7 @@ function applyEfxToPoints(pts,efx,w,h) {
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
   // Iterate bottom-to-top: last item in list is applied first (bottom layer),
   // first item in list is applied last (top layer). Standard layer convention.
-  for(var ei=stack.length-1;ei>=0;ei--){
+  for(var ei=0;ei<stack.length;ei++){
     var efx=stack[ei]; if(!efx.enabled) continue
     // Points-domain effects: transform _points, skip canvas
     if(efx.domain==="points"&&efx.type!=="show-points"&&efx.type!=="source-at-points"){
@@ -2129,6 +2120,8 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
     }
     // Point Map — handled via domain:"points" above, skip pixel path
     if(efx.type==="point-map"){ continue }
+    // Show-points deferred — always applied last so it renders on top
+    if(efx.type==="show-points"){ continue }
 
     // Source at Points — stamps sources at each point position
     if(efx.type==="source-at-points"){
@@ -2349,7 +2342,18 @@ function resolveSlotBase(slot,cmap,cache,iC,w,h,vis) {
     for(var si=0;si<w*h;si++) sid.data[si*4+3]=Math.round(sid.data[si*4+3]*sf)
     ctx.putImageData(sid,0,0)
   }
-  if(slot.effectStack&&slot.effectStack.length>0)applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis))
+  if(slot.effectStack&&slot.effectStack.length>0){
+    var hadPtEfx=slot.effectStack.some(function(e){return e.enabled&&e.domain==="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
+    applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis))
+    // Re-render shape using modified _points if pt effects ran
+    if(hadPtEfx&&cv._shapeProps&&cv._points){
+      ctx.clearRect(0,0,w,h)
+      gShape(ctx,cv._shapeProps,w,h)
+      // Then re-run pixel effects
+      var pixEfx=slot.effectStack.filter(function(e){return e.enabled&&e.domain!=="points"})
+      if(pixEfx.length) applyEfxStk(ctx,pixEfx,cmap,cache,iC,w,h,new Set(vis))
+    }
+  }
   return cv
 }
 // Compute effective matte for a slot: source_alpha × maskStack result.
@@ -2431,7 +2435,8 @@ function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
   // Find the index of afterId in the stack (display order top-to-bottom)
   var afterIdx=-1; for(var fi=0;fi<stack.length;fi++){if(stack[fi].id===afterId){afterIdx=fi;break}}
   // Iterate bottom-to-top, stopping at afterIdx (inclusive)
-  for(var ei=stack.length-1;ei>=(afterIdx>=0?afterIdx:0);ei--){
+  var eiEnd=afterIdx>=0?afterIdx:stack.length
+  for(var ei=0;ei<eiEnd;ei++){
     var efx=stack[ei]; if(!efx.enabled)continue
     if(efx.type==="transform"){applyTransform(ctx,efx.params,w,h)}
     else {
@@ -2577,13 +2582,12 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       else if(sType==="phyllotaxis")gPhyllotaxis(ctx,n.props,w,h)
       else if(sType==="scatter")    gScatter(ctx,n.props,w,h)
       else cv._points=shapePoints(n.props,w,h)  // classic shapes: vertices/perimeter
+      cv._shapeProps=n.props  // stored for re-render after slot-level pt effects
       // Pre-apply any points-domain effects BEFORE gShape renders
       // This allows wave/twirl/bulge etc. in pt mode to warp the point positions
-      // Apply points-domain effects in FORWARD order (0 → n) before gShape renders.
-      // Forward order = top-of-stack first, matching user's expectation:
-      // Point Map (top) transforms points, Source at Points (below) uses result.
+      // Pre-pass: apply pt-domain effects FORWARD (top→bottom) before gShape renders
       if(n.effectStack&&n.effectStack.length>0){
-        for(var pei=n.effectStack.length-1;pei>=0;pei--){
+        for(var pei=0;pei<n.effectStack.length;pei++){
           var pefx=n.effectStack[pei]
           if(!pefx.enabled||pefx.domain!=="points")continue
           if(pefx.type==="show-points"||pefx.type==="source-at-points")continue
@@ -5068,6 +5072,7 @@ function EfxStack(props) {
 
   return (
     <div>
+      {props.stack.length>0&&<div style={{display:"flex",justifyContent:"flex-end",padding:"0 4px 2px",fontSize:7,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:".05em"}}>↓ top → bottom</div>}
       {props.stack.length===0 && <div className="empty">no effects</div>}
       {props.stack.map(function(efx,i){
         if(efx.type==="__stackref__") return (
