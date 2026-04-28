@@ -6887,6 +6887,10 @@ function App() {
   var autoSaveIntSt=useState(0); var autoSaveInt=autoSaveIntSt[0],setAutoSaveInt=autoSaveIntSt[1]
   var autoSaveTmr=useRef(null)
   var fileInputRef=useRef(null)
+  var loadDialogSt=useState(false); var loadDialog=loadDialogSt[0],setLoadDialog=loadDialogSt[1]
+  var recentProjSt=useState(function(){
+    try{var r=localStorage.getItem("nlics:recent");return r?JSON.parse(r):[]}catch(e){return[]}
+  }); var recentProj=recentProjSt[0],setRecentProj=recentProjSt[1]
 
   function pushHistory(snapshot) {
     var ring = histRef.current
@@ -6899,20 +6903,27 @@ function App() {
     toastTmr.current = setTimeout(function(){ setToastOn(false) }, 1600)
   }
   // ── Project save / load ──────────────────────────────────────────────────
-  function saveProject() {
+  function saveProject(setDefault) {
     try {
-      var data = JSON.stringify({
-        version:"1.0", appName:"Selena",
-        name:projName,
-        savedAt:new Date().toISOString(),
-        nodes:nodes
-      }, null, 2)
+      var savedAt=new Date().toISOString()
+      var payload={version:"1.0",appName:"Selena",fileType:"nlics",name:projName,savedAt:savedAt,nodes:nodes}
+      var data = JSON.stringify(payload, null, 2)
       var blob = new Blob([data], {type:"application/json"})
       var url = URL.createObjectURL(blob)
       var a = document.createElement("a")
-      a.href=url; a.download=(projName||"Untitled").replace(/[^a-z0-9_-]/gi,"_")+".selena"
+      a.href=url; a.download=(projName||"Untitled").replace(/[^a-z0-9_-]/gi,"_")+".nlics"
       document.body.appendChild(a); a.click()
       document.body.removeChild(a); URL.revokeObjectURL(url)
+      // Store in recent projects list
+      var entry={name:projName,savedAt:savedAt,nodeCount:nodes.length}
+      var recent=recentProj.filter(function(r){return r.name!==projName}).slice(0,9)
+      recent.unshift(entry)
+      setRecentProj(recent)
+      try{localStorage.setItem("nlics:recent",JSON.stringify(recent))}catch(e){}
+      // Optionally set as default startup project
+      if(setDefault) {
+        try{localStorage.setItem("nlics:default-project",data);localStorage.setItem("nlics:default-project-name",projName)}catch(e){}
+      }
     } catch(e) { console.error("Save failed",e) }
   }
   function loadProject(file) {
@@ -6934,8 +6945,8 @@ function App() {
   function autoSaveNow() {
     try {
       var data = JSON.stringify({version:"1.0",name:projName,nodes:nodes,savedAt:new Date().toISOString()})
-      localStorage.setItem("selena:autosave",data)
-      localStorage.setItem("selena:autosave:name",projName)
+      localStorage.setItem("nlics:autosave",data)
+      localStorage.setItem("nlics:autosave:name",projName)
     } catch(e) {}
   }
   // Auto-save interval
@@ -6964,6 +6975,15 @@ function App() {
   // ── Persist settings via localStorage ───────────────────────────────────
   // Works on GitHub Pages, local dev, and any browser.
   // Wrapped in try/catch — localStorage throws in private mode with full quota.
+  // Load default project on startup if set
+  useEffect(function(){
+    try {
+      var def=localStorage.getItem("nlics:default-project")
+      var defName=localStorage.getItem("nlics:default-project-name")
+      if(def){var d=JSON.parse(def);if(d.nodes){setNodes(d.nodes);if(defName)setProjName(defName)}}
+    }catch(e){}
+  },[])
+
   var STORAGE_KEY = 'nlics:ui-settings:v1'
   // v1 suffix means a new app version can change the key to reset stale settings
 
@@ -7248,13 +7268,13 @@ function App() {
             background:"none",border:"none",borderBottom:"1px solid var(--bd)",
             outline:"none",width:90,padding:"1px 4px",marginLeft:4}}
           placeholder="project name"/>
-        <button onClick={saveProject} className="hico" title="Save project (↓)">↓</button>
-        <button onClick={function(){fileInputRef.current&&fileInputRef.current.click()}}
-          className="hico" title="Load project (↑)">↑</button>
-        <input ref={fileInputRef} type="file" accept=".selena,.json"
-          style={{display:"none"}} onChange={function(e){loadProject(e.target.files[0]);e.target.value=""}}/>
+        <button onClick={function(){saveProject(false)}} className="hico" title="Save project">↓</button>
+        <button onClick={function(){setLoadDialog(true)}} className="hico" title="Load project">↑</button>
+        <input ref={fileInputRef} type="file" accept=".nlics,.selena,.json,application/json,*/*"
+          style={{display:"none"}} onChange={function(e){loadProject(e.target.files[0]);e.target.value="";setLoadDialog(false)}}/>
         <span style={{flex:1}}/>
         <button className="hico" title="Layout settings" onClick={function(){setSettingsOpen(true)}}>⚙</button>
+        <button className={"hico"+(rightFS?" exit":"")} title={rightFS?"Exit preview fullscreen":"Fullscreen preview"} onClick={function(){setRightFS(!rightFS)}}>{rightFS?"⊠":"⊡"}</button>
         {hProps.showExpand && <button className={"hico"+(leftFS?" exit":"")} onClick={function(){setLeftFS(!leftFS)}}>{leftFS?"⊠":"⊞"}</button>}
       </div>
     )
