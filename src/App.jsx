@@ -7314,16 +7314,24 @@ function App() {
           {recentProj.length>0&&<div>
             <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace"}}>Recent</div>
             {recentProj.map(function(r,i){
-              var isDefault=r.name===(localStorage.getItem("nlics:default-project-name")||"")
+              var defName=localStorage.getItem("nlics:default-project-name")||""
+              var isDefault=r.name===defName
               return (
                 <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
-                  <button onClick={function(){
-                    try{var def=localStorage.getItem("nlics:default-project");if(def){var d=JSON.parse(def);if(d.name===r.name)localStorage.setItem("nlics:default-project-name",r.name)}}catch(e){}
-                    // Set this as default by name — user must have the file
-                    try{localStorage.setItem("nlics:default-project-name",r.name)}catch(e){}
-                  }} style={{width:18,height:18,borderRadius:"50%",border:"2px solid "+(isDefault?"var(--lv)":"var(--bd)"),background:isDefault?"var(--lv)":"none",flexShrink:0,cursor:"pointer",padding:0}}/>
+                  {isDefault
+                    ? <span style={{fontSize:8,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",
+                        border:"1px solid var(--lv)",borderRadius:3,padding:"1px 5px",
+                        flexShrink:0,letterSpacing:".06em",textTransform:"uppercase"}}>default</span>
+                    : <button onClick={function(){
+                        try{localStorage.setItem("nlics:default-project-name",r.name)}catch(e){}
+                        // Force re-render of dialog by toggling loadDialog
+                        setLoadDialog(false); setTimeout(function(){setLoadDialog(true)},0)
+                      }} style={{width:18,height:18,borderRadius:"50%",
+                        border:"2px solid var(--bd)",background:"none",
+                        flexShrink:0,cursor:"pointer",padding:0}}/>
+                  }
                   <div style={{flex:1}}>
-                    <div style={{fontSize:12,color:"var(--tx)"}}>{r.name}</div>
+                    <div style={{fontSize:12,color:isDefault?"var(--lv)":"var(--tx)"}}>{r.name}</div>
                     <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
                       {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}
                     </div>
