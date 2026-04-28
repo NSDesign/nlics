@@ -6140,24 +6140,8 @@ function useDivider(vert, onDragStart) {
 
 /* ─── INITIAL STATE ─────────────────────────────────────── */
 function initState() {
-  function ef(id,t,p,o,bm,ms){return{id:id,type:t,enabled:true,params:p,opacity:o||100,blendMode:bm||"normal",maskStack:ms||[]}}
-  function mk(id,refId,ch,inv,str,o,bm,es){return{id:id,refId:refId,channel:ch||"luminosity",invert:inv||false,strength:str||1,opacity:o||100,blendMode:bm||"multiply",effectStack:es||[]}}
-  function sl(refId,efx,msk){return{refId:refId,effectStack:efx||[],maskStack:msk||[]}}
-  var nodes=[
-    {id:"g1",name:"BG Gradient", type:"gradient",section:1,enabled:true,props:{gType:"radial",c1:"#180068",c2:"#030316",s1:0,s2:1,angle:90,cx:.5,cy:.45,r:.95,sa:0,alpha:1}},
-    {id:"g2",name:"Perlin Noise",type:"noise",   section:1,enabled:true,props:{nType:"perlin",c1:"#5533ee",c2:"#000000",scale:.042,oct:5,seed:7,alpha:1}},
-    {id:"g3",name:"Dot Pattern", type:"pattern", section:1,enabled:true,props:{pType:"dots",c1:"#ffffff",c2:"#000000",scale:.12,sw:.1,angle:0,dr:.025,ds:.09,alpha:1}},
-    {id:"g4",name:"Glow Orb",    type:"shape",   section:1,enabled:true,props:{shapeType:"ellipse",x:.5,y:.5,sz:.62,rot:0,fill:"#2288ff",stroke:"#000",strokeW:0,pts:5,innerR:.45,sides:5,ringR:.62,alpha:1}},
-    {id:"g5",name:"Star Shape",  type:"shape",   section:1,enabled:true,props:{shapeType:"star",x:.5,y:.5,sz:.38,rot:0,fill:"#ffffff",stroke:"#000",strokeW:0,pts:7,innerR:.42,sides:5,ringR:.62,alpha:1}},
-    {id:"b1",name:"BG+Noise",    type:"blender", section:2,enabled:true,inputA:sl("g1"),inputB:sl("g2",[ef("e1","blur",{radius:3})]),mode:"overlay",amount:60,switched:false,outEfx:[],outMask:[]},
-    {id:"b2",name:"BG+Orb",      type:"blender", section:2,enabled:true,inputA:sl("b1"),inputB:sl("g4",[ef("e2","blur",{radius:24})]),mode:"screen",amount:100,switched:false,outEfx:[],outMask:[]},
-    {id:"b3",name:"Final Output",type:"blender", section:2,enabled:true,
-      inputA:sl("b2"),
-      inputB:sl("g5",[ef("e3","blur",{radius:5})],[mk("m1","g3","luminosity",false,1,100,"multiply")]),
-      mode:"screen",amount:90,switched:false,
-      outEfx:[ef("e4","exposure",{stops:.35})],outMask:[]}
-  ]
-  return {nodes:nodes,dispId:"b3"}
+  // Start blank — default project loads from localStorage if set (see startup useEffect)
+  return {nodes:[], dispId:null}
 }
 
 /* ─── SETTINGS SHEET ─────────────────────────────────────── */
