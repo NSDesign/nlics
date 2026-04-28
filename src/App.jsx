@@ -3932,6 +3932,17 @@ function CreatorProps(props) {
       {node.type==="phyllotaxis" && <PhyllotaxisP p={node.props} up={up}/>}
       {node.type==="scatter"     && <ScatterP    p={node.props} up={up}/>}
       {node.type==="image"    && <ImgP   p={node.props} up={up} onLoad={onLoad}/>}
+      {/* Effects stack for creator */}
+      <div style={{borderTop:"1px solid var(--bd)",marginTop:10,paddingTop:10}}>
+        <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
+          letterSpacing:".06em",textTransform:"uppercase",padding:"0 0 6px"}}>Effects</div>
+        <EfxStack
+          stack={node.outEfx||[]}
+          nodes={nodes} selfId={node.id}
+          iC={iC}
+          basePath={{slotKey:"outEfx",steps:[]}}
+          onChange={function(es){onUpdate(Object.assign({},node,{outEfx:es}))}}/>
+      </div>
       {/* Save-as-default row */}
       <div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid var(--bd)",alignItems:"center"}}>
         <button className="ghost" style={{flex:1,fontSize:10,padding:"6px 10px"}}
@@ -7025,6 +7036,7 @@ function App() {
   var autoSaveTmr=useRef(null)
   var fileInputRef=useRef(null)
   var loadDialogSt=useState(false); var loadDialog=loadDialogSt[0],setLoadDialog=loadDialogSt[1]
+  var saveDialogSt=useState(false); var saveDialog=saveDialogSt[0],setSaveDialog=saveDialogSt[1]
   var recentProjSt=useState(function(){
     try{var r=localStorage.getItem("nlics:recent");return r?JSON.parse(r):[]}catch(e){return[]}
   }); var recentProj=recentProjSt[0],setRecentProj=recentProjSt[1]
@@ -7117,8 +7129,15 @@ function App() {
     try {
       var def=localStorage.getItem("nlics:default-project")
       var defName=localStorage.getItem("nlics:default-project-name")
-      if(def){var d=JSON.parse(def);if(d.nodes){setNodes(d.nodes);if(defName)setProjName(defName)}}
-    }catch(e){}
+      if(def){
+        var d=JSON.parse(def)
+        if(d&&d.nodes&&d.nodes.length>0){
+          setNodes(d.nodes)
+          if(defName)setProjName(defName)
+        }
+      }
+    }catch(e){console.warn("Default project load failed:",e)}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[])
 
   var STORAGE_KEY = 'nlics:ui-settings:v1'
@@ -7407,9 +7426,9 @@ function App() {
             background:"none",border:"none",borderBottom:"1px solid var(--bd)",
             outline:"none",width:90,padding:"1px 4px",marginLeft:4}}
           placeholder="project name"/>
-        <button onClick={function(){saveProject(false)}} className="hico" title="Save project">↓</button>
+        <button onClick={function(){setSaveDialog(true)}} className="hico" title="Save project">↓</button>
         <button onClick={function(){setLoadDialog(true)}} className="hico" title="Load project">↑</button>
-        <input ref={fileInputRef} type="file" accept=".nlics,.selena,.json,.txt,application/json,*"
+        <input ref={fileInputRef} type="file" accept="*"
           style={{display:"none"}} onChange={function(e){loadProject(e.target.files[0]);e.target.value="";setLoadDialog(false)}}/>
         <span style={{flex:1}}/>
         <button className="hico" title="Layout settings" onClick={function(){setSettingsOpen(true)}}>⚙</button>
@@ -7450,10 +7469,14 @@ function App() {
               var isDefault=r.name===defName
               return (
                 <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
-                  <div style={{flex:1}}>
+                  <div style={{flex:1,cursor:"pointer"}} onClick={function(){
+                    // Open file picker filtered to help find this project
+                    fileInputRef.current&&fileInputRef.current.click()
+                    setLoadDialog(false)
+                  }}>
                     <div style={{fontSize:12,color:isDefault?"var(--lv)":"var(--tx)"}}>{r.name}</div>
                     <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
-                      {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}
+                      {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()} · tap to load
                     </div>
                   </div>
                   {isDefault
@@ -7497,6 +7520,7 @@ function App() {
   return (
     <div ref={appRef} onPointerMove={handleRootPointerMove} onPointerUp={handleRootPointerUp}
       style={{display:settings.viewMode==="unified"?"block":"flex",flexDirection:isVert?"column":"row",height:"100vh",width:"100vw",overflow:"hidden",background:"var(--bg)",fontFamily:"'IBM Plex Mono','Courier New',monospace",fontSize:12,color:"var(--tx)"}}>
+      {SaveDialog}
       {LoadDialog}
       <StyleInjector />
 
