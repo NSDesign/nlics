@@ -1845,7 +1845,7 @@ function resolvePath(node, slotKey, steps) {
 /* ─── RENDERING ENGINE ───────────────────────────────────── */
 var BM = {"normal":"source-over","add":"lighter","multiply":"multiply","screen":"screen","overlay":"overlay","soft-light":"soft-light","hard-light":"hard-light","difference":"difference","exclusion":"exclusion","darken":"darken","lighten":"lighten","color-burn":"color-burn","color-dodge":"color-dodge","hue":"hue","saturation":"saturation","color":"color","luminosity":"luminosity"}
 function mkCv(w,h){var c=document.createElement("canvas");c.width=w;c.height=h;return c}
-function clCv(s,w,h){var c=mkCv(w,h);c.getContext("2d").drawImage(s,0,0);return c}
+function clCv(s,w,h){var c=mkCv(w,h);c.getContext("2d").drawImage(s,0,0);if(s&&s._points)c._points=s._points.slice();return c}
 
 function pxBl(mode,p,c) {
   if(mode==="multiply")return[p[0]*c[0]/255,p[1]*c[1]/255,p[2]*c[2]/255]
