@@ -4281,7 +4281,7 @@ function EfxPrimary(props) {
                 <button onClick={function(){delSrc(si)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
               </div>
               {(function(idx){return <NRef l="node" v={s.refId} nodes={props.nodes||[]} selfId={props.selfId} iC={props.iC}
-                fn={function(v){updSrc(idx,{refId:v})}}/>})(si)}
+                mode="source" fn={function(v){updSrc(idx,{refId:v})}}/>})(si)}
               <Sl l="weight" v={s.weight==null?1:s.weight} mn={0} mx={10} st={.1}
                 fmt={function(v){return v.toFixed(1)}} fn={function(v){updSrc(si,{weight:v})}}/>
             </div>
@@ -4856,7 +4856,7 @@ function EfxCard(props) {
       <TabBar tabs={tabs} active={tab} onChange={setTab}/>
       {tab==="primary" && (
         <div className="card-body">
-          <EfxPrimary efx={efx} onChange={props.onChange}/>
+          <EfxPrimary efx={efx} onChange={props.onChange} nodes={props.nodes} selfId={props.selfId} iC={props.iC}/>
         </div>
       )}
       {tab==="layer" && (
