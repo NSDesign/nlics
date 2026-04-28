@@ -7452,6 +7452,59 @@ function App() {
   }
 
 
+  // ── Save project dialog ─────────────────────────────────────────────────────
+  var SaveDialog = saveDialog ? (
+    <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(4,4,18,.88)",display:"flex",alignItems:"flex-end"}}
+      onClick={function(e){if(e.target===e.currentTarget)setSaveDialog(false)}}>
+      <div style={{width:"100%",background:"var(--pn)",borderRadius:"18px 18px 0 0",overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",padding:"14px 16px 10px",borderBottom:"1px solid var(--bd)"}}>
+          <span style={{flex:1,fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13}}>Save Project</span>
+          <button className="icon-btn" onClick={function(){setSaveDialog(false)}} style={{fontSize:20,color:"var(--mu)"}}>×</button>
+        </div>
+        <div style={{padding:"10px 16px 24px"}}>
+          <div style={{marginBottom:12}}>
+            <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:".08em"}}>Project name</span>
+            <input defaultValue={projName}
+              onBlur={function(e){setProjName(e.target.value)}}
+              onKeyDown={function(e){if(e.key==="Enter"||e.key==="Escape")e.target.blur()}}
+              style={{display:"block",width:"100%",marginTop:6,fontSize:13,
+                fontFamily:"'IBM Plex Mono',monospace",color:"var(--tx)",
+                background:"var(--el)",border:"1px solid var(--bd)",borderRadius:6,
+                outline:"none",padding:"8px 10px",boxSizing:"border-box"}}/>
+          </div>
+          <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Save to</div>
+          <button onClick={function(){saveProject(false);setSaveDialog(false)}}
+            style={{width:"100%",padding:"14px 16px",marginBottom:10,borderRadius:8,
+              border:"1px solid var(--bd)",background:"var(--el)",color:"var(--tx)",
+              cursor:"pointer",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
+              display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:20}}>📁</span>
+            <div style={{textAlign:"left"}}>
+              <div style={{fontWeight:600}}>Files</div>
+              <div style={{fontSize:10,color:"var(--mu)",marginTop:2}}>Download .nlics to device</div>
+            </div>
+          </button>
+          <button style={{width:"100%",padding:"14px 16px",borderRadius:8,
+              border:"1px solid var(--bd)",background:"var(--el)",color:"var(--tx)",
+              fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
+              display:"flex",alignItems:"center",gap:12,opacity:.45,cursor:"default"}}>
+            <span style={{fontSize:20}}>☁️</span>
+            <div style={{textAlign:"left"}}>
+              <div style={{fontWeight:600}}>Google Drive</div>
+              <div style={{fontSize:10,color:"var(--mu)",marginTop:2}}>OAuth integration — coming soon</div>
+            </div>
+          </button>
+          <button onClick={function(){saveProject(true);setSaveDialog(false)}}
+            style={{width:"100%",padding:"10px 16px",marginTop:10,borderRadius:8,
+              border:"1px solid var(--lv)",background:"rgba(176,96,240,.08)",color:"var(--lv)",
+              cursor:"pointer",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}>
+            save &amp; set as default project
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null
+
   // ── Load project dialog ────────────────────────────────────────────────────
   var LoadDialog = loadDialog ? (
     <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(4,4,18,.88)",display:"flex",alignItems:"flex-end"}}
