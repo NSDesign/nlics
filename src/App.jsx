@@ -2077,9 +2077,16 @@ function applyEfxToPoints(pts,efx,w,h) {
     out.forEach(function(pt){
       mappings.forEach(function(m){
         var inV=pt[m.inputAttr]
-        if(inV==null)return
+        if(inV==null||inV===undefined)return  // 0 is valid, only skip null/undefined
         var outMin=m.min==null?0:m.min, outMax=m.max==null?1:m.max
-        var mapped=m.mode==="invert"?(1-inV)*(outMax-outMin)+outMin:inV*(outMax-outMin)+outMin
+        var normV=Math.max(0,Math.min(1,inV))  // clamp to 0-1 for mapping
+        var tV
+        if(m.mode==="invert")  tV=1-normV
+        else if(m.mode==="log") tV=Math.log(1+normV*9)/Math.log(10)  // log10(1..10) → 0..1
+        else if(m.mode==="exp") tV=(Math.pow(10,normV)-1)/9            // inverse log
+        else if(m.mode==="random") tV=seededRand(Math.round(normV*9999+pt.pointIndex*7))()
+        else tV=normV  // linear
+        var mapped=tV*(outMax-outMin)+outMin
         var curV=pt[m.outputAttr]==null?1:pt[m.outputAttr]
         var cm=m.combine||"replace"
         if(cm==="replace")      pt[m.outputAttr]=mapped
@@ -2572,12 +2579,16 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       else cv._points=shapePoints(n.props,w,h)  // classic shapes: vertices/perimeter
       // Pre-apply any points-domain effects BEFORE gShape renders
       // This allows wave/twirl/bulge etc. in pt mode to warp the point positions
+      // Apply points-domain effects in FORWARD order (0 → n) before gShape renders.
+      // Forward order = top-of-stack first, matching user's expectation:
+      // Point Map (top) transforms points, Source at Points (below) uses result.
       if(n.effectStack&&n.effectStack.length>0){
-        n.effectStack.forEach(function(efx){
-          if(!efx.enabled||efx.domain!=="points")return
-          if(efx.type==="show-points"||efx.type==="source-at-points")return
-          if(cv._points) cv._points=applyEfxToPoints(cv._points,efx,w,h)
-        })
+        for(var pei=n.effectStack.length-1;pei>=0;pei--){
+          var pefx=n.effectStack[pei]
+          if(!pefx.enabled||pefx.domain!=="points")continue
+          if(pefx.type==="show-points"||pefx.type==="source-at-points")continue
+          if(cv._points) cv._points=applyEfxToPoints(cv._points,pefx,w,h)
+        }
       }
       // gShape now renders using the (possibly modified) _points
       ctx.clearRect(0,0,w,h)
@@ -4248,17 +4259,32 @@ function EfxPrimary(props) {
                 <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>mapping {mi+1}</span>
                 <button onClick={function(){delMapping(mi)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
               </div>
-              <Se l="input" v={m.inputAttr||"pointIndex"} opts={["pointIndex","pointCount","x","y","rowNorm","colNorm","row","col","spiralT","angleNorm","radiusNorm","perimeterT","fibIndex","scatterIndex"]} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
-              <Se l="output" v={m.outputAttr||"scale"} opts={["scale","rotation","opacity","x","y","sourceIndex"]} fn={function(v){updMapping(mi,{outputAttr:v})}}/>
-              <Se l="mode" v={m.mode||"linear"} opts={["linear","invert"]} fn={function(v){updMapping(mi,{mode:v})}}/>
-              <Sl l="min" v={m.min==null?0:m.min} mn={-2} mx={2} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{min:v})}}/>
-              <Sl l="max" v={m.max==null?1:m.max} mn={-2} mx={2} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{max:v})}}/>
+              <Se l="input" v={m.inputAttr||"pointIndex"} opts={[
+                "pointIndex","pointCount","x","y",
+                "rowNorm","colNorm","row","col","rowCount","colCount",
+                "ringIndex","ringCount","angleNorm","radiusNorm",
+                "spiralT","windingNumber",
+                "fibIndex","scatterIndex","perimeterT"
+              ]} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
+              <Se l="output" v={m.outputAttr||"scale"} opts={["scale","rotation","opacity","x","y","sourceIndex"]} fn={function(v){updMapping(mi,{outputAttr:v,min:null,max:null})}}/>
+              <Se l="mode" v={m.mode||"linear"} opts={["linear","invert","log","exp","random"]} fn={function(v){updMapping(mi,{mode:v})}}/>
+              {(function(){
+                var oa=m.outputAttr||"scale"
+                var defMin=oa==="opacity"?0:oa==="rotation"?-180:oa==="scale"?0:oa==="sourceIndex"?0:-1
+                var defMax=oa==="opacity"?1:oa==="rotation"?180:oa==="scale"?3:oa==="sourceIndex"?10:1
+                var mn=oa==="rotation"?-360:oa==="scale"||oa==="opacity"?0:oa==="sourceIndex"?0:-4
+                var mx=oa==="rotation"?360:oa==="scale"?8:oa==="opacity"?1:oa==="sourceIndex"?20:4
+                return (<div>
+                  <Sl l="min out" v={m.min==null?defMin:m.min} mn={mn} mx={mx} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{min:v})}}/>
+                  <Sl l="max out" v={m.max==null?defMax:m.max} mn={mn} mx={mx} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{max:v})}}/>
+                </div>)
+              })()}
               <Se l="combine" v={m.combine||"replace"} opts={["replace","add","subtract","multiply"]}
                 fn={function(v){updMapping(mi,{combine:v})}}/>
             </div>
           )
         })}
-        <button onClick={addMapping} className="ghost" style={{width:"100%",minHeight:36,fontSize:11}}>+ add mapping</button>
+        <button onClick={addMapping} className="ac" style={{width:"100%",minHeight:36,fontSize:10,letterSpacing:".05em",fontFamily:"'IBM Plex Mono',monospace"}}>+ add mapping</button>
       </div>
     )
   }
@@ -4287,7 +4313,7 @@ function EfxPrimary(props) {
             </div>
           )
         })}
-        <button onClick={addSrc} className="ghost" style={{width:"100%",minHeight:36,fontSize:11}}>+ add source</button>
+        <button onClick={addSrc} className="ac" style={{width:"100%",minHeight:36,fontSize:10,letterSpacing:".05em",fontFamily:"'IBM Plex Mono',monospace"}}>+ add source</button>
         <div style={{borderTop:"1px solid var(--bd)",paddingTop:8,marginTop:4}}>
           <Se l="distribute" v={p.distributionMode||"weighted"} opts={["weighted","sequence","attribute"]}
             fn={function(v){up({distributionMode:v})}}/>
