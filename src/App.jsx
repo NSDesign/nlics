@@ -5923,14 +5923,14 @@ function AddMenu(props) {
       {open&&pos&&createPortal(
         <div ref={menuRef} className="drop-menu" style={pos}>
           {props.sec===1?[
-            s1standard.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>}),
+            s1standard.map(function(item){return <div key={item.t} className="drop-item" onClick={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>}),
             <div key="__adv__" style={{padding:"5px 14px 4px",fontSize:8,color:"var(--mu)",
               textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
               borderTop:"1px solid var(--bd)",borderBottom:"1px solid var(--bd)",background:"var(--bg)"}}>
               Advanced
             </div>,
-            s1advanced.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})
-          ]:s2items.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
+            s1advanced.map(function(item){return <div key={item.t} className="drop-item" onClick={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})
+          ]:s2items.map(function(item){return <div key={item.t} className="drop-item" onClick={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
         </div>,
         document.body
       )}
@@ -7324,7 +7324,7 @@ function App() {
           placeholder="project name"/>
         <button onClick={function(){saveProject(false)}} className="hico" title="Save project">↓</button>
         <button onClick={function(){setLoadDialog(true)}} className="hico" title="Load project">↑</button>
-        <input ref={fileInputRef} type="file" accept=".nlics,.selena,.json,application/json,*/*"
+        <input ref={fileInputRef} type="file" accept=".nlics,.selena,.json,.txt,application/json,*"
           style={{display:"none"}} onChange={function(e){loadProject(e.target.files[0]);e.target.value="";setLoadDialog(false)}}/>
         <span style={{flex:1}}/>
         <button className="hico" title="Layout settings" onClick={function(){setSettingsOpen(true)}}>⚙</button>
