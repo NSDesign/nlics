@@ -2101,10 +2101,11 @@ function applyEfxToPoints(pts,efx,w,h) {
 }
 
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
-  // Iterate bottom-to-top: last item in list is applied first (bottom layer),
-  // first item in list is applied last (top layer). Standard layer convention.
-  for(var ei=stack.length-1;ei>=0;ei--){
+  if(!stack||!stack.length)return
+  var spDeferred=[]  // show-points deferred to end (always on top)
+  for(var ei=0;ei<stack.length;ei++){
     var efx=stack[ei]; if(!efx.enabled) continue
+    if(efx.type==="show-points"){ spDeferred.push(efx); continue }
     // Points-domain effects: transform _points, skip canvas
     if(efx.domain==="points"&&efx.type!=="show-points"&&efx.type!=="source-at-points"){
       if(ctx.canvas&&ctx.canvas._points)
