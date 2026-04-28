@@ -7579,3 +7579,9 @@ class ErrorBoundary extends Component {
 export default function AppWithBoundary(){
   return <ErrorBoundary><App/></ErrorBoundary>
 }
+      <PR l="labels">
+        <button className={p.showLabels?"ac":"ghost"} style={{flex:1,minHeight:32,fontSize:11}} onClick={function(){up({showLabels:!p.showLabels})}}>{p.showLabels?"on":"off"}</button>
+      </PR>
+      {p.showLabels&&<Se l="attr" v={p.labelAttr||"pointIndex"} opts={["pointIndex","pointCount","x","y","rowNorm","colNorm","row","col","ringIndex","angleNorm","radiusNorm","spiralT","fibIndex","scatterIndex","scale","rotation","opacity","sourceIndex"]} fn={function(v){up({labelAttr:v})}}/>}
+      {p.showLabels&&<Co l="label col" v={p.labelColor||"#fff"} fn={function(v){up({labelColor:v})}}/>}
+      {p.showLabels&&<Sl l="label sz" v={p.labelSize||9} mn={6} mx={16} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>}
