@@ -3932,17 +3932,6 @@ function CreatorProps(props) {
       {node.type==="phyllotaxis" && <PhyllotaxisP p={node.props} up={up}/>}
       {node.type==="scatter"     && <ScatterP    p={node.props} up={up}/>}
       {node.type==="image"    && <ImgP   p={node.props} up={up} onLoad={onLoad}/>}
-      {/* Effects stack for creator */}
-      <div style={{borderTop:"1px solid var(--bd)",marginTop:10,paddingTop:10}}>
-        <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
-          letterSpacing:".06em",textTransform:"uppercase",padding:"0 0 6px"}}>Effects</div>
-        <EfxStack
-          stack={node.outEfx||[]}
-          nodes={nodes} selfId={node.id}
-          iC={iC}
-          basePath={{slotKey:"outEfx",steps:[]}}
-          onChange={function(es){onUpdate(Object.assign({},node,{outEfx:es}))}}/>
-      </div>
       {/* Save-as-default row */}
       <div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid var(--bd)",alignItems:"center"}}>
         <button className="ghost" style={{flex:1,fontSize:10,padding:"6px 10px"}}
