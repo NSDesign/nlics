@@ -1236,45 +1236,54 @@ function gShape(ctx,p,w,h) {
     if(renderMode==="smooth") drawSmooth(starPts)
     else drawPts(starPts)
   }
-  else if(GEO_POINT_TYPES.includes(s)){
-    // Geometry types: render ENTIRELY from ctx.canvas._points (which may be pt-effect modified)
-    // Generators set _points; gShape draws from those points — never regenerates positions here
+  else if(s==="grid"||s==="spiral"||s==="polar-grid"||s==="phyllotaxis"||s==="scatter"){
+    // Geometry types: generate _points and render as dots or path line
+    // _points are set in compAny after gShape runs; here we just draw markers if needed
     var geoPts=ctx.canvas&&ctx.canvas._points
-    if(!geoPts||!geoPts.length) { /* nothing to draw */ } else {
-      var gColor=p.color||"#ffffff", gAlpha=p.opacity==null?1:p.opacity
-      var gDr=Math.max(.5,(p.dotSize||4)/2)
-      // Dots
-      if((p.pointStyle||"dots")==="dots"){
-        ctx.save();ctx.globalAlpha=gAlpha;ctx.fillStyle=gColor
-        geoPts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,gDr,0,Math.PI*2);ctx.fill()})
-        ctx.restore()
-      }
-      // Connections — drawn using actual (possibly modified) point positions
-      if(s!=="scatter"&&(p.connected!==false)){
-        ctx.save();ctx.strokeStyle=gColor
-        ctx.lineWidth=Math.max(.5,p.strokeW||1);ctx.globalAlpha=gAlpha;ctx.beginPath()
-        if(s==="grid"){
-          var gcols=Math.round(p.cols||4),grows=Math.round(p.rows||4)
-          for(var gr=0;gr<grows;gr++){
-            for(var gc2=0;gc2<gcols;gc2++){var gpt=geoPts[gr*gcols+gc2];if(!gpt)continue;gc2===0?ctx.moveTo(gpt.x*w,gpt.y*h):ctx.lineTo(gpt.x*w,gpt.y*h)}
+    if(geoPts&&geoPts.length>0&&(p.pointStyle||"dots")==="dots"){
+      var dr=Math.max(1,(p.dotSize||4)/2),gc=p.color||"#ffffff"
+      ctx.save();ctx.globalAlpha=p.opacity==null?1:p.opacity;ctx.fillStyle=gc
+      geoPts.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,dr,0,Math.PI*2);ctx.fill()})
+      ctx.restore()
+    }
+    // Connected toggle — draw lines between points
+    if(geoPts&&geoPts.length>1&&s!=="scatter"&&(p.connected!==false)){
+      ctx.save();ctx.strokeStyle=p.color||"#ffffff"
+      ctx.lineWidth=Math.max(.5,p.strokeW||1);ctx.globalAlpha=(p.opacity==null?1:p.opacity)
+      ctx.beginPath()
+      if(s==="grid"){
+        var gcols=Math.round(p.cols||4), grows=Math.round(p.rows||4)
+        for(var gr=0;gr<grows;gr++){
+          for(var gc2=0;gc2<gcols;gc2++){
+            var gidx=gr*gcols+gc2, pt2=geoPts[gidx]; if(!pt2)continue
+            gc2===0?ctx.moveTo(pt2.x*w,pt2.y*h):ctx.lineTo(pt2.x*w,pt2.y*h)
           }
-          for(var gc=0;gc<gcols;gc++){
-            for(var gr2=0;gr2<grows;gr2++){var gpt2=geoPts[gr2*gcols+gc];if(!gpt2)continue;gr2===0?ctx.moveTo(gpt2.x*w,gpt2.y*h):ctx.lineTo(gpt2.x*w,gpt2.y*h)}
-          }
-        } else if(s==="polar-grid"){
-          var ppr=Math.round(p.pointsPerRing||8),prings=Math.round(p.rings||4)
-          for(var ri=0;ri<prings;ri++){
-            for(var pi=0;pi<=ppr;pi++){var rpt2=geoPts[ri*ppr+(pi%ppr)];if(!rpt2)continue;pi===0?ctx.moveTo(rpt2.x*w,rpt2.y*h):ctx.lineTo(rpt2.x*w,rpt2.y*h)}
-            ctx.closePath()
-          }
-          for(var si2=0;si2<ppr;si2++){
-            for(var ri2=0;ri2<prings;ri2++){var spt2=geoPts[ri2*ppr+si2];if(!spt2)continue;ri2===0?ctx.moveTo(spt2.x*w,spt2.y*h):ctx.lineTo(spt2.x*w,spt2.y*h)}
-          }
-        } else {
-          geoPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
         }
-        ctx.stroke();ctx.restore()
+        for(var gc=0;gc<gcols;gc++){
+          for(var gr2=0;gr2<grows;gr2++){
+            var gidx2=gr2*gcols+gc, pt3=geoPts[gidx2]; if(!pt3)continue
+            gr2===0?ctx.moveTo(pt3.x*w,pt3.y*h):ctx.lineTo(pt3.x*w,pt3.y*h)
+          }
+        }
+      } else if(s==="polar-grid"){
+        var ppr=Math.round(p.pointsPerRing||8), prings=Math.round(p.rings||4)
+        for(var ri=0;ri<prings;ri++){
+          for(var pi=0;pi<=ppr;pi++){
+            var pidx=ri*ppr+(pi%ppr), rpt=geoPts[pidx]; if(!rpt)continue
+            pi===0?ctx.moveTo(rpt.x*w,rpt.y*h):ctx.lineTo(rpt.x*w,rpt.y*h)
+          }
+          ctx.closePath()
+        }
+        for(var si2=0;si2<ppr;si2++){
+          for(var ri2=0;ri2<prings;ri2++){
+            var sidx=ri2*ppr+si2, spt=geoPts[sidx]; if(!spt)continue
+            ri2===0?ctx.moveTo(spt.x*w,spt.y*h):ctx.lineTo(spt.x*w,spt.y*h)
+          }
+        }
+      } else {
+        geoPts.forEach(function(pt,i){i===0?ctx.moveTo(pt.x*w,pt.y*h):ctx.lineTo(pt.x*w,pt.y*h)})
       }
+      ctx.stroke();ctx.restore()
     }
   }
   else if(s==="ring"){
@@ -2092,13 +2101,10 @@ function applyEfxToPoints(pts,efx,w,h) {
 }
 
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
-  // Forward order (0→n, top→bottom): each effect receives the result of the previous.
-  // show-points deferred to end so markers always render on top.
-  var spDeferred=[]
-  for(var ei=0;ei<stack.length;ei++){
+  // Iterate bottom-to-top: last item in list is applied first (bottom layer),
+  // first item in list is applied last (top layer). Standard layer convention.
+  for(var ei=stack.length-1;ei>=0;ei--){
     var efx=stack[ei]; if(!efx.enabled) continue
-    // Defer show-points — always applied last (on top)
-    if(efx.type==="show-points"){ spDeferred.push(efx); continue }
     // Points-domain effects: transform _points, skip canvas
     if(efx.domain==="points"&&efx.type!=="show-points"&&efx.type!=="source-at-points"){
       if(ctx.canvas&&ctx.canvas._points)
@@ -2123,8 +2129,6 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
     }
     // Point Map — handled via domain:"points" above, skip pixel path
     if(efx.type==="point-map"){ continue }
-    // Show-points deferred — always applied last so it renders on top
-    if(efx.type==="show-points"){ continue }
 
     // Source at Points — stamps sources at each point position
     if(efx.type==="source-at-points"){
@@ -2170,10 +2174,8 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
       continue
     }
 
-    // Show Points — deferred to end of stack (always renders on top)
-    if(efx.type==="show-points"){ spDeferred.push(efx); continue }
-    // Show Points inner rendering — called from deferred list after main loop
-    if(efx.type==="__show-points-render__"){
+    // Show Points — renders markers at point positions onto canvas
+    if(efx.type==="show-points"){
       var spts=ctx.canvas&&ctx.canvas._points
       if(spts&&spts.length>0){
         var sp2=efx.params||{},spR=(sp2.size||6)/2,spC=sp2.color||"#00ccff",spO=sp2.opacity==null?.8:sp2.opacity
@@ -2348,15 +2350,10 @@ function resolveSlotBase(slot,cmap,cache,iC,w,h,vis) {
     ctx.putImageData(sid,0,0)
   }
   if(slot.effectStack&&slot.effectStack.length>0){
-    var hadPtEfx=slot.effectStack.some(function(e){return e.enabled&&e.domain==="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
+    var hadPt=slot.effectStack.some(function(e){return e.enabled&&e.domain==="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
     applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis))
-    // Re-render shape using modified _points if pt effects ran
-    if(hadPtEfx&&cv._shapeProps&&cv._points){
-      ctx.clearRect(0,0,w,h)
-      gShape(ctx,cv._shapeProps,w,h)
-      // Then re-run pixel effects
-      var pixEfx=slot.effectStack.filter(function(e){return e.enabled&&e.domain!=="points"})
-      if(pixEfx.length) applyEfxStk(ctx,pixEfx,cmap,cache,iC,w,h,new Set(vis))
+    if(hadPt&&cv._shapeProps&&cv._points&&cv._points.length>0){
+      ctx.clearRect(0,0,w,h); gShape(ctx,cv._shapeProps,w,h)
     }
   }
   return cv
@@ -2433,79 +2430,5151 @@ function blendCv(ctx,srcCv,mode,amount,w,h,maskMode,maskAmount,blendChannels,ble
     ctx.globalCompositeOperation=BM[mode]||"source-over"
     ctx.drawImage(srcCv,0,0);ctx.restore()
   }
-  // Show-points deferred — apply all last so they always render on top
-  for(var spi=0;spi<stack.length;spi++){
-    var spefx=stack[spi]; if(!spefx.enabled||spefx.type!=="show-points")continue
-    if(ctx.canvas&&ctx.canvas._points){
-      var spp=spefx.params||{},spts2=ctx.canvas._points
-      var spDr=Math.max(1,(spp.size||6)/2),spC2=spp.color||"#00ccff"
-      ctx.save();ctx.globalAlpha=spp.opacity==null?.8:spp.opacity
-      ctx.fillStyle=spC2
-      spts2.forEach(function(pt){ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,spDr,0,Math.PI*2);ctx.fill()})
-      if(spp.labelAttr&&spp.labelAttr!=="none"){
-        ctx.fillStyle=spp.labelColor||"#ffffff"
-        ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
-        ctx.textBaseline="bottom"
-        spts2.forEach(function(pt){
-          var val=pt[spp.labelAttr]; if(val==null)return
-          ctx.fillText(typeof val==="number"?val.toFixed(2):String(val),pt.x*w+spDr+2,pt.y*h-spDr-1)
-        })
-      }
-      ctx.restore()
-    }
-  }
-  // Flush deferred show-points — always on top regardless of stack position
-  spDeferred.forEach(function(spEfx){
-    var spp=spEfx.params||{}, spts=ctx.canvas&&ctx.canvas._points
-    if(!spts||!spts.length) return
-    var sDr=Math.max(1,(spp.size||6)/2), sColor=spp.color||"#00ccff"
-    var sStyle=spp.style||"circle", sOp=spp.opacity==null?.8:spp.opacity
-    ctx.save(); ctx.globalAlpha=sOp; ctx.fillStyle=sColor; ctx.strokeStyle=sColor; ctx.lineWidth=1
-    spts.forEach(function(pt){
-      var sx=pt.x*w, sy=pt.y*h
-      ctx.beginPath()
-      if(sStyle==="square"){ctx.rect(sx-sDr,sy-sDr,sDr*2,sDr*2)}
-      else if(sStyle==="crosshair"){ctx.moveTo(sx-sDr*1.5,sy);ctx.lineTo(sx+sDr*1.5,sy);ctx.moveTo(sx,sy-sDr*1.5);ctx.lineTo(sx,sy+sDr*1.5);ctx.stroke()}
-      else{ctx.arc(sx,sy,sDr,0,Math.PI*2)}
-      if(sStyle!=="crosshair") ctx.fill()
-      if(spp.showLabels&&spp.labelAttr){
-        var v=pt[spp.labelAttr]
-        if(v!=null){
-          ctx.fillStyle=spp.labelColor||"#ffffff"
-          ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
-          ctx.fillText(typeof v==="number"?v.toFixed(2):String(v),sx+sDr+2,sy-sDr-2)
-        }
-      }
-    })
-    ctx.restore()
-  })
-
-
-  // Flush deferred show-points — renders after all other effects (always on top)
-  spDeferred.forEach(function(spEfx){
-    var spp=spEfx.params||{}, spts=ctx.canvas&&ctx.canvas._points
-    if(!spts||!spts.length) return
-    var sDr=Math.max(1,(spp.size||6)/2), sColor=spp.color||"#00ccff"
-    var sStyle=spp.style||"circle", sOp=spp.opacity==null?.8:spp.opacity
-    ctx.save(); ctx.globalAlpha=sOp; ctx.fillStyle=sColor; ctx.strokeStyle=sColor; ctx.lineWidth=1
-    spts.forEach(function(pt){
-      var sx=pt.x*w, sy=pt.y*h
-      ctx.beginPath()
-      if(sStyle==="square"){ctx.rect(sx-sDr,sy-sDr,sDr*2,sDr*2)}
-      else if(sStyle==="crosshair"){ctx.moveTo(sx-sDr*1.5,sy);ctx.lineTo(sx+sDr*1.5,sy);ctx.moveTo(sx,sy-sDr*1.5);ctx.lineTo(sx,sy+sDr*1.5);ctx.stroke()}
-      else{ctx.arc(sx,sy,sDr,0,Math.PI*2)}
-      if(sStyle!=="crosshair") ctx.fill()
-      if(spp.showLabels&&spp.labelAttr){
-        var v=pt[spp.labelAttr]
-        if(v!=null){
-          ctx.fillStyle=spp.labelColor||"#ffffff"
-          ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
-          ctx.fillText(typeof v==="number"?v.toFixed(2):String(v),sx+sDr+2,sy-sDr-2)
-        }
-      }
-    })
-    ctx.restore()
-  })
 }
 // Partially evaluate an effect stack up to and including a given effect id.
 // withSub: if true, also apply that effect's own maskStack (for promoted taps that include the masked result).
+function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
+  // Find the index of afterId in the stack (display order top-to-bottom)
+  var afterIdx=-1; for(var fi=0;fi<stack.length;fi++){if(stack[fi].id===afterId){afterIdx=fi;break}}
+  // Iterate bottom-to-top, stopping at afterIdx (inclusive)
+  for(var ei=stack.length-1;ei>=(afterIdx>=0?afterIdx:0);ei--){
+    var efx=stack[ei]; if(!efx.enabled)continue
+    if(efx.type==="transform"){applyTransform(ctx,efx.params,w,h)}
+    else {
+      var pre=ctx.getImageData(0,0,w,h), post=new Uint8ClampedArray(pre.data)
+      pxFn(post,w,h,efx.type,efx.params)
+      var useMask = withSub || efx.id!==afterId
+      var mv = useMask&&efx.maskStack&&efx.maskStack.length>0
+        ? compMasks(efx.maskStack,cmap,cache,iC,w,h,new Set(vis)) : null
+      applyBack(pre.data,post,mv,efx.opacity,efx.blendMode||"normal")
+      ctx.putImageData(pre,0,0)
+    }
+  }
+}
+// Partially evaluate a mask stack up to and including a given mask id.
+// Returns the Float32Array of mask values at that point.
+function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
+  var out=new Float32Array(w*h).fill(1),any=false
+  var afterIdx=-1; for(var fi=0;fi<stack.length;fi++){if(stack[fi].id===afterId){afterIdx=fi;break}}
+  for(var mi=stack.length-1;mi>=(afterIdx>=0?afterIdx:0);mi--){
+    var mk=stack[mi];if(mk.enabled===false||!mk.refId||vis.has(mk.refId))continue
+    var cv=compAny(mk.refId,cmap,cache,iC,w,h,new Set(vis));if(!cv)continue;any=true
+    var useSub = withSub || mk.id!==afterId
+    var chU=mk.channel||"luminosity"
+    if(useSub&&mk.effectStack&&mk.effectStack.length>0){
+      if(chU!=="A"){
+        var rawU=cv.getContext("2d").getImageData(0,0,w,h).data
+        var gcvU=mkCv(w,h),gctxU=gcvU.getContext("2d"),gidU=gctxU.createImageData(w,h)
+        for(var giu=0;giu<w*h;giu++){
+          var gpu=giu*4,gvu
+          if(chU==="R")gvu=rawU[gpu];else if(chU==="G")gvu=rawU[gpu+1];else if(chU==="B")gvu=rawU[gpu+2]
+          else gvu=Math.round(.299*rawU[gpu]+.587*rawU[gpu+1]+.114*rawU[gpu+2])
+          var gaU=rawU[gpu+3]/255; gvu=Math.round(gvu*gaU)
+          gidU.data[gpu]=gvu;gidU.data[gpu+1]=gvu;gidU.data[gpu+2]=gvu;gidU.data[gpu+3]=255
+        }
+        gctxU.putImageData(gidU,0,0)
+        applyEfxStk(gctxU,mk.effectStack,cmap,cache,iC,w,h,new Set(vis))
+        cv=gcvU
+      } else {
+        // Alpha channel — greyscale-first so effects work on alpha values
+        var rawAU=cv.getContext("2d").getImageData(0,0,w,h).data
+        var gcvAU=mkCv(w,h),gctxAU=gcvAU.getContext("2d"),gidAU=gctxAU.createImageData(w,h)
+        for(var gauI=0;gauI<w*h;gauI++){var gauV=rawAU[gauI*4+3];gidAU.data[gauI*4]=gauV;gidAU.data[gauI*4+1]=gauV;gidAU.data[gauI*4+2]=gauV;gidAU.data[gauI*4+3]=255}
+        gctxAU.putImageData(gidAU,0,0)
+        if(mk.effectStack&&mk.effectStack.length>0) applyEfxStk(gctxAU,mk.effectStack,cmap,cache,iC,w,h,new Set(vis))
+        cv=gcvAU
+      }
+    }
+    var src=cv.getContext("2d").getImageData(0,0,w,h).data,f=(mk.opacity==null?100:mk.opacity)/100
+    for(var ii=0;ii<w*h;ii++){
+      var pi=ii*4,v
+      v=src[pi]/255  // all channels: greyscale canvas
+      var rawVU=mk.invert?1-v:v
+      var contribU=f
+      var mv2=1-(1-rawVU)*contribU
+      if(mk.blendMode==="screen")out[ii]=1-(1-out[ii])*(1-mv2)
+      else if(mk.blendMode==="add")out[ii]=Math.min(1,out[ii]+mv2)
+      else if(mk.blendMode==="subtract")out[ii]=Math.max(0,out[ii]-mv2)
+      else if(mk.blendMode==="normal")out[ii]=mv2
+      else out[ii]*=mv2
+    }
+  }
+  return any?out:null
+}
+// Resolve a tap path for a promoted node — partially evaluates the chain
+// and returns the canvas state at the exact promoted point.
+function compPromoted(n,cmap,cache,iC,w,h,vis){
+  var tp=n.tapPath; if(!tp||!tp.nodeId||vis.has(tp.nodeId))return null
+  var srcNode=cmap.get(tp.nodeId); if(!srcNode||!srcNode.enabled)return null
+
+  // ── Resolve tp.slot to a {refId, effectStack, maskStack} slot object ─────
+  var slot
+  var slotKey=tp.slot||""
+
+  if(slotKey==="inputA") slot=srcNode.inputA
+  else if(slotKey==="inputB") slot=srcNode.inputB
+
+  // "inputA.effectStack" / "inputB.effectStack" / "inputA.maskStack" etc.
+  else if(slotKey==="inputA.effectStack"||slotKey==="inputA.maskStack") slot=srcNode.inputA
+  else if(slotKey==="inputB.effectStack"||slotKey==="inputB.maskStack") slot=srcNode.inputB
+
+  // "layers[N].effectStack" / "layers[N].maskStack"
+  else if(/^layers\[\d+\]/.test(slotKey)){
+    var lm=slotKey.match(/^layers\[(\d+)\]/)
+    var li=parseInt(lm[1])
+    var lyr=(srcNode.layers||[])[li]
+    if(!lyr||lyr.enabled===false)return null
+    // Synthesise a slot-like object from the layer
+    slot={refId:lyr.refId, effectStack:lyr.effectStack||[], maskStack:lyr.maskStack||[]}
+  }
+
+  // Output stacks — tap into the node's outEfx or outMask after full composition
+  else if(slotKey==="outEfx"||slotKey==="outMask"){
+    var baseOut=compAny(tp.nodeId,cmap,cache,iC,w,h,new Set(vis))
+    if(!baseOut)return null
+    var cv=clCv(baseOut,w,h),ctx=cv.getContext("2d")
+    if(slotKey==="outEfx"&&srcNode.outEfx&&srcNode.outEfx.length>0){
+      applyEfxStkUpTo(ctx,srcNode.outEfx,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
+    }else if(slotKey==="outMask"&&srcNode.outMask&&srcNode.outMask.length>0){
+      var mv=compMasksUpTo(srcNode.outMask,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
+      if(mv){var gid=ctx.getImageData(0,0,w,h);for(var i=0;i<w*h;i++)gid.data[i*4+3]=Math.round(gid.data[i*4+3]*mv[i]);ctx.putImageData(gid,0,0)}
+    }
+    return cv
+  }
+
+  if(!slot||!slot.refId||vis.has(slot.refId))return null
+
+  // ── Resolve base source and partially apply the stack ────────────────────
+  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis));if(!base)return null
+  var cv2=clCv(base,w,h),ctx2=cv2.getContext("2d")
+  if(tp.stackType==="effect"&&slot.effectStack&&slot.effectStack.length>0){
+    applyEfxStkUpTo(ctx2,slot.effectStack,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
+  }else if(tp.stackType==="mask"&&slot.maskStack&&slot.maskStack.length>0){
+    // Return greyscale matte canvas — NOT RGBA with alpha applied.
+    // Applying matte to alpha then reading luminance later gives wrong results
+    // because the source's colour values bleed into the matte reading.
+    var mv2=compMasksUpTo(slot.maskStack,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
+    if(mv2){
+      var grCv=mkCv(w,h),grCtx=grCv.getContext("2d"),grId=grCtx.createImageData(w,h)
+      for(var j=0;j<w*h;j++){var gv=Math.round(mv2[j]*255);grId.data[j*4]=gv;grId.data[j*4+1]=gv;grId.data[j*4+2]=gv;grId.data[j*4+3]=255}
+      grCtx.putImageData(grId,0,0)
+      return grCv
+    }
+  }
+  return cv2
+}
+
+function compAny(id,cmap,cache,iC,w,h,vis) {
+  if(!vis)vis=new Set()
+  if(cache.has(id))return cache.get(id)
+  if(vis.has(id))return null
+  var n=cmap.get(id);if(!n||!n.enabled)return null
+
+  // ── Creators ───────────────────────────────────────
+  if(n.section===1){
+    var cv=mkCv(w,h),ctx=cv.getContext("2d")
+    if(n.type==="solid")gSolid(ctx,n.props,w,h)
+    else if(n.type==="shape"){
+      var sType=n.props&&n.props.shapeType
+      // Generate _points for ALL shape types first
+      if(sType==="grid")            gGrid(ctx,n.props,w,h)
+      else if(sType==="spiral")     gSpiral(ctx,n.props,w,h)
+      else if(sType==="polar-grid") gPolarGrid(ctx,n.props,w,h)
+      else if(sType==="phyllotaxis")gPhyllotaxis(ctx,n.props,w,h)
+      else if(sType==="scatter")    gScatter(ctx,n.props,w,h)
+      else cv._points=shapePoints(n.props,w,h)  // classic shapes: vertices/perimeter
+      // Pre-apply any points-domain effects BEFORE gShape renders
+      // This allows wave/twirl/bulge etc. in pt mode to warp the point positions
+      // Apply points-domain effects in FORWARD order (0 → n) before gShape renders.
+      // Forward order = top-of-stack first, matching user's expectation:
+      // Point Map (top) transforms points, Source at Points (below) uses result.
+      if(n.effectStack&&n.effectStack.length>0){
+        for(var pei=n.effectStack.length-1;pei>=0;pei--){
+          var pefx=n.effectStack[pei]
+          if(!pefx.enabled||pefx.domain!=="points")continue
+          if(pefx.type==="show-points"||pefx.type==="source-at-points")continue
+          if(cv._points) cv._points=applyEfxToPoints(cv._points,pefx,w,h)
+        }
+      }
+      // gShape now renders using the (possibly modified) _points
+      ctx.clearRect(0,0,w,h)
+      gShape(ctx,n.props,w,h)
+      // Apply pixel-domain effects from creator's own effectStack
+      if(n.effectStack&&n.effectStack.length>0){
+        var pixEfx=n.effectStack.filter(function(e){return e.enabled&&e.domain!=="points"})
+        if(pixEfx.length>0) applyEfxStk(ctx,pixEfx,cmap,cache,iC,w,h,new Set(vis))
+      }
+    }
+    else if(n.type==="gradient")gGrad(ctx,n.props,w,h)
+    else if(n.type==="noise")gNoise(ctx,n.props,w,h)
+    else if(n.type==="pattern")gPat(ctx,n.props,w,h)
+    else if(n.type==="tile")gTile(ctx,n.props,cmap,cache,iC,w,h,vis)
+    else if(n.type==="grid"||n.type==="spiral"||n.type==="polar-grid"||n.type==="phyllotaxis"||n.type==="scatter"){
+      var gFn={"grid":gGrid,"spiral":gSpiral,"polar-grid":gPolarGrid,"phyllotaxis":gPhyllotaxis,"scatter":gScatter}[n.type]
+      if(gFn) gFn(ctx,n.props,w,h)
+      cv._points=ctx.canvas._points
+      var synProps=Object.assign({},n.props,{shapeType:n.type})
+      cv._shapeProps=synProps
+      if(n.effectStack&&n.effectStack.length>0){
+        for(var gpei=0;gpei<n.effectStack.length;gpei++){
+          var gpefx=n.effectStack[gpei]
+          if(!gpefx.enabled||gpefx.domain!=="points")continue
+          if(gpefx.type==="show-points"||gpefx.type==="source-at-points")continue
+          if(cv._points) cv._points=applyEfxToPoints(cv._points,gpefx,w,h)
+        }
+      }
+      ctx.clearRect(0,0,w,h); gShape(ctx,synProps,w,h)
+      if(n.effectStack&&n.effectStack.length>0){
+        var gpixEfx=n.effectStack.filter(function(e){return e.enabled&&e.domain!=="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
+        if(gpixEfx.length>0) applyEfxStk(ctx,gpixEfx,cmap,cache,iC,w,h,new Set(vis))
+        // source-at-points and show-points handled via applyEfxStk below on full stack
+        var fullStk=n.effectStack.filter(function(e){return e.enabled&&(e.type==="source-at-points"||e.type==="show-points")})
+        if(fullStk.length>0) applyEfxStk(ctx,fullStk,cmap,cache,iC,w,h,new Set(vis))
+      }
+    }
+    else if(n.type==="image")gImg(ctx,n.props,iC,w,h)
+    cache.set(id,cv);return cv
+  }
+
+  // ── Promoted tap point ───────────────────────────────────
+  if(n.type==="promoted"){
+    var pv=new Set(vis);pv.add(id)
+    var pcv=compPromoted(n,cmap,cache,iC,w,h,pv)
+    if(pcv)cache.set(id,pcv)
+    return pcv
+  }
+
+  vis.add(id)
+
+  // ── Stack node — renderable only when previewRefId is set ───────────────────
+  if(n.type==="stack"){
+    if(!n.previewRefId){vis.delete(id);return null}
+    // Use a fresh isolated vis for the preview — only the stack node itself
+    // is marked in-progress. This prevents false-positive bail when the
+    // preview source appears elsewhere in the outer vis chain.
+    var spVis=new Set([id])
+    var previewBase=compAny(n.previewRefId,cmap,cache,iC,w,h,spVis)
+    if(!previewBase){vis.delete(id);return null}
+    var pcv=clCv(previewBase,w,h),pctx=pcv.getContext("2d")
+    if(n.stackType==="effect"&&(n.effectStack||[]).length>0){
+      applyEfxStk(pctx,n.effectStack,cmap,cache,iC,w,h,spVis)
+    } else if(n.stackType==="mask"&&(n.maskStack||[]).length>0){
+      // Mask stack preview:
+      //   Preview source set → show source with mask applied as alpha
+      //     (preview unaltered except by the mask's alpha cut)
+      //   No preview source → render mask as greyscale B&W matte
+      // Masks always read as greyscale when no preview is provided.
+      var mv=compMasks(n.maskStack,cmap,cache,iC,w,h,spVis)
+      if(mv){
+        // Apply mask to preview source alpha
+        var id=pctx.getImageData(0,0,w,h)
+        for(var gi3=0;gi3<w*h;gi3++){
+          id.data[gi3*4+3]=Math.round(id.data[gi3*4+3]*mv[gi3])
+        }
+        pctx.putImageData(id,0,0)
+      }
+      // If mv is null (no masks have sources), leave preview source unaltered.
+    }
+    cache.set(id,pcv);vis.delete(id);return pcv
+  }
+
+  // ── Layer compositor ──────────────────────────────────────
+  if(n.type==="layers"){
+    var lcv=mkCv(w,h),lctx=lcv.getContext("2d")
+    // Running matte — starts fully transparent (no layers = nothing visible)
+    var runMatte=new Float32Array(w*h)
+    var layers=n.layers||[]
+    // Iterate bottom-to-top (last in array = top layer)
+    for(var li=layers.length-1;li>=0;li--){
+      var lyr=layers[li]
+      if(lyr.enabled===false) continue
+      if(!lyr.refId||vis.has(lyr.refId)) continue
+      var lVis=new Set(vis)
+      var lBase=compAny(lyr.refId,cmap,cache,iC,w,h,lVis)
+      if(!lBase) continue
+      var lCv=clCv(lBase,w,h),lCtx=lCv.getContext("2d")
+      // Fill opacity: applied before effectStack (doesn't affect effects like glows)
+      if(lyr.fillOpacity!=null&&lyr.fillOpacity<100){
+        var fid=lCtx.getImageData(0,0,w,h)
+        var ff=lyr.fillOpacity/100
+        for(var fi=0;fi<w*h;fi++) fid.data[fi*4+3]=Math.round(fid.data[fi*4+3]*ff)
+        lCtx.putImageData(fid,0,0)
+      }
+      if(lyr.effectStack&&lyr.effectStack.length>0) applyEfxStk(lCtx,lyr.effectStack,cmap,cache,iC,w,h,lVis)
+      // Compute layer effective matte (source_alpha × maskStack)
+      var lyrMatte=slotEffectiveMatte(
+        {refId:lyr.refId,maskStack:lyr.maskStack},lCv,cmap,cache,iC,w,h,lVis)
+      // Apply matte to layer alpha for visual pixel blend
+      if(lyrMatte){
+        var lid2=lCtx.getImageData(0,0,w,h)
+        for(var lmi=0;lmi<w*h;lmi++) lid2.data[lmi*4+3]=Math.round(lyrMatte[lmi]*255)
+        lCtx.putImageData(lid2,0,0)
+      } else {
+        if(lyr.maskStack&&lyr.maskStack.length>0) maskToAlpha(lCtx,lyr.maskStack,cmap,cache,iC,w,h,lVis)
+      }
+      blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h,null,null,lyr.blendChannels,lyr.blendIf)
+
+      // Accumulate matte using layer's maskMode
+      var lmf=(lyr.maskAmount==null?100:lyr.maskAmount)/100
+      var lmblend=ALPHA_BM[lyr.maskMode||"add"]||ALPHA_BM["add"]
+      var lyrMv=lyrMatte||(function(){
+        // No explicit mask — use source alpha
+        var ld=lBase.getContext("2d").getImageData(0,0,w,h).data
+        var m=new Float32Array(w*h); for(var x=0;x<w*h;x++) m[x]=ld[x*4+3]/255; return m
+      })()
+      for(var lri=0;lri<w*h;lri++) runMatte[lri]=lmblend(runMatte[lri],lyrMv[lri],lmf)
+    }
+    // Override alpha with accumulated matte
+    var lOutImg=lctx.getImageData(0,0,w,h)
+    for(var loi=0;loi<w*h;loi++) lOutImg.data[loi*4+3]=Math.round(runMatte[loi]*255)
+    lctx.putImageData(lOutImg,0,0)
+    if(n.outFillOpacity!=null&&n.outFillOpacity<100){
+      var lfid=lctx.getImageData(0,0,w,h),lff=n.outFillOpacity/100
+      for(var lfi=0;lfi<w*h;lfi++) lfid.data[lfi*4+3]=Math.round(lfid.data[lfi*4+3]*lff)
+      lctx.putImageData(lfid,0,0)
+    }
+    if(n.outEfx&&n.outEfx.length>0) applyEfxStk(lctx,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
+    if(n.outMask&&n.outMask.length>0) maskToAlpha(lctx,n.outMask,cmap,cache,iC,w,h,new Set(vis))
+    if(n.outOpacity!=null&&n.outOpacity<100){
+      var loid=lctx.getImageData(0,0,w,h),lof=n.outOpacity/100
+      for(var loi2=0;loi2<w*h;loi2++) loid.data[loi2*4+3]=Math.round(loid.data[loi2*4+3]*lof)
+      lctx.putImageData(loid,0,0)
+    }
+    cache.set(id,lcv);vis.delete(id);return lcv
+  }
+
+  // ── Blender compositor ───────────────────────────────────
+  // Pixel blend and matte composition are computed independently.
+  // resolveSlotBase: pixels+effects, no mask on alpha.
+  // slotEffectiveMatte: source_alpha × maskStack → the input's matte.
+  var cv2=mkCv(w,h),ctx2=cv2.getContext("2d")
+  var cAb=resolveSlotBase(n.inputA,cmap,cache,iC,w,h,new Set(vis))
+  var cBb=resolveSlotBase(n.inputB,cmap,cache,iC,w,h,new Set(vis))
+  var mA=slotEffectiveMatte(n.inputA,cAb,cmap,cache,iC,w,h,new Set(vis))
+  var mB=slotEffectiveMatte(n.inputB,cBb,cmap,cache,iC,w,h,new Set(vis))
+  // Apply mattes to pixel alpha for visual compositing
+  function applyMatte(baseCv, matte){
+    if(!baseCv) return null
+    var cv=clCv(baseCv,w,h),id2=cv.getContext("2d").getImageData(0,0,w,h)
+    for(var i=0;i<w*h;i++) id2.data[i*4+3]=matte?Math.round(matte[i]*255):id2.data[i*4+3]
+    cv.getContext("2d").putImageData(id2,0,0); return cv
+  }
+  var cA=applyMatte(cAb,mA), cB=applyMatte(cBb,mB)
+  // Pixel blend (switched controls draw order = A over B or B over A)
+  var bottom=n.switched?cA:cB, topC=n.switched?cB:cA
+  if(bottom)ctx2.drawImage(bottom,0,0)
+  if(topC)blendCv(ctx2,topC,n.mode,n.amount,w,h,null,null,n.blendChannels,n.blendIf)
+  // Matte combination — switched also affects matte order
+  var botM=n.switched?mA:mB, topM=n.switched?mB:mA
+  var mf=(n.maskAmount==null?100:n.maskAmount)/100
+  var mblend=ALPHA_BM[n.maskMode||"add"]||ALPHA_BM["add"]
+  var outImg=ctx2.getImageData(0,0,w,h)
+  for(var mi=0;mi<w*h;mi++){
+    var bv=botM?botM[mi]:(n.switched?(n.inputA.refId?1:0):(n.inputB.refId?1:0))
+    var tv=topM?topM[mi]:(n.switched?(n.inputB.refId?1:0):(n.inputA.refId?1:0))
+    outImg.data[mi*4+3]=Math.round(mblend(bv,tv,mf)*255)
+  }
+  ctx2.putImageData(outImg,0,0)
+  // Output fill opacity: affects composited pixels before outEfx
+  if(n.outFillOpacity!=null&&n.outFillOpacity<100){
+    var ofid=ctx2.getImageData(0,0,w,h),off=n.outFillOpacity/100
+    for(var ofi=0;ofi<w*h;ofi++) ofid.data[ofi*4+3]=Math.round(ofid.data[ofi*4+3]*off)
+    ctx2.putImageData(ofid,0,0)
+  }
+  if(n.outEfx&&n.outEfx.length>0)applyEfxStk(ctx2,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
+  if(n.outMask&&n.outMask.length>0)maskToAlpha(ctx2,n.outMask,cmap,cache,iC,w,h,new Set(vis))
+  // Output opacity: affects entire output after effects
+  if(n.outOpacity!=null&&n.outOpacity<100){
+    var ooid=ctx2.getImageData(0,0,w,h),oof=n.outOpacity/100
+    for(var ooi=0;ooi<w*h;ooi++) ooid.data[ooi*4+3]=Math.round(ooid.data[ooi*4+3]*oof)
+    ctx2.putImageData(ooid,0,0)
+  }
+  cache.set(id,cv2);vis.delete(id);return cv2
+}
+function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
+  if(!canvas||!dispId)return
+  try {
+    var ctx=canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height)
+    var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
+    var w=canvas.width,h=canvas.height
+    if(dispSlot){
+      // Display a specific input slot — pixels or mask
+      var dsNode=cmap.get(dispSlot.nodeId)
+      function renderMaskGrey(stack,fallbackLabel){
+        var mv2=stack&&stack.length>0?compMasks(stack,cmap,new Map(),iC,w,h,new Set()):null
+        ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
+        if(mv2){
+          var gd=ctx.createImageData(w,h)
+          for(var dsi=0;dsi<w*h;dsi++){var dv=Math.round(mv2[dsi]*255);gd.data[dsi*4]=dv;gd.data[dsi*4+1]=dv;gd.data[dsi*4+2]=dv;gd.data[dsi*4+3]=255}
+          ctx.putImageData(gd,0,0)
+        } else {
+          ctx.fillStyle="var(--bd)"; ctx.fillRect(0,0,w,h)
+          ctx.fillStyle="#8090c0"; ctx.font="11px 'IBM Plex Mono',monospace"
+          ctx.textAlign="center"; ctx.fillText(fallbackLabel||"no mask",w/2,h/2)
+        }
+      }
+      if(dispSlot.slot==="output"&&dsNode){
+        // Output slot — show composite pixels or outMask greyscale
+        if(dispSlot.mode==="mask"){
+          renderMaskGrey(dsNode.outMask,"no output mask")
+        } else {
+          var outRes=compAny(dispSlot.nodeId,cmap,new Map(),iC,w,h,new Set())
+          if(outRes) ctx.drawImage(outRes,0,0)
+          else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
+        }
+      } else {
+        var dsSlot=dsNode&&(dispSlot.slot==="inputA"?dsNode.inputA:dsNode.inputB)
+        if(dsSlot&&dsSlot.refId){
+          if(dispSlot.mode==="mask"){
+            // Show effective matte: source_alpha × mask_value
+            var dsSrc=dsSlot.refId?compAny(dsSlot.refId,cmap,new Map(),iC,w,h,new Set()):null
+            var em=effectiveMatte(dsSrc,dsSlot.maskStack,cmap,new Map(),iC,w,h,new Set())
+            ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
+            var emGid=ctx.createImageData(w,h)
+            for(var emi=0;emi<w*h;emi++){var emv=Math.round(em[emi]*255);emGid.data[emi*4]=emv;emGid.data[emi*4+1]=emv;emGid.data[emi*4+2]=emv;emGid.data[emi*4+3]=255}
+            ctx.putImageData(emGid,0,0)
+          } else {
+            var dsRes=resolveSlot(dsSlot,cmap,new Map(),iC,w,h,new Set())
+            if(dsRes) ctx.drawImage(dsRes,0,0)
+            else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
+          }
+        } else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
+      }
+    } else if(dispMask){
+      // Top-level ◈ — show effective matte (source_alpha × mask) using fallback chain.
+      // Undefined outMask = fully opaque (white). Falls back through inputs/layers.
+      var mn=cmap.get(dispId)
+      var em2=null, emLabel="no mask configured"
+      if(mn){
+        if(mn.outMask&&mn.outMask.length>0){
+          // Output mask defined — show it (no source alpha to multiply, it's an output matte)
+          em2=compMasks(mn.outMask,cmap,new Map(),iC,w,h,new Set()); emLabel="output mask"
+        }
+        // Empty outMask = no restriction — fall through to input/layer mattes
+        if(!em2&&(mn.type==="blender")&&(mn.inputA||mn.inputB)){
+          // For blender: compute combined matte same as engine (both inputs combined)
+          var dispCvA=mn.inputA&&mn.inputA.refId?compAny(mn.inputA.refId,cmap,new Map(),iC,w,h,new Set()):null
+          var dispCvB=mn.inputB&&mn.inputB.refId?compAny(mn.inputB.refId,cmap,new Map(),iC,w,h,new Set()):null
+          var dispMA=dispCvA?slotEffectiveMatte(mn.inputA,dispCvA,cmap,new Map(),iC,w,h,new Set()):null
+          var dispMB=dispCvB?slotEffectiveMatte(mn.inputB,dispCvB,cmap,new Map(),iC,w,h,new Set()):null
+          if(dispMA||dispMB){
+            var dispMf=(mn.maskAmount==null?100:mn.maskAmount)/100
+            var dispMblend=ALPHA_BM[mn.maskMode||"add"]||ALPHA_BM["add"]
+            var dispBotM=mn.switched?dispMA:dispMB, dispTopM=mn.switched?dispMB:dispMA
+            em2=new Float32Array(w*h)
+            for(var dmi=0;dmi<w*h;dmi++){
+              var dbv=dispBotM?dispBotM[dmi]:(mn.switched?(mn.inputA.refId?1:0):(mn.inputB.refId?1:0))
+              var dtv=dispTopM?dispTopM[dmi]:(mn.switched?(mn.inputB.refId?1:0):(mn.inputA.refId?1:0))
+              em2[dmi]=dispMblend(dbv,dtv,dispMf)
+            }
+            emLabel="blender combined matte"
+          }
+        }
+        if(!em2&&mn.inputA&&mn.inputA.refId&&mn.type!=="blender"){
+          var iaS=compAny(mn.inputA.refId,cmap,new Map(),iC,w,h,new Set())
+          em2=effectiveMatte(iaS,mn.inputA.maskStack,cmap,new Map(),iC,w,h,new Set())
+          emLabel="input A effective matte"
+        }
+        if(!em2&&mn.inputB&&mn.inputB.refId&&mn.type!=="blender"){
+          var ibS=compAny(mn.inputB.refId,cmap,new Map(),iC,w,h,new Set())
+          em2=effectiveMatte(ibS,mn.inputB.maskStack,cmap,new Map(),iC,w,h,new Set())
+          emLabel="input B effective matte"
+        }
+        if(!em2&&mn.layers){
+          for(var mli=0;mli<mn.layers.length;mli++){
+            var mll=mn.layers[mli]
+            if(mll.refId||mll.maskStack&&mll.maskStack.length>0){
+              var lls=mll.refId?compAny(mll.refId,cmap,new Map(),iC,w,h,new Set()):null
+              em2=effectiveMatte(lls,mll.maskStack,cmap,new Map(),iC,w,h,new Set())
+              emLabel="layer "+(mli+1)+" effective matte"; break
+            }
+          }
+        }
+        // §1 creators: show intrinsic alpha channel as matte
+        // (shape fillOpacity, gradient alpha stops, image transparency, etc.)
+        if(!em2&&mn.section===1){
+          var pcCv=compAny(dispId,cmap,new Map(),iC,w,h,new Set())
+          if(pcCv){
+            var pcId=pcCv.getContext("2d").getImageData(0,0,w,h)
+            em2=new Float32Array(w*h)
+            for(var pci=0;pci<w*h;pci++) em2[pci]=pcId.data[pci*4+3]/255
+            emLabel="intrinsic alpha"
+          }
+        }
+      }
+      ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h)
+      if(em2){
+        var gid=ctx.createImageData(w,h)
+        for(var gi=0;gi<w*h;gi++){var gv=Math.round(em2[gi]*255);gid.data[gi*4]=gv;gid.data[gi*4+1]=gv;gid.data[gi*4+2]=gv;gid.data[gi*4+3]=255}
+        ctx.putImageData(gid,0,0)
+      } else {
+        ctx.fillStyle="var(--bd)"; ctx.fillRect(0,0,w,h)
+        ctx.fillStyle="#8090c0"; ctx.font="11px 'IBM Plex Mono',monospace"
+        ctx.textAlign="center"; ctx.fillText(emLabel,w/2,h/2)
+      }
+    } else {
+      var result=compAny(dispId,cmap,new Map(),iC,w,h,new Set())
+      if(result)ctx.drawImage(result,0,0)
+    }
+  } catch(err) {
+    // Render pipeline failed — draw a soft error overlay so the UI stays interactive
+    try {
+      var ectx=canvas.getContext("2d")
+      ectx.clearRect(0,0,canvas.width,canvas.height)
+      ectx.fillStyle="#2a1020"
+      ectx.fillRect(0,0,canvas.width,canvas.height)
+      ectx.fillStyle="#e03060"
+      ectx.font="14px 'IBM Plex Mono', monospace"
+      ectx.textAlign="center"
+      ectx.fillText("render error", canvas.width/2, canvas.height/2-10)
+      ectx.fillStyle="#e0a0b0"
+      ectx.font="10px 'IBM Plex Mono', monospace"
+      var msg=String(err&&err.message||err).slice(0,60)
+      ectx.fillText(msg, canvas.width/2, canvas.height/2+10)
+    } catch(_){}
+    if(typeof console!=="undefined"&&console.error)console.error("NLICS render:",err)
+  }
+}
+
+
+
+
+/* ─── UI PRIMITIVES ─────────────────────────────────────── */
+function PR(props) {
+  return (
+    <div className="prow" style={props.style}>
+      {!props.ns && <span className="plbl">{props.l}</span>}
+      {props.children}
+    </div>
+  )
+}
+function Sl(props) {
+  var disp = props.fmt ? props.fmt(props.v) : (props.st < 1 ? Number(props.v).toFixed(2) : Math.round(props.v))
+  return (
+    <PR l={props.l}>
+      <input type="range" min={props.mn} max={props.mx} step={props.st||.01} value={props.v}
+        onChange={function(e){ props.fn(parseFloat(e.target.value)) }} style={{flex:1}}/>
+      <span className="pval">{disp}</span>
+    </PR>
+  )
+}
+function Co(props) {
+  return (
+    <PR l={props.l}>
+      <input type="color" value={props.v} onChange={function(e){props.fn(e.target.value)}}/>
+      <input type="text" value={props.v} onChange={function(e){props.fn(e.target.value)}} style={{flex:1,marginLeft:6}}/>
+    </PR>
+  )
+}
+function Se(props) {
+  return (
+    <PR l={props.l}>
+      <select value={props.v} onChange={function(e){props.fn(e.target.value)}} style={{flex:1}}>
+        {props.opts.map(function(o){ return <option key={o}>{o}</option> })}
+      </select>
+    </PR>
+  )
+}
+/* ─── NODE REFERENCE PICKER (thumbnail) ─────────────────── */
+// Thumb size for the picker grid items
+var THUMB_PX = 48
+// Render a single thumbnail onto a canvas element — called once per item on open
+function renderThumb(canvas, nodeId, nodes, iC, asMask, greySource) {
+  if(!canvas||!nodeId) return
+  var ctx=canvas.getContext("2d"); ctx.clearRect(0,0,THUMB_PX,THUMB_PX)
+  var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
+  var n=cmap.get(nodeId)
+  // Stack nodes with no previewRefId return null from compAny.
+  // For mask stacks: render their mask as greyscale if possible.
+  // For effect stacks with no preview: show a hatched placeholder.
+  if(n&&n.type==="stack"&&!n.previewRefId){
+    ctx.fillStyle="#0d0d22"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX)
+    if(n.stackType==="mask"&&(n.maskStack||[]).length>0){
+      // Try to render mask values using a white base
+      var baseC=document.createElement("canvas"); baseC.width=THUMB_PX; baseC.height=THUMB_PX
+      var bx=baseC.getContext("2d"); bx.fillStyle="#ffffff"; bx.fillRect(0,0,THUMB_PX,THUMB_PX)
+      try {
+        var mv=compMasks(n.maskStack,cmap,new Map(),iC||new Map(),THUMB_PX,THUMB_PX,new Set())
+        if(mv){
+          var gid=ctx.createImageData(THUMB_PX,THUMB_PX)
+          for(var gi=0;gi<THUMB_PX*THUMB_PX;gi++){var gv=Math.round(mv[gi]*255);gid.data[gi*4]=gv;gid.data[gi*4+1]=gv;gid.data[gi*4+2]=gv;gid.data[gi*4+3]=255}
+          ctx.putImageData(gid,0,0)
+        } else { drawThumbLabel(ctx,"mask stack",THUMB_PX) }
+      } catch(_) { drawThumbLabel(ctx,"mask stack",THUMB_PX) }
+    } else {
+      drawThumbLabel(ctx,n.stackType==="mask"?"mask stack":"effect stack",THUMB_PX)
+    }
+    return
+  }
+  try {
+    var result=compAny(nodeId,cmap,new Map(),iC||new Map(),THUMB_PX,THUMB_PX,new Set())
+    if(result){
+      if(asMask){
+        // ◈ matte — alpha channel as greyscale (mask boundary)
+        var rId=result.getContext("2d").getImageData(0,0,THUMB_PX,THUMB_PX)
+        var gId=ctx.createImageData(THUMB_PX,THUMB_PX)
+        for(var ri=0;ri<THUMB_PX*THUMB_PX;ri++){
+          var rp=ri*4
+          var av=rId.data[rp+3]
+          gId.data[rp]=av;gId.data[rp+1]=av;gId.data[rp+2]=av;gId.data[rp+3]=255
+        }
+        ctx.putImageData(gId,0,0)
+      } else if(greySource){
+        // ◉ source in mask context — luminance greyscale for identification
+        // (masks are always read as greyscale so colour is misleading)
+        var rsId=result.getContext("2d").getImageData(0,0,THUMB_PX,THUMB_PX)
+        var gsId=ctx.createImageData(THUMB_PX,THUMB_PX)
+        for(var gsi=0;gsi<THUMB_PX*THUMB_PX;gsi++){
+          var gsp=gsi*4
+          var lv=Math.round(.299*rsId.data[gsp]+.587*rsId.data[gsp+1]+.114*rsId.data[gsp+2])
+          var la=Math.round(lv*(rsId.data[gsp+3]/255))
+          gsId.data[gsp]=la;gsId.data[gsp+1]=la;gsId.data[gsp+2]=la;gsId.data[gsp+3]=255
+        }
+        ctx.putImageData(gsId,0,0)
+      } else {
+        // Full RGBA colour — normal source picker context
+        ctx.drawImage(result,0,0,THUMB_PX,THUMB_PX)
+      }
+    } else { ctx.fillStyle="#0d0d22"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX); drawThumbLabel(ctx,"no preview",THUMB_PX) }
+  } catch(_) { ctx.fillStyle="#0d0d22"; ctx.fillRect(0,0,THUMB_PX,THUMB_PX) }
+}
+function drawThumbLabel(ctx, text, sz) {
+  ctx.fillStyle="rgba(96,104,152,.5)"; ctx.fillRect(0,0,sz,sz)
+  ctx.fillStyle="#8090c0"; ctx.font="8px 'IBM Plex Mono',monospace"
+  ctx.textAlign="center"; ctx.fillText(text, sz/2, sz/2+3)
+}
+// Single thumb item in the picker
+function ThumbItem(props) {
+  var cvRef=useRef(null)
+  useEffect(function(){
+    if(!cvRef.current||!props.iC) return
+    var delay = (props.index||0) * 18
+    var t = setTimeout(function(){
+      renderThumb(cvRef.current, props.nodeId, props.nodes, props.iC.current||props.iC, props.asMask, props.greySource)
+    }, delay)
+    return function(){ clearTimeout(t) }
+  },[props.nodeId, props.index, props.asMask, props.greySource])
+  return (
+    <div onClick={props.onClick}
+      style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
+        padding:"6px 4px",borderRadius:6,
+        background:props.active?"var(--sl)":"none",
+        border:props.active?"1px solid var(--ac)":"1px solid transparent",
+        minWidth:THUMB_PX+16}}>
+      <div style={{width:THUMB_PX,height:THUMB_PX,borderRadius:4,overflow:"hidden",
+        flexShrink:0,background:"var(--bg)",
+        boxShadow:props.active?"0 0 0 1px var(--ac)":"0 0 0 1px var(--bd)"}}>
+        <canvas ref={cvRef} width={THUMB_PX} height={THUMB_PX} style={{display:"block"}}/>
+      </div>
+      <span style={{fontSize:8,color:props.active?"var(--ac)":"var(--mu)",textAlign:"center",
+        fontFamily:"'IBM Plex Mono',monospace",maxWidth:THUMB_PX+8,
+        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2}}>
+        {props.label}
+      </span>
+    </div>
+  )
+}
+function NRef(props) {
+  // Safety: nodes must be an array
+  if(!props.nodes||!Array.isArray(props.nodes)) return null
+  var mode = props.mode || "all"
+  var asMaskSt=useState(props.asMask||false); var asMask=asMaskSt[0], setAsMask=asMaskSt[1]
+  var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
+  var anchorRef=useRef(null)
+  var menuRef=useRef(null)
+  var pos=usePopoverPosition(anchorRef, open, "above")
+  useEffect(function(){
+    if(!open) return
+    function h(e){
+      if(anchorRef.current&&anchorRef.current.contains(e.target)) return
+      if(menuRef.current&&menuRef.current.contains(e.target)) return
+      setOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[open])
+  var creators = mode==="intermediate" ? [] : props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId})
+  var comps = props.nodes.filter(function(n){
+    if(n.id===props.selfId) return false
+    if(n.section!==2) return false
+    if(mode==="intermediate") return n.type==="promoted"
+    if(mode==="source") return true  // all compositors (incl. promoted taps) are valid pixel sources
+    if(mode==="effect-source") return n.type==="stack"&&n.stackType==="effect"
+    if(mode==="mask-source") return n.type==="stack"&&n.stackType==="mask"||n.type==="promoted"
+    return true
+  })
+  var allItems = creators.concat(comps)
+  var selectedNode = allItems.find(function(n){return n.id===props.v})
+  var btnLabel = selectedNode ? selectedNode.name : "— none —"
+  var btnStyle={flex:1,textAlign:"left",fontSize:11,padding:"0 10px",
+    fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",
+    whiteSpace:"nowrap",color:selectedNode?"var(--tx)":"var(--mu)"}
+
+  function pick(id){ props.fn(id||null); setOpen(false) }
+
+  var menuContent = (
+    <div style={{padding:8,maxHeight:"50vh",overflowY:"auto",userSelect:"none"}}>
+      {/* Source/Matte toggle — only shown in mask context */}
+      {props.asMask&&(
+        <div style={{display:"flex",gap:4,marginBottom:8}}>
+          <button onClick={function(){setAsMask(false)}}
+            style={{flex:1,padding:"4px 0",fontSize:9,borderRadius:4,cursor:"pointer",
+              fontFamily:"'IBM Plex Mono',monospace",
+              background:!asMask?"var(--ac)":"var(--el)",
+              color:!asMask?"var(--bg)":"var(--mu)",
+              border:"1px solid "+(!asMask?"var(--ac)":"var(--bd)")}}>
+            ◉ source
+          </button>
+          <button onClick={function(){setAsMask(true)}}
+            style={{flex:1,padding:"4px 0",fontSize:9,borderRadius:4,cursor:"pointer",
+              fontFamily:"'IBM Plex Mono',monospace",
+              background:asMask?"var(--lv)":"var(--el)",
+              color:asMask?"#fff":"var(--mu)",
+              border:"1px solid "+(asMask?"var(--lv)":"var(--bd)")}}>
+            ◈ matte
+          </button>
+        </div>
+      )}
+      {/* None option */}
+      <div onClick={function(){pick(null)}}
+        style={{padding:"6px 10px",fontSize:11,color:"var(--mu)",cursor:"pointer",
+          borderRadius:5,marginBottom:6,border:"1px solid "+(props.v==null?"var(--bd)":"transparent"),
+          background:props.v==null?"var(--sl)":"none"}}>— none —</div>
+      {props.siblingEffects&&props.siblingEffects.length>0&&(
+        <div>
+          <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
+            letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
+            Same Stack
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+            {props.siblingEffects.map(function(sibEfx){
+              return (sibEfx.maskStack||[]).map(function(sibMk){
+                var synId="__sibling__:"+(props.ownerNodeId||"?")+":"+sibEfx.id+":"+sibMk.id
+                var lbl=(sibEfx.name||sibEfx.type)+" › "+(sibMk.name||sibMk.channel||"mask")
+                return (
+                  <div key={synId} onClick={function(){pick(synId)}}
+                    style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
+                      padding:"6px 4px",borderRadius:6,
+                      background:props.v===synId?"var(--sl)":"none",
+                      border:props.v===synId?"1px solid var(--lv)":"1px solid transparent",
+                      minWidth:THUMB_PX+16}}>
+                    <div style={{width:THUMB_PX,height:THUMB_PX,borderRadius:4,overflow:"hidden",
+                      background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",
+                      boxShadow:"0 0 0 1px "+(props.v===synId?"var(--lv)":"var(--bd)")}}>
+                      <span style={{fontSize:8,color:"var(--mu)",textAlign:"center",padding:2}}>mask</span>
+                    </div>
+                    <span style={{fontSize:8,color:props.v===synId?"var(--lv)":"var(--mu)",textAlign:"center",
+                      fontFamily:"'IBM Plex Mono',monospace",maxWidth:THUMB_PX+8,
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2}}>
+                      {lbl}
+                    </span>
+                  </div>
+                )
+              })
+            })}
+          </div>
+        </div>
+      )}
+      {(function(){
+        // Phase 2: Other Stacks — masks from effect stacks on other nodes
+        var otherMasks=[]
+        ;(props.nodes||[]).forEach(function(n){
+          if(n.id===props.selfId) return
+          function collectFromStack(stack, slotLabel){
+            if(!stack||!stack.length) return
+            stack.forEach(function(efx){
+              if(efx.type==="__stackref__") return
+              var efxMasks=(efx.maskStack||[]).filter(function(m){return m.refId&&m.refId.length>0})
+              efxMasks.forEach(function(m){
+                otherMasks.push({
+                  nodeId:n.id, nodeName:n.name||n.type,
+                  effectId:efx.id, effectLabel:efx.name||efx.type,
+                  slotLabel:slotLabel,
+                  maskId:m.id, maskLabel:m.name||m.channel||"mask",
+                  synId:"__sibling__:"+n.id+":"+efx.id+":"+m.id
+                })
+              })
+            })
+          }
+          if(n.outEfx) collectFromStack(n.outEfx,"output")
+          if(n.inputA&&n.inputA.effectStack) collectFromStack(n.inputA.effectStack,"input A")
+          if(n.inputB&&n.inputB.effectStack) collectFromStack(n.inputB.effectStack,"input B")
+          if(n.layers) n.layers.forEach(function(l,li){
+            collectFromStack(l.effectStack,(l.name||"layer "+(li+1)))
+          })
+          if(n.effectStack) collectFromStack(n.effectStack,"")
+        })
+        // Exclude masks already shown in Same Stack group
+        var sibIds=new Set((props.siblingEffects||[]).map(function(e){
+          return (e.maskStack||[]).map(function(m){return e.id+":"+m.id})
+        }).reduce(function(a,b){return a.concat(b)},[]))
+        otherMasks=otherMasks.filter(function(om){
+          return !sibIds.has(om.effectId+":"+om.maskId)
+        })
+        if(!otherMasks.length) return null
+        return (
+          <div style={{marginBottom:8}}>
+            <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
+              letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
+              Other Stacks
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {otherMasks.map(function(om){
+                var lbl=om.nodeName+(om.slotLabel?" · "+om.slotLabel:"")+" › "+om.effectLabel+" › "+om.maskLabel
+                var isActive=props.v===om.synId
+                return (
+                  <div key={om.synId} onClick={function(){pick(om.synId)}}
+                    style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
+                      padding:"6px 4px",borderRadius:6,
+                      background:isActive?"var(--sl)":"none",
+                      border:isActive?"1px solid var(--lv)":"1px solid transparent",
+                      minWidth:THUMB_PX+16}}>
+                    <div style={{width:THUMB_PX,height:THUMB_PX,borderRadius:4,overflow:"hidden",
+                      background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",
+                      boxShadow:"0 0 0 1px "+(isActive?"var(--lv)":"var(--bd)")}}>
+                      <span style={{fontSize:7,color:"var(--mu)",textAlign:"center",padding:2,lineHeight:1.3}}>mask</span>
+                    </div>
+                    <span style={{fontSize:8,color:isActive?"var(--lv)":"var(--mu)",textAlign:"center",
+                      fontFamily:"'IBM Plex Mono',monospace",maxWidth:THUMB_PX+8,
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2}}
+                      title={lbl}>
+                      {om.effectLabel+" › "+om.maskLabel}
+                    </span>
+                    <span style={{fontSize:7,color:"var(--mu)",textAlign:"center",
+                      maxWidth:THUMB_PX+8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {om.nodeName}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+      {creators.length>0&&(
+        <div>
+          <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
+            letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
+            Creators
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {creators.map(function(n,ci){
+              return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
+                label={n.name} active={props.v===n.id} index={ci} asMask={asMask}
+                greySource={!asMask&&!!props.asMask} onClick={function(){pick(n.id)}}/>
+            })}
+          </div>
+        </div>
+      )}
+      {comps.length>0&&(
+        <div style={{marginTop:creators.length>0?10:0}}>
+          <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
+            letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
+            {mode==="intermediate"?"Promoted Taps":"Compositors"}
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {comps.map(function(n,ci){
+              return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
+                label={n.name} active={props.v===n.id} index={creators.length+ci} asMask={asMask}
+                greySource={!asMask&&!!props.asMask} onClick={function(){pick(n.id)}}/>
+            })}
+          </div>
+        </div>
+      )}
+      {allItems.length===0&&(
+        <div style={{fontSize:11,color:"var(--mu)",padding:"4px 10px"}}>no valid sources</div>
+      )}
+    </div>
+  )
+  return (
+    <PR l={props.l}>
+      <button ref={anchorRef} onClick={function(){setOpen(!open)}}
+        style={Object.assign({},btnStyle,{minHeight:"var(--tap-sm)",background:"var(--el)",
+          border:"1px solid var(--bd)",borderRadius:6})}>
+        {btnLabel}
+      </button>
+      {open&&pos&&createPortal(
+        <div ref={menuRef} style={Object.assign({},pos,{
+          position:"fixed",zIndex:9000,background:"var(--pn)",
+          border:"1px solid var(--bd)",borderRadius:10,
+          boxShadow:"0 -8px 32px rgba(0,0,0,.7)"})}>
+          {menuContent}
+        </div>,
+        document.body
+      )}
+    </PR>
+  )
+}
+function TabBar(props) {
+  return (
+    <div className="tabs">
+      {props.tabs.map(function(t) {
+        var cls = "tab" + (props.active===t.id ? " on" + (t.color ? " "+t.color : "") : "")
+        return (
+          <button key={t.id} className={cls} onClick={function(){props.onChange(t.id)}}>
+            {t.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─── CREATOR PROP PANELS ─────────────────────────────── */
+function SolidP(props) {
+  var p=props.p, up=props.up
+  return (
+    <div>
+      <Co l="colour" v={p.color} fn={function(v){up(Object.assign({},p,{color:v}))}}/>
+      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+    </div>
+  )
+}
+// Geometry types that are point-based (use point render controls)
+var GEO_POINT_TYPES = ["grid","spiral","polar-grid","phyllotaxis","scatter"]
+
+function ShapeP(props) {
+  var p=props.p, up=props.up, s=p.shapeType
+  var isPointGeo = GEO_POINT_TYPES.includes(s)
+  var rm = p.renderMode||"smooth"
+  return (
+    <div>
+      <Se l="type" v={s} opts={SHAPES} fn={function(v){up(Object.assign({},p,{shapeType:v}))}}/>
+      <Se l="render" v={rm} opts={isPointGeo?["points"]:["smooth","faceted","points"]}
+        fn={function(v){up(Object.assign({},p,{renderMode:v}))}}/>
+      {!isPointGeo&&<Sl l="x" v={p.x||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x:v}))}}/>}
+      {!isPointGeo&&<Sl l="y" v={p.y||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y:v}))}}/>}
+      {!isPointGeo&&<Sl l="size" v={p.sz||.6} mn={.05} mx={1.8} st={.01} fn={function(v){up(Object.assign({},p,{sz:v}))}}/>}
+      {(s==="ellipse") && (
+        <div>
+          <Sl l="x radius" v={p.rx==null?1:p.rx} mn={.1} mx={3} st={.01} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>
+          <Sl l="y radius" v={p.ry==null?1:p.ry} mn={.1} mx={3} st={.01} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>
+        </div>
+      )}
+      {(s==="rectangle") && (
+        <div>
+          <Sl l="corner x" v={p.rx==null?1:p.rx} mn={0} mx={2} st={.01} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>
+          <Sl l="corner y" v={p.ry==null?1:p.ry} mn={0} mx={2} st={.01} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>
+        </div>
+      )}
+      {!isPointGeo&&<Sl l="rotation" v={p.rot||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rot:v}))}}/>}
+      {s==="star" && (
+        <div>
+          <Sl l="points" v={p.pts} mn={3} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pts:v}))}}/>
+          <Sl l="inner r" v={p.innerR} mn={.05} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{innerR:v}))}}/>
+          <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
+          {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
+        </div>
+      )}
+      {s==="ring" && <Sl l="inner r" v={p.ringR} mn={.1} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{ringR:v}))}}/>}
+      {s==="rounded-rect" && (
+        <Sl l="corner r" v={p.cornerR==null?.2:p.cornerR} mn={0} mx={1} st={.01}
+          fmt={function(v){return Math.round(v*100)+"%"}}
+          fn={function(v){up(Object.assign({},p,{cornerR:v}))}}/>
+      )}
+      {s==="polygon" && (
+        <div>
+          <Sl l="sides" v={p.sides} mn={3} mx={14} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{sides:v}))}}/>
+          <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
+          {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
+        </div>
+      )}
+
+      {(p.renderMode==="faceted")&&(
+        <Sl l="segments" v={p.segments||32} mn={3} mx={128} st={1}
+          fmt={function(v){return Math.round(v)}}
+          fn={function(v){up(Object.assign({},p,{segments:v}))}}/>
+      )}
+      {/* Jitter available in both modes for all shapes */}
+      {(s==="ellipse"||s==="ring"||s==="rectangle"||s==="rounded-rect")&&(
+        <div>
+          <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01}
+            fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
+          {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1}
+            fmt={function(v){return Math.round(v)}}
+            fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
+        </div>
+      )}
+      {/* ── Geometry-specific params ── */}
+      {s==="grid"&&(<div>
+        <Sl l="columns" v={p.cols||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>
+        <Sl l="rows" v={p.rows||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>
+        <Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>
+        {(p.stagger||0)>0&&<Se l="axis" v={p.staggerAxis||"row"} opts={["row","col"]} fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>}
+        <Sl l="offset X" v={p.offX||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
+        <Sl l="offset Y" v={p.offY||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
+      </div>)}
+      {s==="spiral"&&(<div>
+        <Sl l="points" v={p.pointCount||32} mn={4} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+        <Sl l="turns" v={p.turns||3} mn={.25} mx={20} st={.25} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{turns:v}))}}/>
+        <Sl l="start r" v={p.startRadius||0} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>
+        <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
+        <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+        <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
+      </div>)}
+      {s==="polar-grid"&&(<div>
+        <Sl l="rings" v={p.rings||4} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rings:v}))}}/>
+        <Sl l="per ring" v={p.pointsPerRing||8} mn={2} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointsPerRing:v}))}}/>
+        <Sl l="start r" v={p.startRadius||.05} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>
+        <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
+        <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+        <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
+      </div>)}
+      {s==="phyllotaxis"&&(<div>
+        <Sl l="points" v={p.pointCount||64} mn={4} mx={1024} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+        <Sl l="divergence" v={p.divergenceAngle==null?137.508:p.divergenceAngle} mn={90} mx={180} st={.001} fmt={function(v){return v.toFixed(3)+"°"}} fn={function(v){up(Object.assign({},p,{divergenceAngle:v}))}}/>
+        <Sl l="spread" v={p.scale||.45} mn={.05} mx={.5} st={.005} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+        <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
+      </div>)}
+      {s==="scatter"&&(<div>
+        <Sl l="points" v={p.pointCount||32} mn={2} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+        <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
+        <Sl l="x min" v={p.x0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x0:v}))}}/>
+        <Sl l="x max" v={p.x1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x1:v}))}}/>
+        <Sl l="y min" v={p.y0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y0:v}))}}/>
+        <Sl l="y max" v={p.y1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y1:v}))}}/>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+      </div>)}
+      {isPointGeo&&<div>
+        <Se l="style" v={p.pointStyle||"dots"} opts={["dots","hidden"]}
+          fn={function(v){up(Object.assign({},p,{pointStyle:v}))}}/>
+        {(p.pointStyle||"dots")==="dots"&&<div>
+          <Sl l="dot size" v={p.dotSize||4} mn={1} mx={20} st={.5}
+            fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up(Object.assign({},p,{dotSize:v}))}}/>
+          <Co l="colour" v={p.color||"#ffffff"} fn={function(v){up(Object.assign({},p,{color:v}))}}/>
+          <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
+            fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
+        </div>}
+      </div>}
+      {!isPointGeo&&<Co l="fill" v={p.fill} fn={function(v){up(Object.assign({},p,{fill:v}))}}/>}
+      {!isPointGeo&&<Sl l="fill op" v={p.fillOpacity==null?1:p.fillOpacity} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}}
+        fn={function(v){up(Object.assign({},p,{fillOpacity:v}))}}/>}
+      {!isPointGeo&&<Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>}
+      {!isPointGeo&&p.strokeW>0 && (
+        <div>
+          <Co l="stroke" v={p.stroke} fn={function(v){up(Object.assign({},p,{stroke:v}))}}/>
+          <Sl l="stroke op" v={p.strokeOpacity==null?1:p.strokeOpacity} mn={0} mx={1} st={.01}
+            fmt={function(v){return Math.round(v*100)+"%"}}
+            fn={function(v){up(Object.assign({},p,{strokeOpacity:v}))}}/>
+        </div>
+      )}
+      {!isPointGeo&&<Sl l="opacity" v={p.opacity==null?(p.alpha==null?1:p.alpha):p.opacity} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}}
+        fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>}
+    </div>
+  )
+}
+function GradP(props) {
+  var p=props.p, up=props.up
+  // Migrate legacy c1/s1/c2/s2 to stops on first render via gradStops helper
+  var stops=gradStops(p).slice().sort(function(a,b){return a.pos-b.pos})
+  function setStops(ns){up(Object.assign({},p,{stops:ns,c1:undefined,s1:undefined,c2:undefined,s2:undefined}))}
+  function updStop(i,patch){setStops(stops.map(function(s,si){return si===i?Object.assign({},s,patch):s}))}
+  function addStop(){
+    // Insert at widest gap, interpolate colour + alpha
+    var maxGap=0,ins=.5,insC="#808080",insA=1
+    for(var i=0;i<stops.length-1;i++){
+      var gap=stops[i+1].pos-stops[i].pos
+      if(gap>maxGap){
+        maxGap=gap; ins=stops[i].pos+gap/2
+        function ph(h){var s=(h||"#000").replace("#","");if(s.length===3)s=s.split("").map(function(c){return c+c}).join("");return[parseInt(s.slice(0,2),16)||0,parseInt(s.slice(2,4),16)||0,parseInt(s.slice(4,6),16)||0]}
+        var r1=ph(stops[i].color),r2=ph(stops[i+1].color)
+        insC="#"+[0,1,2].map(function(j){return Math.round((r1[j]+r2[j])/2).toString(16).padStart(2,"0")}).join("")
+        var ai=stops[i].alpha==null?1:stops[i].alpha, aj=stops[i+1].alpha==null?1:stops[i+1].alpha
+        insA=(ai+aj)/2
+      }
+    }
+    setStops(stops.concat([{pos:ins,color:insC,alpha:insA}]))
+  }
+  function delStop(i){if(stops.length<=2)return;setStops(stops.filter(function(_,si){return si!==i}))}
+  // CSS preview strip using rgba stops
+  var previewStops=stops.map(function(s){
+    var hex=(s.color||"#000000").replace("#",""),a=s.alpha==null?1:s.alpha
+    if(hex.length===3)hex=hex.split("").map(function(c){return c+c}).join("")
+    return "rgba("+[parseInt(hex.slice(0,2),16),parseInt(hex.slice(2,4),16),parseInt(hex.slice(4,6),16),a].join(",")+" "+(s.pos*100).toFixed(1)+"%"
+  }).join(",")
+  return (
+    <div>
+      <Se l="type" v={p.gType} opts={GTYPES} fn={function(v){up(Object.assign({},p,{gType:v}))}}/>
+      {/* Gradient preview strip */}
+      <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 8px"}}>
+        <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
+          minWidth:76,textAlign:"right",flexShrink:0}}>preview</span>
+        <div style={{flex:1,height:24,borderRadius:5,border:"1px solid var(--bd)",
+          background:"linear-gradient(to right,"+previewStops+"),repeating-conic-gradient(#1a1a38 0deg 90deg,#121228 90deg 180deg) 0 0 / 10px 10px"}}/>
+      </div>
+      {/* Stops editor */}
+      <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
+        {stops.map(function(s,i){
+          var aVal=s.alpha==null?1:s.alpha
+          return (
+            <div key={i} style={{background:"rgba(20,20,44,.5)",border:"1px solid var(--bd)",borderRadius:6,padding:"6px 8px",display:"flex",flexDirection:"column",gap:4}}>
+              {/* Row 1: swatch + position + delete */}
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input type="color" value={s.color||"#ffffff"}
+                  onChange={function(e){updStop(i,{color:e.target.value})}}
+                  style={{width:32,height:28,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer",flexShrink:0}}/>
+                <span style={{fontSize:9,color:"var(--mu)",flexShrink:0}}>pos</span>
+                <input type="range" min={0} max={1} step={.001} value={s.pos}
+                  onChange={function(e){updStop(i,{pos:parseFloat(e.target.value)})}}
+                  style={{flex:1}}/>
+                <span style={{fontSize:10,color:"var(--di)",minWidth:38,textAlign:"right",flexShrink:0}}>{(s.pos*100).toFixed(1)}%</span>
+                <button onClick={function(){delStop(i)}} disabled={stops.length<=2}
+                  style={{minHeight:28,padding:"0 8px",fontSize:12,color:stops.length<=2?"var(--mu)":"var(--dng)",background:"none",border:"none",cursor:stops.length<=2?"default":"pointer",flexShrink:0}}>×</button>
+              </div>
+              {/* Row 2: alpha */}
+              <div style={{display:"flex",gap:6,alignItems:"center",paddingLeft:38}}>
+                <span style={{fontSize:9,color:"var(--mu)",flexShrink:0,minWidth:14}}>α</span>
+                <input type="range" min={0} max={1} step={.01} value={aVal}
+                  onChange={function(e){updStop(i,{alpha:parseFloat(e.target.value)})}}
+                  style={{flex:1}}/>
+                <span style={{fontSize:10,color:"var(--di)",minWidth:38,textAlign:"right",flexShrink:0}}>{Math.round(aVal*100)}%</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <button className="ac" style={{width:"100%",marginBottom:8}} onClick={addStop}>+ stop</button>
+      {p.gType==="linear" && <Sl l="angle" v={p.angle||90} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>}
+      {(p.gType==="radial"||p.gType==="conic") && (
+        <div>
+          <Sl l="centre x" v={p.cx||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+          <Sl l="centre y" v={p.cy||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+        </div>
+      )}
+      {p.gType==="radial" && <Sl l="radius" v={p.r||.7} mn={.01} mx={2.5} st={.01} fn={function(v){up(Object.assign({},p,{r:v}))}}/>}
+      {p.gType==="conic" && <Sl l="start" v={p.sa||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{sa:v}))}}/>}
+      <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      {/* ── Gradient utilities ── */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>
+        <button onClick={function(){
+          setStops(stops.map(function(s){return Object.assign({},s,{pos:1-s.pos})}))
+        }} className="ghost" style={{flex:"1 1 0",fontSize:10,padding:"4px 8px"}}>reverse</button>
+      </div>
+      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
+        <span style={{fontSize:9,color:"var(--mu)",marginRight:4}}>distribute</span>
+        {[["even",function(t){return t}],["expo",function(t){return t*t}],["log",function(t){return Math.sqrt(t)}]].map(function(m){
+          return <button key={m[0]} className="ghost" style={{fontSize:10,padding:"4px 10px"}}
+            onClick={function(){
+              var n2=stops.length; if(n2<2)return
+              var ns=stops.map(function(s,i){return Object.assign({},s,{pos:m[1](i/(n2-1))})})
+              setStops(ns)
+            }}>{m[0]}</button>
+        })}
+      </div>
+      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
+        <span style={{fontSize:9,color:"var(--mu)",marginRight:4}}>presets</span>
+        {[
+          {label:"B→W",  stops:[{pos:0,color:"#000000",alpha:1},{pos:1,color:"#ffffff",alpha:1}]},
+          {label:"W→B",  stops:[{pos:0,color:"#ffffff",alpha:1},{pos:1,color:"#000000",alpha:1}]},
+          {label:"rainbow",stops:[{pos:0,color:"#ff0000",alpha:1},{pos:.17,color:"#ff8800",alpha:1},{pos:.33,color:"#ffff00",alpha:1},{pos:.5,color:"#00cc00",alpha:1},{pos:.67,color:"#0044ff",alpha:1},{pos:.83,color:"#8800cc",alpha:1},{pos:1,color:"#ff0088",alpha:1}]},
+          {label:"heat",  stops:[{pos:0,color:"#000000",alpha:1},{pos:.33,color:"#cc2200",alpha:1},{pos:.66,color:"#ffaa00",alpha:1},{pos:1,color:"#ffffff",alpha:1}]},
+          {label:"cyan",  stops:[{pos:0,color:"#000033",alpha:1},{pos:1,color:"#00ffcc",alpha:1}]},
+          {label:"α→full",stops:[{pos:0,color:"#ffffff",alpha:0},{pos:1,color:"#ffffff",alpha:1}]}
+        ].map(function(pr){
+          return <button key={pr.label} className="ghost" style={{fontSize:10,padding:"4px 8px"}}
+            onClick={function(){setStops(pr.stops)}}>{pr.label}</button>
+        })}
+      </div>
+    </div>
+  )
+}
+function NoiseP(props) {
+  var p=props.p, up=props.up
+  var hasOct=["perlin","fbm","turbulence","marble","wood"].includes(p.nType)
+  return (
+    <div>
+      <Se l="type" v={p.nType} opts={NTYPES} fn={function(v){up(Object.assign({},p,{nType:v}))}}/>
+      <Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>
+      <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
+      <Sl l="scale" v={p.scale} mn={.005} mx={.4} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+      {hasOct&&<Sl l="octaves" v={p.oct||4} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>}
+      {p.nType==="fbm"&&(
+        <div>
+          <Sl l="lacunarity" v={p.lac||2} mn={1} mx={4} st={.1} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{lac:v}))}}/>
+          <Sl l="gain" v={p.gain||.5} mn={.1} mx={.9} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gain:v}))}}/>
+        </div>
+      )}
+      {p.nType==="worley"&&(
+        <Sl l="jitter" v={p.wJitter==null?1:p.wJitter} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{wJitter:v}))}}/>
+      )}
+      {(p.nType==="marble"||p.nType==="wood")&&(
+        <div>
+          <Sl l="frequency" v={p.mFreq||4} mn={1} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{mFreq:v}))}}/>
+          <Sl l="turbulence" v={p.mTurb||2} mn={0} mx={10} st={.1} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{mTurb:v}))}}/>
+        </div>
+      )}
+      <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
+      <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+    </div>
+  )
+}
+function PointCreatorBase(props) {
+  var p=props.p,up=props.up
+  return (
+    <div>
+      <PR l="render">
+        {["dots","hidden"].map(function(m){
+          return <button key={m} className={(p.renderMode||"dots")===m?"ac":"ghost"}
+            onClick={function(){up(Object.assign({},p,{renderMode:m}))}}
+            style={{flex:1,fontSize:11,minHeight:32}}>{m}</button>
+        })}
+      </PR>
+      {(p.renderMode||"dots")==="dots"&&(
+        <div>
+          <Sl l="dot size" v={p.dotSize||4} mn={1} mx={20} st={.5}
+            fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up(Object.assign({},p,{dotSize:v}))}}/>
+          <Co l="colour" v={p.color||"#ffffff"} fn={function(v){up(Object.assign({},p,{color:v}))}}/>
+          <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
+            fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
+        </div>
+      )}
+      {props.children}
+    </div>
+  )
+}
+function GridP(props) {
+  var p=props.p,up=props.up
+  return (<PointCreatorBase p={p} up={up}>
+    <Sl l="columns" v={p.cols||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>
+    <Sl l="rows" v={p.rows||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>
+    <Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>
+    {(p.stagger||0)>0&&<Se l="axis" v={p.staggerAxis||"row"} opts={["row","col"]} fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>}
+    <Sl l="offset X" v={p.offX||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
+    <Sl l="offset Y" v={p.offY||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
+  </PointCreatorBase>)
+}
+function SpiralP(props) {
+  var p=props.p,up=props.up
+  return (<PointCreatorBase p={p} up={up}>
+    <Sl l="points" v={p.pointCount||32} mn={4} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+    <Sl l="turns" v={p.turns||3} mn={.25} mx={20} st={.25} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{turns:v}))}}/>
+    <Sl l="start r" v={p.startRadius||0} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>
+    <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
+    <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+    <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+  </PointCreatorBase>)
+}
+function PolarGridP(props) {
+  var p=props.p,up=props.up
+  return (<PointCreatorBase p={p} up={up}>
+    <Sl l="rings" v={p.rings||4} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rings:v}))}}/>
+    <Sl l="per ring" v={p.pointsPerRing||8} mn={2} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointsPerRing:v}))}}/>
+    <Sl l="start r" v={p.startRadius||.05} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>
+    <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
+    <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+    <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+  </PointCreatorBase>)
+}
+function PhyllotaxisP(props) {
+  var p=props.p,up=props.up
+  return (<PointCreatorBase p={p} up={up}>
+    <Sl l="points" v={p.pointCount||64} mn={4} mx={1024} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+    <Sl l="divergence" v={p.divergenceAngle==null?137.508:p.divergenceAngle} mn={90} mx={180} st={.001}
+      fmt={function(v){return v.toFixed(3)+"°"}} fn={function(v){up(Object.assign({},p,{divergenceAngle:v}))}}/>
+    <Sl l="scale" v={p.scale||.45} mn={.05} mx={.5} st={.005} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+    <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
+    <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+  </PointCreatorBase>)
+}
+function ScatterP(props) {
+  var p=props.p,up=props.up
+  return (<PointCreatorBase p={p} up={up}>
+    <Sl l="points" v={p.pointCount||32} mn={2} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+    <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
+    <Sl l="x min" v={p.x0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x0:v}))}}/>
+    <Sl l="x max" v={p.x1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x1:v}))}}/>
+    <Sl l="y min" v={p.y0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y0:v}))}}/>
+    <Sl l="y max" v={p.y1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y1:v}))}}/>
+  </PointCreatorBase>)
+}
+function PatP(props) {
+  var p=props.p, up=props.up
+  return (
+    <div>
+      <Se l="type" v={p.pType} opts={PTYPES} fn={function(v){up(Object.assign({},p,{pType:v}))}}/>
+      <Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>
+      <Sl l="opacity 1" v={p.a1==null?1:p.a1} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a1:v}))}}/>
+      <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
+      <Sl l="opacity 2" v={p.a2==null?1:p.a2} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a2:v}))}}/>
+      <Sl l="scale" v={p.scale||.1} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+      <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>
+      {p.pType==="stripes" && (
+        <Sl l="width" v={p.sw||.1} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{sw:v}))}}/>
+      )}
+      {p.pType==="dots" && (
+        <div>
+          <Sl l="dot r" v={p.dr||.03} mn={.005} mx={.2} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{dr:v}))}}/>
+          <Sl l="spacing" v={p.ds||.1} mn={.02} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{ds:v}))}}/>
+        </div>
+      )}
+      <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+    </div>
+  )
+}
+
+// ── Tile pattern UI ───────────────────────────────────────────────────────────
+function TileP(props) {
+  var p=props.p, up=props.up, nodes=props.nodes, selfId=props.selfId, iC=props.iC
+  // RandRow factory for per-tile params
+  function tr(enK,baseK,scK,biK,amtK,offK,seedK){
+    return {
+      enabled:p[enK]||false, onToggle:function(){var o={};o[enK]=!p[enK];up(Object.assign({},p,o))},
+      rangeBipolar:p[biK]!==false, onRangeBipolar:function(v){var o={};o[biK]=v;up(Object.assign({},p,o))},
+      scale:p[scK], onScale:function(v){var o={};o[scK]=v;up(Object.assign({},p,o))},
+      offset:p[offK]||0, onOffset:function(v){var o={};o[offK]=v;up(Object.assign({},p,o))},
+      amount:p[amtK]==null?1:p[amtK], onAmount:function(v){var o={};o[amtK]=v;up(Object.assign({},p,o))},
+      seed:p[seedK]||0, onSeed:function(v){var o={};o[seedK]=v;up(Object.assign({},p,o))}
+    }
+  }
+  return (
+    <div>
+      {/* Source */}
+      <NRef l="source" v={p.refId} nodes={nodes} selfId={selfId} iC={iC}
+        fn={function(v){up(Object.assign({},p,{refId:v}))}}/>
+      {/* Grid */}
+      <Sl l="columns" v={p.cols||4} mn={1} mx={32} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>
+      <Sl l="rows" v={p.rows||4} mn={1} mx={32} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>
+      {/* Layout */}
+      <Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>
+      {(p.stagger||0)>0&&(
+        <div>
+          <Se l="stagger axis" v={p.staggerAxis||"row"} opts={["row","col"]}
+            fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>
+          <Se l="apply to" v={p.staggerParity||"odd"} opts={["odd","even"]}
+            fn={function(v){up(Object.assign({},p,{staggerParity:v}))}}/>
+        </div>
+      )}
+      <Sl l="offset X" v={p.offX||0} mn={-1} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
+      <Sl l="offset Y" v={p.offY||0} mn={-1} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
+      <PR l="gap mode">
+        {[["spacing","spread"],["inset","shrink"]].map(function(m){
+          return <button key={m[0]} className={(p.gapMode||"spacing")===m[0]?"ac":"ghost"}
+            onClick={function(){up(Object.assign({},p,{gapMode:m[0]}))}}
+            style={{flex:1,fontSize:11,minHeight:32}}>{m[1]}</button>
+        })}
+      </PR>
+      <Sl l="gap X" v={p.gapX||0} mn={0} mx={(p.gapMode||"spacing")==="spacing"?4:.98} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapX:v}))}}/>
+      <Sl l="gap Y" v={p.gapY||0} mn={0} mx={(p.gapMode||"spacing")==="spacing"?4:.98} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapY:v}))}}/>
+      {/* Per-tile base + randomise */}
+      <RandRow {...tr("rRotEn","rotation","rRotSc","rRotBi","rRotAmt","rRotOff","rRotSeed")}>
+        <Sl l="rotation" v={p.rotation||0} mn={-180} mx={180} st={1}
+          fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rotation:v}))}}/>
+      </RandRow>
+      <RandRow {...tr("rScaleEn","scale","rScaleSc","rScaleBi","rScaleAmt","rScaleOff","rScaleSeed")}>
+        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.05} mx={3} st={.01}
+          fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+      </RandRow>
+      <RandRow {...tr("rOpEn","opacity","rOpSc","rOpBi","rOpAmt","rOpOff","rOpSeed")}>
+        <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
+          fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
+      </RandRow>
+      {/* Random position nudge per tile — base is always 0 (cell centre) */}
+      <RandRow {...tr("rOxEn","rOxBase","rOxSc","rOxBi","rOxAmt","rOxOff","rOxSeed")}>
+        <div style={{display:"flex",alignItems:"center",minHeight:36}}>
+          <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",minWidth:76,textAlign:"right",paddingRight:12}}>nudge X</span>
+          <span style={{fontSize:9,color:"var(--di)"}}>per-tile random offset</span>
+        </div>
+      </RandRow>
+      <RandRow {...tr("rOyEn","rOyBase","rOySc","rOyBi","rOyAmt","rOyOff","rOySeed")}>
+        <div style={{display:"flex",alignItems:"center",minHeight:36}}>
+          <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",minWidth:76,textAlign:"right",paddingRight:12}}>nudge Y</span>
+          <span style={{fontSize:9,color:"var(--di)"}}>per-tile random offset</span>
+        </div>
+      </RandRow>
+      {/* Flip probabilities */}
+      <Sl l="flip X prob" v={p.flipXProb||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{flipXProb:v}))}}/>
+      <Sl l="flip Y prob" v={p.flipYProb||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{flipYProb:v}))}}/>
+      {/* Wrap + background */}
+      <Se l="wrap" v={p.wrap||"clamp"} opts={["clamp","repeat","mirror"]}
+        fn={function(v){up(Object.assign({},p,{wrap:v}))}}/>
+      <Co l="bg colour" v={p.bgColor||"#000000"} fn={function(v){up(Object.assign({},p,{bgColor:v}))}}/>
+      <Sl l="bg opacity" v={p.bgOpacity||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{bgOpacity:v}))}}/>
+      <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
+    </div>
+  )
+}
+function ImgP(props) {
+  var p=props.p, up=props.up, onLoad=props.onLoad
+  var fileRef=useRef(null)
+  function loadBlob(file){
+    if(!file)return
+    var b=URL.createObjectURL(file)
+    up(Object.assign({},p,{url:b}))
+    onLoad(b)
+  }
+  return (
+    <div>
+      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}}
+        onChange={function(e){loadBlob(e.target.files&&e.target.files[0]);e.target.value=""}}/>
+      <button className="ac" style={{width:"100%",marginBottom:10,minHeight:44}}
+        onClick={function(){if(fileRef.current)fileRef.current.click()}}>
+        + Load image from device
+      </button>
+      {p.url&&(
+        <div style={{fontSize:10,color:"var(--ac)",marginBottom:10,textAlign:"center"}}>
+          {p.url.startsWith("blob:")?"image loaded ✓":p.url.length>40?p.url.slice(0,40)+"…":p.url}
+        </div>
+      )}
+      <Se l="fit" v={p.fit} opts={["contain","cover","fill"]} fn={function(v){up(Object.assign({},p,{fit:v}))}}/>
+      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+    </div>
+  )
+}
+function CreatorProps(props) {
+  var node=props.node, onUpdate=props.onUpdate, onLoad=props.onLoad
+  var nodes=props.nodes||[], iC=props.iC
+  function up(p){onUpdate(Object.assign({},node,{props:p}))}
+  var savedSt=useState(false); var savedMsg=savedSt[0], setSavedMsg=savedSt[1]
+  var hasSt=useState(hasCreatorDefault(node.type)); var hasDef=hasSt[0], setHasDef=hasSt[1]
+  function saveDefault(){
+    if(saveCreatorDefault(node.type, node.props)){
+      setSavedMsg("saved ✓"); setHasDef(true)
+      setTimeout(function(){setSavedMsg(false)},1800)
+    }
+  }
+  function resetDefault(){
+    if(resetCreatorDefault(node.type)){
+      setSavedMsg("cleared"); setHasDef(false)
+      setTimeout(function(){setSavedMsg(false)},1800)
+    }
+  }
+  return (
+    <div style={{padding:"12px 12px 4px"}}>
+      {node.type==="solid"    && <SolidP p={node.props} up={up}/>}
+      {node.type==="shape"    && <ShapeP p={node.props} up={up}/>}
+      {node.type==="gradient" && <GradP  p={node.props} up={up}/>}
+      {node.type==="noise"    && <NoiseP p={node.props} up={up}/>}
+      {node.type==="pattern"  && <PatP   p={node.props} up={up}/>}
+      {node.type==="tile"     && <TileP  p={node.props} up={up} nodes={props.nodes} selfId={node.id} iC={props.iC}/>}
+      {node.type==="grid"        && <GridP       p={node.props} up={up}/>}
+      {node.type==="spiral"      && <SpiralP     p={node.props} up={up}/>}
+      {node.type==="polar-grid"  && <PolarGridP  p={node.props} up={up}/>}
+      {node.type==="phyllotaxis" && <PhyllotaxisP p={node.props} up={up}/>}
+      {node.type==="scatter"     && <ScatterP    p={node.props} up={up}/>}
+      {node.type==="image"    && <ImgP   p={node.props} up={up} onLoad={onLoad}/>}
+      {/* Save-as-default row */}
+      <div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid var(--bd)",alignItems:"center"}}>
+        <button className="ghost" style={{flex:1,fontSize:10,padding:"6px 10px"}}
+          onClick={saveDefault}
+          title={"Make these "+node.type+" settings the default for new "+node.type+" nodes"}>
+          save as default
+        </button>
+        {hasDef&&(
+          <button className="ghost" style={{flex:1,fontSize:10,padding:"6px 10px",color:"var(--mu)"}}
+            onClick={resetDefault}
+            title="Remove custom default, revert to built-in">
+            reset
+          </button>
+        )}
+        {savedMsg&&(
+          <span style={{fontSize:10,color:"var(--ac)",minWidth:52,textAlign:"right"}}>{savedMsg}</span>
+        )}
+      </div>
+      {hasDef&&!savedMsg&&(
+        <div style={{fontSize:9,color:"var(--mu)",marginTop:4,textAlign:"center"}}>
+          custom defaults active for {node.type}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── EFFECT PRIMARY PARAMS ──────────────────────────── */
+/* ─── COLOUR MAP EDITOR ──────────────────────────────── */
+function ColourMapEditor(props) {
+  var p=props.p, up=props.up
+  var stops=(p.stops||[]).slice().sort(function(a,b){return a.pos-b.pos})
+  function setStops(ns){up({stops:ns})}
+  function updStop(i,nw){var ns=stops.map(function(s,si){return si===i?Object.assign({},s,nw):s});setStops(ns)}
+  function addStop(){
+    var maxGap=0,insertAt=.5,afterColor="#808080",afterAlpha=100
+    for(var i=0;i<stops.length-1;i++){
+      var gap=stops[i+1].pos-stops[i].pos
+      if(gap>maxGap){maxGap=gap;insertAt=stops[i].pos+gap/2
+        var c1=stops[i].color,c2=stops[i+1].color
+        function ph(h){var s=(h||"#000000").replace("#","");return [parseInt(s.slice(0,2),16)||0,parseInt(s.slice(2,4),16)||0,parseInt(s.slice(4,6),16)||0]}
+        var r1=ph(c1),r2=ph(c2)
+        var ri=Math.round((r1[0]+r2[0])/2),gi=Math.round((r1[1]+r2[1])/2),bi=Math.round((r1[2]+r2[2])/2)
+        afterColor="#"+[ri,gi,bi].map(function(v){return v.toString(16).padStart(2,"0")}).join("")
+        var a1=stops[i].alpha==null?100:stops[i].alpha, a2=stops[i+1].alpha==null?100:stops[i+1].alpha
+        afterAlpha=Math.round((a1+a2)/2)
+      }
+    }
+    setStops(stops.concat([{pos:insertAt,color:afterColor,alpha:afterAlpha}]))
+  }
+  function delStop(i){
+    if(stops.length<=2)return
+    setStops(stops.filter(function(_,si){return si!==i}))
+  }
+  function distribute(mode){
+    var n=stops.length
+    if(n<2)return
+    var ns=stops.map(function(s,i){
+      var t=i/(n-1)
+      var pos=t
+      if(mode==="even")         pos=t
+      else if(mode==="expo")    pos=t*t
+      else if(mode==="log")     pos=Math.sqrt(t)
+      return Object.assign({},s,{pos:pos})
+    })
+    setStops(ns)
+  }
+  // Convert a hex + alpha (0..100) into an rgba() CSS string
+  function rgbaStr(hex, alpha){
+    var s=(hex||"#000000").replace("#","")
+    if(s.length===3)s=s.split("").map(function(c){return c+c}).join("")
+    var r=parseInt(s.slice(0,2),16)||0, g=parseInt(s.slice(2,4),16)||0, b=parseInt(s.slice(4,6),16)||0
+    var a=(alpha==null?100:alpha)/100
+    return "rgba("+r+","+g+","+b+","+a.toFixed(3)+")"
+  }
+  // CSS gradient — includes alpha, rendered on a checkered pattern for visibility
+  var grad=(p.reverse?stops.slice().reverse().map(function(s){return Object.assign({},s,{pos:1-s.pos})}):stops)
+    .map(function(s){return rgbaStr(s.color,s.alpha)+" "+(s.pos*100).toFixed(1)+"%"}).join(",")
+  // Checkerboard background so transparency is visible
+  var checker="repeating-conic-gradient(#242440 0deg 90deg, #181830 90deg 180deg) 0 0 / 12px 12px"
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {/* Gradient preview strip */}
+      <div style={{height:32,borderRadius:6,border:"1px solid var(--bd)",
+        background:"linear-gradient(to right,"+grad+"),"+checker}}/>
+      {/* Stops list */}
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em"}}>stops</div>
+        {stops.map(function(s,i){
+          var alphaVal=s.alpha==null?100:s.alpha
+          return (
+            <div key={i} style={{display:"flex",flexDirection:"column",gap:4,padding:"6px 8px",
+              background:"rgba(20,20,44,.4)",border:"1px solid var(--bd)",borderRadius:6}}>
+              {/* Row 1: colour swatch, position, delete */}
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input type="color" value={s.color}
+                  onChange={function(e){updStop(i,{color:e.target.value})}}
+                  style={{width:32,height:28,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
+                <span style={{fontSize:9,color:"var(--mu)",minWidth:22}}>pos</span>
+                <input type="range" min={0} max={1} step={0.001} value={s.pos}
+                  onChange={function(e){updStop(i,{pos:parseFloat(e.target.value)})}}
+                  style={{flex:1}}/>
+                <span style={{fontSize:10,color:"var(--di)",minWidth:42,textAlign:"right"}}>
+                  {(s.pos*100).toFixed(1)}%
+                </span>
+                <button onClick={function(){delStop(i)}} disabled={stops.length<=2}
+                  style={{minHeight:28,padding:"0 8px",fontSize:12,color:stops.length<=2?"var(--mu)":"var(--dng)",
+                  background:"none",border:"none",cursor:stops.length<=2?"default":"pointer"}}>×</button>
+              </div>
+              {/* Row 2: alpha */}
+              <div style={{display:"flex",gap:6,alignItems:"center",paddingLeft:38}}>
+                <span style={{fontSize:9,color:"var(--mu)",minWidth:22}}>α</span>
+                <input type="range" min={0} max={100} step={1} value={alphaVal}
+                  onChange={function(e){updStop(i,{alpha:parseInt(e.target.value)})}}
+                  style={{flex:1}}/>
+                <span style={{fontSize:10,color:"var(--di)",minWidth:42,textAlign:"right"}}>
+                  {alphaVal}%
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {/* Controls */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <button className="ac" style={{flex:"1 1 0",minWidth:90}} onClick={addStop}>+ stop</button>
+        <button onClick={function(){up({reverse:!p.reverse})}}
+          className={p.reverse?"ac":"ghost"}
+          style={{flex:"1 1 0",minWidth:90}}>
+          {p.reverse?"reversed":"reverse"}
+        </button>
+      </div>
+      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:9,color:"var(--mu)",alignSelf:"center",marginRight:4}}>presets</span>
+        <button className="ghost" style={{fontSize:10,padding:"4px 8px"}} title="2-stop duotone: edit shadow + highlight colours"
+          onClick={function(){setStops([{pos:0,color:"#0a0a2a",alpha:100},{pos:1,color:"#f5e642",alpha:100}])}}>duotone</button>
+        <button className="ghost" style={{fontSize:10,padding:"4px 8px"}} title="Classic B&W tonal map"
+          onClick={function(){setStops([{pos:0,color:"#000000",alpha:100},{pos:1,color:"#ffffff",alpha:100}])}}>B&W</button>
+        <button className="ghost" style={{fontSize:10,padding:"4px 8px"}} title="Heat map: black → red → yellow → white"
+          onClick={function(){setStops([{pos:0,color:"#000000",alpha:100},{pos:.33,color:"#cc2200",alpha:100},{pos:.66,color:"#ffaa00",alpha:100},{pos:1,color:"#ffffff",alpha:100}])}}>heat</button>
+      </div>
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        <span style={{fontSize:9,color:"var(--mu)",alignSelf:"center",marginRight:4}}>distribute</span>
+        <button className="ghost" style={{fontSize:10,padding:"4px 10px"}} onClick={function(){distribute("even")}}>even</button>
+        <button className="ghost" style={{fontSize:10,padding:"4px 10px"}} onClick={function(){distribute("expo")}}>expo</button>
+        <button className="ghost" style={{fontSize:10,padding:"4px 10px"}} onClick={function(){distribute("log")}}>log</button>
+      </div>
+    </div>
+  )
+}
+
+function EfxPrimary(props) {
+  var efx=props.efx, p=efx.params
+  function up(np){props.onChange(Object.assign({},efx,{params:Object.assign({},p,np)}))}
+  if(efx.type==="brightness") return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
+  if(efx.type==="contrast")   return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
+  if(efx.type==="blur")       return <Sl l="radius" v={p.radius} mn={0} mx={60} st={.5} fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up({radius:v})}}/>
+  if(efx.type==="invert")     return <Sl l="amount" v={p.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({amount:v})}}/>
+  if(efx.type==="threshold")  return <Sl l="level" v={p.value} mn={0} mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
+  if(efx.type==="hue-shift")  return <Sl l="angle" v={p.angle} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
+  if(efx.type==="saturation") return <Sl l="amount" v={p.amount} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({amount:v})}}/>
+  if(efx.type==="vibrance")   return <Sl l="amount" v={p.amount==null?0:p.amount} mn={-100} mx={100} st={1} fmt={function(v){return (v>0?"+":"")+Math.round(v)}} fn={function(v){up({amount:v})}}/>
+  if(efx.type==="posterize")  return <Sl l="levels" v={p.levels} mn={2} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({levels:v})}}/>
+  if(efx.type==="exposure")   return <Sl l="stops" v={p.stops} mn={-3} mx={3} st={.1} fmt={function(v){return v.toFixed(1)+"EV"}} fn={function(v){up({stops:v})}}/>
+  if(efx.type==="levels")     return <Sl l="gamma" v={p.gamma!=null?p.gamma:1} mn={.1} mx={4} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up({gamma:v})}}/>
+  if(efx.type==="curves") return (
+    <div>
+      <Sl l="in black"  v={p.inBlack||0}                    mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inBlack:v})}}/>
+      <Sl l="in white"  v={p.inWhite==null?255:p.inWhite}   mn={1}   mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inWhite:v})}}/>
+      <Sl l="out black" v={p.outBlack||0}                   mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outBlack:v})}}/>
+      <Sl l="out white" v={p.outWhite==null?255:p.outWhite} mn={1}   mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outWhite:v})}}/>
+      <Sl l="S-curve"   v={p.sCurve||0}                     mn={-100} mx={100} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({sCurve:v})}}/>
+    </div>
+  )
+  if(efx.type==="colour-map") return <ColourMapEditor efx={efx} p={p} up={up}/>
+  if(efx.type==="sharpen") return (
+    <Sl l="amount" v={p.amount==null?100:p.amount} mn={0} mx={500} st={1}
+      fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({amount:v})}}/>
+  )
+  if(efx.type==="vignette") return (
+    <div>
+      <Sl l="strength" v={p.strength==null?80:p.strength} mn={0} mx={100} st={1}
+        fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({strength:v})}}/>
+      <Sl l="radius" v={p.radius==null?.65:p.radius} mn={0} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({radius:v})}}/>
+      <Sl l="softness" v={p.softness==null?.45:p.softness} mn={0.01} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({softness:v})}}/>
+      <PR l="colour">
+        <input type="color" value={p.color||"#000000"}
+          onChange={function(e){up({color:e.target.value})}}
+          style={{width:44,height:32,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
+        <span style={{fontSize:10,color:"var(--mu)",marginLeft:6}}>{p.color||"#000000"}</span>
+      </PR>
+    </div>
+  )
+  if(efx.type==="chromatic-ab") return (
+    <div>
+      <Sl l="distance" v={p.distance==null?6:p.distance} mn={0} mx={40} st={.5}
+        fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up({distance:v})}}/>
+      <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1}
+        fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
+    </div>
+  )
+  if(efx.type==="glow") return (
+    <div>
+      <Sl l="radius" v={p.radius==null?12:p.radius} mn={1} mx={60} st={1}
+        fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({radius:v})}}/>
+      <Sl l="strength" v={p.strength==null?60:p.strength} mn={0} mx={100} st={1}
+        fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({strength:v})}}/>
+      <Sl l="threshold" v={p.threshold==null?120:p.threshold} mn={0} mx={255} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up({threshold:v})}}/>
+    </div>
+  )
+  if(efx.type==="emboss") return (
+    <div>
+      <Sl l="angle" v={p.angle==null?135:p.angle} mn={0} mx={360} st={1}
+        fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
+      <Sl l="strength" v={p.strength==null?100:p.strength} mn={0} mx={400} st={1}
+        fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({strength:v})}}/>
+      <Sl l="midpoint" v={p.flat==null?128:p.flat} mn={0} mx={255} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up({flat:v})}}/>
+    </div>
+  )
+  if(efx.type==="edge-detect") return (
+    <div>
+      <Sl l="strength" v={p.strength==null?100:p.strength} mn={0} mx={400} st={1}
+        fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({strength:v})}}/>
+      <PR l="invert">
+        <button className={p.invert?"ac":"ghost"} style={{minHeight:32,padding:"0 14px"}}
+          onClick={function(){up({invert:!p.invert})}}>
+          {p.invert?"on":"off"}
+        </button>
+      </PR>
+    </div>
+  )
+  if(efx.type==="pixelate") return (
+    <Sl l="block size" v={p.size==null?8:p.size} mn={2} mx={64} st={1}
+      fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({size:v})}}/>
+  )
+  if(efx.type==="duotone") return (
+    <div>
+      <PR l="shadows">
+        <input type="color" value={p.shadow||"#0a0a2a"}
+          onChange={function(e){up({shadow:e.target.value})}}
+          style={{width:44,height:32,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
+        <span style={{fontSize:10,color:"var(--mu)",marginLeft:6}}>{p.shadow||"#0a0a2a"}</span>
+      </PR>
+      <PR l="highlights">
+        <input type="color" value={p.highlight||"#f5e642"}
+          onChange={function(e){up({highlight:e.target.value})}}
+          style={{width:44,height:32,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
+        <span style={{fontSize:10,color:"var(--mu)",marginLeft:6}}>{p.highlight||"#f5e642"}</span>
+      </PR>
+    </div>
+  )
+  if(efx.type==="dir-blur") return (
+    <div>
+      <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1}
+        fmt={function(v){return Math.round(v)+"deg"}}
+        fn={function(v){up({angle:v})}}/>
+      <Sl l="distance" v={p.distance==null?20:p.distance} mn={1} mx={200} st={1}
+        fmt={function(v){return Math.round(v)+"px"}}
+        fn={function(v){up({distance:v})}}/>
+      <PR l="spread">
+        {["both","forward","backward"].map(function(opt){
+          return (
+            <button key={opt}
+              className={(p.spread||"both")===opt?"ac":"ghost"}
+              style={{flex:1,fontSize:10,minHeight:32}}
+              onClick={function(){up({spread:opt})}}>
+              {opt}
+            </button>
+          )
+        })}
+      </PR>
+    </div>
+  )
+  if(efx.type==="transform") return (
+    <div>
+      <Sl l="translate x" v={p.tx||0}  mn={-.5} mx={.5}   st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({tx:v})}}/>
+      <Sl l="translate y" v={p.ty||0}  mn={-.5} mx={.5}   st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({ty:v})}}/>
+      <Sl l="rotation"    v={p.rot||0} mn={-180} mx={180}  st={1}    fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({rot:v})}}/>
+      <Sl l="scale unif"  v={p.su!=null?p.su:1} mn={.05} mx={4} st={.01} fmt={function(v){return v.toFixed(2)+"x"}} fn={function(v){up({su:v})}}/>
+      <Sl l="scale x"     v={p.sx!=null?p.sx:1} mn={.05} mx={4} st={.01} fmt={function(v){return v.toFixed(2)+"x"}} fn={function(v){up({sx:v})}}/>
+      <Sl l="scale y"     v={p.sy!=null?p.sy:1} mn={.05} mx={4} st={.01} fmt={function(v){return v.toFixed(2)+"x"}} fn={function(v){up({sy:v})}}/>
+      <Sl l="skew x"      v={p.skX||0} mn={-60} mx={60}   st={1}    fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({skX:v})}}/>
+      <Sl l="skew y"      v={p.skY||0} mn={-60} mx={60}   st={1}    fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({skY:v})}}/>
+    </div>
+  )
+  if(efx.type==="solarise") return (
+    <Sl l="threshold" v={p.threshold==null?.5:p.threshold} mn={0} mx={1} st={.01}
+      fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({threshold:v})}}/>)
+  if(efx.type==="wave") return (
+    <div>
+      <RandRow enabled={p.rAmpEn} onToggle={function(){up({rAmpEn:!p.rAmpEn})}}
+        rangeBipolar={p.rAmpBi!==false} onRangeBipolar={function(v){up({rAmpBi:v})}}
+        scale={p.rAmpSc} onScale={function(v){up({rAmpSc:v})}}
+        offset={p.rAmpOff||0} onOffset={function(v){up({rAmpOff:v})}}
+        amount={p.rAmpAmt} onAmount={function(v){up({rAmpAmt:v})}}
+        seed={p.rSeed||1} onSeed={function(v){up({rSeed:v})}}>
+        <Sl l="amplitude" v={p.amplitude==null?.05:p.amplitude} mn={0} mx={.5} st={.005}
+          fmt={function(v){return (v*100).toFixed(1)+"%"}} fn={function(v){up({amplitude:v})}}/>
+      </RandRow>
+      <RandRow enabled={p.rFxEn} onToggle={function(){up({rFxEn:!p.rFxEn})}}
+        rangeBipolar={p.rFxBi!==false} onRangeBipolar={function(v){up({rFxBi:v})}}
+        scale={p.rFxSc} onScale={function(v){up({rFxSc:v})}}
+        offset={p.rFxOff||0} onOffset={function(v){up({rFxOff:v})}}
+        amount={p.rFxAmt} onAmount={function(v){up({rFxAmt:v})}}
+        seed={p.rSeed||1} onSeed={function(v){up({rSeed:v})}}>
+        <Sl l="freq x" v={p.freqX==null?3:p.freqX} mn={0} mx={20} st={.5}
+          fmt={function(v){return v.toFixed(1)}} fn={function(v){up({freqX:v})}}/>
+      </RandRow>
+      <RandRow enabled={p.rFyEn} onToggle={function(){up({rFyEn:!p.rFyEn})}}
+        rangeBipolar={p.rFyBi!==false} onRangeBipolar={function(v){up({rFyBi:v})}}
+        scale={p.rFySc} onScale={function(v){up({rFySc:v})}}
+        offset={p.rFyOff||0} onOffset={function(v){up({rFyOff:v})}}
+        amount={p.rFyAmt} onAmount={function(v){up({rFyAmt:v})}}
+        seed={p.rSeed||1} onSeed={function(v){up({rSeed:v})}}>
+        <Sl l="freq y" v={p.freqY==null?3:p.freqY} mn={0} mx={20} st={.5}
+          fmt={function(v){return v.toFixed(1)}} fn={function(v){up({freqY:v})}}/>
+      </RandRow>
+      <Sl l="phase x" v={p.phaseX||0} mn={0} mx={6.28} st={.05}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({phaseX:v})}}/>
+      <Sl l="phase y" v={p.phaseY||0} mn={0} mx={6.28} st={.05}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({phaseY:v})}}/>
+      <div style={{fontSize:8,color:"var(--mu)",padding:"2px 84px",fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.4}}>
+        All rand params share one seed
+      </div>
+    </div>)
+  if(efx.type==="twirl") return (
+    <div>
+      <Sl l="angle" v={p.angle==null?180:p.angle} mn={-720} mx={720} st={5}
+        fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
+      <Sl l="radius" v={p.radius==null?.5:p.radius} mn={.05} mx={1.5} st={.01}
+        fn={function(v){up({radius:v})}}/>
+      <Sl l="centre x" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up({cx:v})}}/>
+      <Sl l="centre y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up({cy:v})}}/>
+    </div>)
+  if(efx.type==="bulge") return (
+    <div>
+      <Sl l="strength" v={p.strength==null?.5:p.strength} mn={-2} mx={2} st={.05}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({strength:v})}}/>
+      <Sl l="radius" v={p.radius==null?.7:p.radius} mn={.05} mx={1.5} st={.01}
+        fn={function(v){up({radius:v})}}/>
+      <Sl l="centre x" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up({cx:v})}}/>
+      <Sl l="centre y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up({cy:v})}}/>
+    </div>)
+  if(efx.type==="uv-distort") return (
+    <div>
+      <NRef l="UV source" v={p.uvRefId} nodes={props.nodes} selfId={props.selfId}
+        iC={props.iC} mode="source" fn={function(v){up({uvRefId:v})}}/>
+      <Se l="mode" v={p.mode||"displacement"} opts={["displacement","absolute"]}
+        fn={function(v){up({mode:v})}}/>
+      {(p.mode||"displacement")==="displacement"&&(
+        <div>
+          <Sl l="X amount" v={p.amtX==null?.1:p.amtX} mn={-1} mx={1} st={.005}
+            fmt={function(v){return (v*100).toFixed(1)+"%"}} fn={function(v){up({amtX:v})}}/>
+          <Sl l="Y amount" v={p.amtY==null?.1:p.amtY} mn={-1} mx={1} st={.005}
+            fmt={function(v){return (v*100).toFixed(1)+"%"}} fn={function(v){up({amtY:v})}}/>
+        </div>)}
+      <Se l="X channel" v={p.chX||"R"} opts={["R","G","B","luminosity"]}
+        fn={function(v){up({chX:v})}}/>
+      <Se l="Y channel" v={p.chY||"G"} opts={["R","G","B","luminosity"]}
+        fn={function(v){up({chY:v})}}/>
+    </div>)
+  if(efx.type==="polar-to-cart"||efx.type==="cart-to-polar") return (
+    <div style={{padding:"8px 0",fontSize:10,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.5}}>
+      {efx.type==="cart-to-polar"
+        ?"Wraps image into a circle (Cartesian → Polar)"
+        :"Unrolls circle into a strip (Polar → Cartesian)"}
+    </div>)
+  if(efx.type==="show-points") return (
+    <div>
+      <Se l="style" v={p.style||"circle"} opts={["circle","dot","square","crosshair"]}
+        fn={function(v){up({style:v})}}/>
+      <Co l="colour" v={p.color||"#00ccff"} fn={function(v){up({color:v})}}/>
+      <Sl l="size" v={p.size||6} mn={1} mx={40} st={.5}
+        fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up({size:v})}}/>
+      <Sl l="opacity" v={p.opacity==null?.8:p.opacity} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({opacity:v})}}/>
+      <PR l="labels">
+        <button className={p.showLabels?"ac":"ghost"} style={{flex:1,minHeight:32,fontSize:11}}
+          onClick={function(){up({showLabels:!p.showLabels})}}>
+          {p.showLabels?"on":"off"}
+        </button>
+      </PR>
+      {p.showLabels&&<div>
+        <Sl l="label size" v={p.labelSize||9} mn={6} mx={20} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>
+        <Co l="label col" v={p.labelColor||"#ffffff"} fn={function(v){up({labelColor:v})}}/>
+      </div>}
+    </div>)
+  if(efx.type==="point-map") {
+    var mappings=p.mappings||[]
+    function updMapping(i,patch){
+      var nm=mappings.map(function(m,j){return j===i?Object.assign({},m,patch):m})
+      up({mappings:nm})
+    }
+    function addMapping(){up({mappings:mappings.concat([{inputAttr:"pointIndex",outputAttr:"scale",mode:"linear",min:0,max:1,multiply:false}])})}
+    function delMapping(i){up({mappings:mappings.filter(function(_,j){return j!==i})})}
+    return (
+      <div>
+        {mappings.length===0&&<div className="empty" style={{padding:"8px 0"}}>no mappings — tap + to add</div>}
+        {mappings.map(function(m,mi){
+          return (
+            <div key={mi} style={{borderBottom:"1px solid var(--bd)",paddingBottom:8,marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>mapping {mi+1}</span>
+                <button onClick={function(){delMapping(mi)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
+              </div>
+              <Se l="input" v={m.inputAttr||"pointIndex"} opts={[
+                "pointIndex","pointCount","x","y",
+                "rowNorm","colNorm","row","col","rowCount","colCount",
+                "ringIndex","ringCount","angleNorm","radiusNorm",
+                "spiralT","windingNumber",
+                "fibIndex","scatterIndex","perimeterT"
+              ]} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
+              <Se l="output" v={m.outputAttr||"scale"} opts={["scale","rotation","opacity","x","y","sourceIndex"]} fn={function(v){updMapping(mi,{outputAttr:v,min:null,max:null})}}/>
+              <Se l="mode" v={m.mode||"linear"} opts={["linear","invert","log","exp","random"]} fn={function(v){updMapping(mi,{mode:v})}}/>
+              {(function(){
+                var oa=m.outputAttr||"scale"
+                var defMin=oa==="opacity"?0:oa==="rotation"?-180:oa==="scale"?0:oa==="sourceIndex"?0:-1
+                var defMax=oa==="opacity"?1:oa==="rotation"?180:oa==="scale"?3:oa==="sourceIndex"?10:1
+                var mn=oa==="rotation"?-360:oa==="scale"||oa==="opacity"?0:oa==="sourceIndex"?0:-4
+                var mx=oa==="rotation"?360:oa==="scale"?8:oa==="opacity"?1:oa==="sourceIndex"?20:4
+                return (<div>
+                  <Sl l="min out" v={m.min==null?defMin:m.min} mn={mn} mx={mx} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{min:v})}}/>
+                  <Sl l="max out" v={m.max==null?defMax:m.max} mn={mn} mx={mx} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{max:v})}}/>
+                </div>)
+              })()}
+              <Se l="combine" v={m.combine||"replace"} opts={["replace","add","subtract","multiply"]}
+                fn={function(v){updMapping(mi,{combine:v})}}/>
+            </div>
+          )
+        })}
+        <button onClick={addMapping} className="ac" style={{width:"100%",minHeight:36,fontSize:10,letterSpacing:".05em",fontFamily:"'IBM Plex Mono',monospace"}}>+ add mapping</button>
+      </div>
+    )
+  }
+  if(efx.type==="source-at-points") {
+    var satSrcs=p.sources||[]
+    function updSrc(i,patch){
+      var ns=satSrcs.map(function(s,j){return j===i?Object.assign({},s,patch):s})
+      up({sources:ns})
+    }
+    function addSrc(){up({sources:satSrcs.concat([{refId:null,weight:1}])})}
+    function delSrc(i){up({sources:satSrcs.filter(function(_,j){return j!==i})})}
+    return (
+      <div>
+        {satSrcs.length===0&&<div className="empty" style={{padding:"8px 0"}}>no sources — tap + to add</div>}
+        {satSrcs.map(function(s,si){
+          return (
+            <div key={si} style={{borderBottom:"1px solid var(--bd)",paddingBottom:6,marginBottom:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>source {si+1}</span>
+                <button onClick={function(){delSrc(si)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
+              </div>
+              {(function(idx){return <NRef l="node" v={s.refId} nodes={props.nodes||[]} selfId={props.selfId} iC={props.iC}
+                mode="source" fn={function(v){updSrc(idx,{refId:v})}}/>})(si)}
+              <Sl l="weight" v={s.weight==null?1:s.weight} mn={0} mx={10} st={.1}
+                fmt={function(v){return v.toFixed(1)}} fn={function(v){updSrc(si,{weight:v})}}/>
+            </div>
+          )
+        })}
+        <button onClick={addSrc} className="ac" style={{width:"100%",minHeight:36,fontSize:10,letterSpacing:".05em",fontFamily:"'IBM Plex Mono',monospace"}}>+ add source</button>
+        <div style={{borderTop:"1px solid var(--bd)",paddingTop:8,marginTop:4}}>
+          <Se l="distribute" v={p.distributionMode||"weighted"} opts={["weighted","sequence","attribute"]}
+            fn={function(v){up({distributionMode:v})}}/>
+          <Se l="wrap" v={p.wrap||"clamp"} opts={["clamp","repeat"]}
+            fn={function(v){up({wrap:v})}}/>
+        </div>
+      </div>
+    )
+  }
+  return <div className="empty">no parameters</div>
+}
+
+/* ─── MASK CARD ───────────────────────────────────────── */
+/* ─── INLINE RENAME ────────────────────────────────────── */
+// Small inline rename widget for effect/mask/stackref cards. Shows the label
+// (custom name if set, else default label). Double-click/tap to rename.
+// props: value (current name, may be empty), fallback (default label when no name),
+//        onChange(newName), style, labelStyle
+function InlineRename(props) {
+  var edSt=useState(false); var ed=edSt[0], setEd=edSt[1]
+  var nmSt=useState(props.value||""); var nm=nmSt[0], setNm=nmSt[1]
+  var inR=useRef(null)
+  useEffect(function(){setNm(props.value||"")},[props.value])
+  useEffect(function(){if(ed&&inR.current){inR.current.focus();inR.current.select()}},[ed])
+  function commit(){
+    setEd(false)
+    var t=nm.trim()
+    if(t!==(props.value||""))props.onChange(t)
+  }
+  if(ed){
+    return (
+      <input ref={inR} value={nm}
+        onChange={function(e){setNm(e.target.value)}}
+        onBlur={commit}
+        onKeyDown={function(e){
+          if(e.key==="Enter")commit()
+          if(e.key==="Escape"){setEd(false);setNm(props.value||"")}
+        }}
+        onClick={function(e){e.stopPropagation()}}
+        placeholder={props.fallback}
+        style={Object.assign({flex:1,minWidth:0,fontSize:12,padding:"2px 6px",
+          background:"var(--bg)",border:"1px solid var(--ac)",borderRadius:4,
+          color:"var(--tx)",fontFamily:"'IBM Plex Mono',monospace"},props.style||{})}/>
+    )
+  }
+  return (
+    <span onDoubleClick={function(e){e.stopPropagation();setEd(true)}}
+      title="Double-tap to rename"
+      style={Object.assign({flex:1,minWidth:0,cursor:"text",userSelect:"none",
+        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},props.labelStyle||{})}>
+      {props.value && props.value.trim() ? props.value : props.fallback}
+    </span>
+  )
+}
+
+function MaskCard(props) {
+  // Defensive copy — backfill missing fields
+  var mk=Object.assign({
+    refId:null, channel:"luminosity", invert:false, strength:1, opacity:100,
+    blendMode:"multiply", effectStack:[], enabled:true, name:""
+  }, props.mask||{})
+  var tabSt=useState("source"); var tab=tabSt[0], setTab=tabSt[1]
+  var armSt=useState(false); var armed=armSt[0], setArmed=armSt[1]
+  var timerRef=useRef(null)
+  useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
+  function handleDel(){
+    if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
+    else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
+  }
+  var nEfx=(mk.effectStack||[]).length
+  var tabs=[
+    {id:"source", label:"Source"},
+    {id:"layer",  label:"Layer"},
+    {id:"effects",label:"Effects"+(nEfx>0?" ("+nEfx+")":""),color:"ac"},
+  ]
+  return (
+    <div className="card" style={{marginBottom:10,border:"1px solid rgba(176,96,240,.25)"}}>
+      {/* Header — matches EfxCard layout */}
+      <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+        <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+          {props.onMove&&<button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>}
+          {props.onMove&&<button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>}
+        </div>
+        <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},mk,{enabled:mk.enabled===false}))}}
+          style={{color:mk.enabled===false?"var(--mu)":"var(--lv)",fontSize:18}}>
+          {mk.enabled===false?"○":"●"}
+        </button>
+        <InlineRename value={mk.name} fallback={mk.channel||"luminosity"}
+          onChange={function(nw){props.onChange(Object.assign({},mk,{name:nw}))}}
+          labelStyle={{fontSize:12,color:mk.enabled===false?"var(--mu)":"var(--lv)",
+            fontFamily:"'IBM Plex Mono',monospace",fontWeight:500,padding:"2px 0"}}/>
+        {props.onPromote&&(function(){
+          var taps=(props.nodes||[]).filter(function(pn){
+            return pn.type==="promoted"&&pn.tapPath&&pn.tapPath.afterId===mk.id
+          })
+          var isTapped=taps.length>0
+          var mTapSt=useState(false); var mTapPop=mTapSt[0], setMTapPop=mTapSt[1]
+          var mTapRef=useRef(null), mMenuRef=useRef(null)
+          var mTapPos=usePopoverPosition(mTapRef,mTapPop,"above")
+          useEffect(function(){
+            if(!mTapPop) return
+            function h(e){
+              if(mTapRef.current&&mTapRef.current.contains(e.target))return
+              if(mMenuRef.current&&mMenuRef.current.contains(e.target))return
+              setMTapPop(false)
+            }
+            document.addEventListener("mousedown",h)
+            return function(){document.removeEventListener("mousedown",h)}
+          },[mTapPop])
+          return (
+            <div style={{position:"relative",display:"inline-flex"}}>
+              <button ref={mTapRef}
+                className={"promote-btn"+(isTapped?" tapped":"")}
+                onClick={function(){isTapped?setMTapPop(!mTapPop):props.onPromote()}}
+                title={isTapped?"Tapped — click to see references":"Promote mask tap point"}>
+                {isTapped?"● tapped":"↗ tap"}
+              </button>
+              {isTapped&&!mTapPop&&<span style={{position:"absolute",bottom:-2,right:-2,width:6,height:6,borderRadius:"50%",background:"var(--ac)"}}/>}
+              {mTapPop&&mTapPos&&createPortal(
+                <div ref={mMenuRef} style={Object.assign({},mTapPos,{
+                  position:"fixed",zIndex:9100,background:"var(--pn)",
+                  border:"1px solid var(--bd)",borderRadius:10,
+                  boxShadow:"0 -6px 24px rgba(0,0,0,.7)",minWidth:180,padding:"8px 0"})}>
+                  <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",
+                    padding:"2px 12px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>Promoted taps</div>
+                  {taps.map(function(tap){
+                    var refs=(props.nodes||[]).filter(function(rn){
+                      return rn.id!==tap.id&&JSON.stringify(rn).indexOf(tap.id)>=0
+                    })
+                    return (
+                      <div key={tap.id}>
+                        <div onClick={function(){setMTapPop(false);props.onNavigate&&props.onNavigate(tap.id)}}
+                          style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",cursor:"pointer",
+                            color:"var(--ac)",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}
+                          className="drop-item">
+                          ◈ {tap.name}
+                        </div>
+                        {refs.map(function(ref){
+                          return (
+                            <div key={ref.id} onClick={function(){setMTapPop(false);props.onNavigate&&props.onNavigate(ref.id)}}
+                              style={{display:"flex",alignItems:"center",gap:8,padding:"4px 14px 4px 28px",
+                                cursor:"pointer",color:"var(--di)",fontSize:10}}
+                              className="drop-item">
+                              ↳ {ref.name||ref.type}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>,
+                document.body
+              )}
+            </div>
+          )
+        })()}
+        <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,
+          background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",
+          color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
+          {armed?"confirm ×":"×"}
+        </button>
+      </div>
+      <TabBar tabs={tabs} active={tab} onChange={setTab}/>
+      {tab==="source" && (
+        <div className="card-body">
+          {!mk.refId && (
+            <div style={{fontSize:9,color:"#e0a060",background:"rgba(224,160,96,.1)",
+              border:"1px solid rgba(224,160,96,.25)",borderRadius:4,padding:"4px 8px",marginBottom:8}}>
+              ⚠ no source — mask inactive until a source is selected
+            </div>
+          )}
+          <NRef l="source" v={mk.refId} nodes={props.nodes} selfId={props.selfId}
+            iC={props.iC} mode="source" asMask={true}
+            siblingEffects={props.siblingEffects} ownerNodeId={props.ownerNodeId}
+            fn={function(v){props.onChange(Object.assign({},mk,{refId:v}))}}/>
+          <Se l="channel" v={mk.channel}
+            opts={MCH}
+            fn={function(v){props.onChange(Object.assign({},mk,{channel:v}))}}/>
+          <Sl l="fill" v={mk.fillOpacity==null?100:mk.fillOpacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){props.onChange(Object.assign({},mk,{fillOpacity:v}))}}/>
+          <PR l="invert">
+            <button className="icon-btn sm"
+              onClick={function(){props.onChange(Object.assign({},mk,{invert:!mk.invert}))}}
+              style={{color:mk.invert?"var(--ac)":"var(--mu)",fontSize:18,width:32,height:32}}>
+              {mk.invert?"●":"○"}
+            </button>
+            <span style={{fontSize:10,color:mk.invert?"var(--ac)":"var(--mu)",marginLeft:4}}>
+              {mk.invert?"inverted":"normal"}
+            </span>
+          </PR>
+        </div>
+      )}
+      {tab==="layer" && (
+        <div className="card-body">
+          <Se l="blend" v={mk.blendMode} opts={MBMS}
+            fn={function(v){props.onChange(Object.assign({},mk,{blendMode:v}))}}/>
+          <Sl l="opacity" v={mk.opacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){props.onChange(Object.assign({},mk,{opacity:v}))}}/>
+<BlendIfAccordion>
+            <BlendIfSlider label="This"
+              values={((mk.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange(Object.assign({},mk,{blendIf:Object.assign({},mk.blendIf||{},{thisLayer:v})}))}}/>
+            <BlendIfSlider label="Below" disabled={true}
+              values={((mk.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange(Object.assign({},mk,{blendIf:Object.assign({},mk.blendIf||{},{underlyingLayer:v})}))}}/>
+          </BlendIfAccordion>
+        </div>
+      )}
+      {tab==="effects" && (
+        <div className="card-body" style={{paddingTop:8}}>
+          {nEfx===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no effects on this mask</div>}
+          {props.onEditEffects && (
+            <button className="ac" style={{width:"100%",marginTop:nEfx===0?0:4}} onClick={props.onEditEffects}>
+              {nEfx>0?"edit effects ("+nEfx+") →":"+ add effects →"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── STACK REF CARD ─────────────────────────────────────── */
+// Renders a __stackref__ item in an effect or mask stack.
+// Same controls as any other stack item: ▲▼ reorder, ●/○ enable, armed delete.
+// No Primary/Layer/Mask tabs — the referenced Stack has its own editing panel.
+function StackRefCard(props) {
+  var item = props.item
+  var refNode = props.nodes.find(function(n){ return n.id===item.stackRefId })
+  var armSt=useState(false); var armed=armSt[0], setArmed=armSt[1]
+  // stackType derived from refNode if present, else from item.stackType hint
+  var stype = (refNode && refNode.stackType) || props.stackType || "effect"
+  var matchingStacks = (props.nodes||[]).filter(function(n){
+    return n.type==="stack" && n.stackType===stype
+  })
+  var timerRef=useRef(null)
+  useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
+  function handleDel(){
+    if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
+    else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
+  }
+  var isMask = refNode && refNode.stackType==="mask"
+  var accent = isMask ? "var(--lv)" : "var(--ac)"
+  var accentBg = isMask ? "rgba(176,96,240,.08)" : "rgba(36,204,168,.08)"
+  return (
+    <div className="card" style={{marginBottom:10,border:isMask?"1px solid rgba(176,96,240,.3)":"1px solid rgba(36,204,168,.28)"}}>
+      <div className="card-hdr" style={{background:accentBg,flexWrap:"wrap"}}>
+        <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+          <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
+          <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
+        </div>
+        <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},item,{enabled:!item.enabled}))}}
+          style={{color:item.enabled?accent:"var(--mu)",fontSize:18}}>
+          {item.enabled?"●":"○"}
+        </button>
+        <button onClick={function(){
+          if(props.onNavigate&&item.stackRefId)props.onNavigate(item.stackRefId)
+        }} disabled={!refNode||!props.onNavigate}
+          title={refNode?"Open "+refNode.name:""}
+          style={{fontSize:9,padding:"2px 7px",borderRadius:4,background:accentBg,
+            color:accent,border:"1px solid "+accent,flexShrink:0,marginRight:4,
+            cursor:refNode&&props.onNavigate?"pointer":"default",
+            fontFamily:"'IBM Plex Mono',monospace",textTransform:"none",letterSpacing:0,
+            minHeight:0,lineHeight:1.4}}>
+          {isMask?"mask":"effect"} stack ↗
+        </button>
+        <InlineRename value={item.name} fallback={refNode?refNode.name:(isMask?"mask ref":"effect ref")}
+          onChange={function(nw){props.onChange(Object.assign({},item,{name:nw}))}}
+          labelStyle={{fontSize:11,color:item.enabled?accent:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",padding:"2px 0"}}/>
+        <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",
+          fontSize:armed?10:14,background:armed?"rgba(224,48,96,.2)":"none",
+          border:armed?"1px solid var(--dng)":"none",
+          color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
+          {armed?"confirm ×":"×"}
+        </button>
+      </div>
+      {/* Reference selector below header */}
+      <div style={{padding:"6px 10px",borderBottom:"1px solid var(--bd)",display:"flex",gap:8,alignItems:"center"}}>
+        <span style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".08em",flexShrink:0}}>refs</span>
+        <select value={item.stackRefId||""}
+          onChange={function(e){props.onChange(Object.assign({},item,{stackRefId:e.target.value||null}))}}
+          style={{flex:1,fontSize:11,padding:"3px 4px",
+            background:"var(--bg)",border:"1px solid var(--bd)",borderRadius:4,
+            color:item.enabled?accent:"var(--mu)",
+            fontFamily:"'IBM Plex Mono',monospace",cursor:"pointer"}}>
+          <option value="">— select stack —</option>
+          {matchingStacks.map(function(n){return <option key={n.id} value={n.id}>{n.name}</option>})}
+        </select>
+      </div>
+        {/* Opacity + blend mode row */}
+      <div style={{padding:"8px 12px",borderTop:"1px solid var(--bd)",display:"flex",gap:8,alignItems:"center"}}>
+        <select value={item.blendMode||"normal"}
+          onChange={function(e){props.onChange(Object.assign({},item,{blendMode:e.target.value}))}}
+          style={{flex:1,fontSize:10,padding:"3px 4px"}}>
+          {(isMask?MBMS:EBMS).map(function(m){return <option key={m}>{m}</option>})}
+        </select>
+        <input type="range" min={0} max={100} step={1}
+          value={item.opacity!=null?item.opacity:100}
+          onChange={function(e){props.onChange(Object.assign({},item,{opacity:+e.target.value}))}}
+          style={{flex:1}}/>
+        <span style={{fontSize:10,color:"var(--di)",minWidth:30,textAlign:"right",flexShrink:0}}>
+          {Math.round(item.opacity!=null?item.opacity:100)}%
+        </span>
+      </div>
+
+    </div>
+  )
+}
+
+/* ─── EFFECT CARD ─────────────────────────────────────── */
+function EfxCard(props) {
+  var efx=props.efx
+  var tabSt=useState("primary"); var tab=tabSt[0], setTab=tabSt[1]
+  var armedSt=useState(false); var armed=armedSt[0], setArmed=armedSt[1]
+  var timerRef=useRef(null)
+  // Swap state machine: null | "picking" | {type, keepMask, keepLayer}
+  var swapSt=useState(null); var swap=swapSt[0], setSwap=swapSt[1]
+  var swapAnchorRef=useRef(null)
+  var swapMenuRef=useRef(null)
+  var swapPos=usePopoverPosition(swapAnchorRef, swap==="picking", "above")
+  useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
+  useEffect(function(){
+    if(swap!=="picking") return
+    function h(e){
+      if(swapAnchorRef.current&&swapAnchorRef.current.contains(e.target)) return
+      if(swapMenuRef.current&&swapMenuRef.current.contains(e.target)) return
+      setSwap(null)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[swap])
+  function handleDel(){
+    if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
+    else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
+  }
+  var nMasks=(efx.maskStack||[]).length
+  var hasNonDefaultLayer=(efx.opacity!==100||efx.blendMode!=="normal")
+  function pickType(t){
+    if(t===efx.type){setSwap(null);return}
+    // Skip confirm step entirely when there's nothing to carry over
+    if(nMasks===0&&!hasNonDefaultLayer){
+      var fresh=mkEfx(t)
+      props.onChange(Object.assign({},fresh,{id:efx.id,name:efx.name,enabled:efx.enabled,maskStack:[],opacity:100,blendMode:"normal"}))
+      setSwap(null)
+    } else {
+      setSwap({type:t, keepMask:true, keepLayer:true})
+    }
+  }
+  function confirmSwap(){
+    var s=swap; if(!s||!s.type) return
+    var fresh=mkEfx(s.type)
+    var next=Object.assign({},fresh,{
+      id:efx.id,                               // keep same id so list key stable
+      name:efx.name,                           // keep user's custom name
+      enabled:efx.enabled,
+      maskStack: s.keepMask  ? efx.maskStack  : [],
+      opacity:   s.keepLayer ? efx.opacity    : 100,
+      blendMode: s.keepLayer ? efx.blendMode  : "normal",
+    })
+    props.onChange(next)
+    setSwap(null)
+  }
+  var tabs=[
+    {id:"primary",label:"Primary"},
+    {id:"layer",  label:"Layer"},
+    {id:"mask",   label:"Mask"+(nMasks>0?" ("+nMasks+")":""),color:"lv"},
+  ]
+  // Confirm-swap overlay rendered inside the card body
+  if(swap&&swap!=="picking") return (
+    <div className="card" style={{marginBottom:10,border:"1px solid var(--ac)"}}>
+      <div className="card-hdr" style={{background:"rgba(36,204,168,.06)"}}>
+        <span style={{fontSize:11,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>
+          {efx.type}
+        </span>
+        <span style={{fontSize:12,color:"var(--mu)",padding:"0 6px"}}>→</span>
+        <span style={{flex:1,fontSize:12,color:"var(--ac)",fontFamily:"'IBM Plex Mono',monospace",fontWeight:600}}>
+          {swap.type}
+        </span>
+        <button className="ghost" style={{fontSize:12,padding:"0 8px",minHeight:32}} onClick={function(){setSwap(null)}}>cancel</button>
+      </div>
+      <div style={{padding:"10px 12px",display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{fontSize:11,color:"var(--di)"}}>What to carry over from the current effect?</div>
+        {/* Retain mask stack option — only shown when masks exist */}
+        {nMasks>0 && (
+          <button
+            onClick={function(){setSwap(Object.assign({},swap,{keepMask:!swap.keepMask}))}}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",
+              background:swap.keepMask?"var(--sl)":"var(--sf)",border:"1px solid "+(swap.keepMask?"var(--lv)":"var(--bd)"),
+              borderRadius:6,cursor:"pointer",textAlign:"left"}}>
+            <span style={{fontSize:16,color:swap.keepMask?"var(--lv)":"var(--mu)"}}>
+              {swap.keepMask?"◈":"○"}
+            </span>
+            <div>
+              <div style={{fontSize:11,color:swap.keepMask?"var(--tx)":"var(--mu)",fontWeight:swap.keepMask?600:400}}>
+                retain mask stack
+              </div>
+              <div style={{fontSize:9,color:"var(--mu)"}}>
+                {nMasks} mask{nMasks!==1?"s":""} · {swap.keepMask?"will be kept":"will be cleared"}
+              </div>
+            </div>
+          </button>
+        )}
+        {/* Retain layer settings option — only shown when non-default */}
+        {hasNonDefaultLayer && (
+          <button
+            onClick={function(){setSwap(Object.assign({},swap,{keepLayer:!swap.keepLayer}))}}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",
+              background:swap.keepLayer?"var(--sl)":"var(--sf)",border:"1px solid "+(swap.keepLayer?"var(--ac)":"var(--bd)"),
+              borderRadius:6,cursor:"pointer",textAlign:"left"}}>
+            <span style={{fontSize:16,color:swap.keepLayer?"var(--ac)":"var(--mu)"}}>
+              {swap.keepLayer?"●":"○"}
+            </span>
+            <div>
+              <div style={{fontSize:11,color:swap.keepLayer?"var(--tx)":"var(--mu)",fontWeight:swap.keepLayer?600:400}}>
+                retain layer settings
+              </div>
+              <div style={{fontSize:9,color:"var(--mu)"}}>
+                opacity {Math.round(efx.opacity)}% · {efx.blendMode} · {swap.keepLayer?"will be kept":"will reset to defaults"}
+              </div>
+            </div>
+          </button>
+        )}
+        {/* No non-default settings to carry over */}
+        {nMasks===0&&!hasNonDefaultLayer&&(
+          <div style={{fontSize:11,color:"var(--mu)",padding:"4px 0"}}>
+            No custom masks or layer settings to carry over.
+          </div>
+        )}
+        <button className="ac" style={{width:"100%",minHeight:40}} onClick={confirmSwap}>
+          apply {swap.type}
+        </button>
+      </div>
+    </div>
+  )
+  return (
+    <div className="card" style={{marginBottom:10}}>
+      <div className="card-hdr">
+        <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+          <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
+          <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
+        </div>
+        <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},efx,{enabled:!efx.enabled}))}} style={{color:efx.enabled?"var(--ac)":"var(--mu)",fontSize:18}}>
+          {efx.enabled?"●":"○"}
+        </button>
+        {["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart"].includes(efx.type)&&(
+          <button onClick={function(){props.onChange(Object.assign({},efx,{domain:efx.domain==="points"?"pixels":"points"}))}}
+            style={{fontSize:8,padding:"2px 6px",borderRadius:3,cursor:"pointer",
+              fontFamily:"'IBM Plex Mono',monospace",
+              border:"1px solid "+(efx.domain==="points"?"var(--lv)":"var(--bd)"),
+              background:efx.domain==="points"?"rgba(176,96,240,.15)":"none",
+              color:efx.domain==="points"?"var(--lv)":"var(--mu)"}}>
+            {efx.domain==="points"?"pt":"px"}
+          </button>
+        )}
+        {/* Type button — tap to open effect-swap picker */}
+        <button ref={swapAnchorRef} onClick={function(){setSwap(swap==="picking"?null:"picking")}}
+          title="Tap to swap effect type"
+          style={{fontSize:12,padding:"0 8px",minHeight:32,fontFamily:"'IBM Plex Mono',monospace",
+            fontWeight:500,color:efx.enabled?"var(--tx)":"var(--mu)",
+            background:"none",border:"none",cursor:"pointer",flexShrink:0,
+            textDecoration:"underline dotted",textUnderlineOffset:3}}>
+          {efx.type}
+        </button>
+        {/* Custom name (separate from type) */}
+        <InlineRename value={efx.name} fallback=""
+          onChange={function(nw){props.onChange(Object.assign({},efx,{name:nw}))}}
+          labelStyle={{fontSize:11,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",fontStyle:"italic",padding:"2px 0"}}/>
+        {/* Effect-swap picker portal */}
+        {swap==="picking"&&swapPos&&createPortal(
+          <div ref={swapMenuRef} className="eff-menu" style={swapPos}>
+            {EFX_GROUPS.map(function(grp){return (
+              <div key={grp.label}>
+                <div className="drop-grp">{grp.label}</div>
+                {grp.items.map(function(t){return (
+                  <div key={t} className={"drop-item"+(t===efx.type?" sel":"")}
+                    onClick={function(){pickType(t)}}
+                    style={t===efx.type?{color:"var(--ac)"}:{}}>
+                    {t}{t===efx.type?" ✓":""}
+                  </div>
+                )})}
+              </div>
+            )})}
+          </div>,
+          document.body
+        )}
+        {props.onPromote&&(function(){
+          // Find any promoted nodes that tap this exact effect
+          var taps=(props.nodes||[]).filter(function(pn){
+            return pn.type==="promoted"&&pn.tapPath&&pn.tapPath.afterId===efx.id
+          })
+          var isTapped=taps.length>0
+          var tapBtnSt=useState(false); var tapPop=tapBtnSt[0], setTapPop=tapBtnSt[1]
+          var tapAnchorRef=useRef(null)
+          var tapMenuRef=useRef(null)
+          useEffect(function(){
+            if(!tapPop) return
+            function h(e){
+              if(tapAnchorRef.current&&tapAnchorRef.current.contains(e.target))return
+              if(tapMenuRef.current&&tapMenuRef.current.contains(e.target))return
+              setTapPop(false)
+            }
+            document.addEventListener("mousedown",h)
+            return function(){document.removeEventListener("mousedown",h)}
+          },[tapPop])
+          var tapPos=usePopoverPosition(tapAnchorRef,tapPop,"above")
+          return (
+            <div style={{position:"relative",display:"inline-flex"}}>
+              <button ref={tapAnchorRef}
+                className={"promote-btn"+(isTapped?" tapped":"")}
+                onClick={function(e){
+                  e.stopPropagation()
+                  if(isTapped) setTapPop(!tapPop)
+                  else props.onPromote()
+                }}
+                title={isTapped?"Tapped — click to see references":"Promote: capture pipeline state here"}>
+                {isTapped?"● tapped":"↗ tap"}
+              </button>
+              {isTapped&&!tapPop&&<span style={{position:"absolute",bottom:-2,right:-2,width:6,height:6,borderRadius:"50%",background:"var(--ac)"}}/>}
+              {tapPop&&tapPos&&createPortal(
+                <div ref={tapMenuRef} style={Object.assign({},tapPos,{
+                  position:"fixed",zIndex:9100,background:"var(--pn)",
+                  border:"1px solid var(--bd)",borderRadius:10,
+                  boxShadow:"0 -6px 24px rgba(0,0,0,.7)",minWidth:180,padding:"8px 0"})}>
+                  <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",
+                    padding:"2px 12px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>Promoted taps</div>
+                  {taps.map(function(tap){
+                    // Find nodes that reference this tap as a source
+                    var refs=(props.nodes||[]).filter(function(rn){
+                      if(rn.id===tap.id) return false
+                      var str=JSON.stringify(rn)
+                      return str.indexOf(tap.id)>=0
+                    })
+                    return (
+                      <div key={tap.id}>
+                        <div onClick={function(){setTapPop(false);props.onNavigate&&props.onNavigate(tap.id)}}
+                          style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",cursor:"pointer",
+                            color:"var(--ac)",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}
+                          className="drop-item">
+                          ◈ {tap.name}
+                        </div>
+                        {refs.length>0&&refs.map(function(ref){
+                          return (
+                            <div key={ref.id} onClick={function(){setTapPop(false);props.onNavigate&&props.onNavigate(ref.id)}}
+                              style={{display:"flex",alignItems:"center",gap:8,padding:"4px 14px 4px 28px",
+                                cursor:"pointer",color:"var(--di)",fontSize:10}}
+                              className="drop-item">
+                              ↳ {ref.name||ref.type}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>,
+                document.body
+              )}
+            </div>
+          )
+        })()}
+        <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
+          {armed?"confirm x":"x"}
+        </button>
+      </div>
+      <TabBar tabs={tabs} active={tab} onChange={setTab}/>
+      {tab==="primary" && (
+        <div className="card-body">
+          <EfxPrimary efx={efx} onChange={props.onChange} nodes={props.nodes} selfId={props.selfId} iC={props.iC}/>
+        </div>
+      )}
+      {tab==="layer" && (
+        <div className="card-body">
+          <Sl l="opacity" v={efx.opacity} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){props.onChange(Object.assign({},efx,{opacity:v}))}}/>
+          <Se l="blend" v={efx.blendMode||"normal"} opts={EBMS} fn={function(v){props.onChange(Object.assign({},efx,{blendMode:v}))}}/>
+          <PR l="channels">
+            <div style={{display:"flex",gap:4}}>
+              {["R","G","B","A"].map(function(ch){
+                var bc=efx.blendChannels||{R:true,G:true,B:true,A:true}
+                var on=bc[ch]!==false
+                var cols={R:"#e05050",G:"#50d050",B:"#5080f0",A:"var(--mu)"}
+                return <button key={ch} onClick={function(){
+                    var nb=Object.assign({R:true,G:true,B:true,A:true},bc)
+                    nb[ch]=!on; props.onChange(Object.assign({},efx,{blendChannels:nb}))}}
+                  style={{padding:"4px 0",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                    cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
+                    background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)",
+                    width:36,textAlign:"center"}}>
+                  {ch}</button>})}
+            </div>
+          </PR>
+<BlendIfAccordion>
+            <BlendIfSlider label="This"
+              values={((efx.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange(Object.assign({},efx,{blendIf:Object.assign({},efx.blendIf||{},{thisLayer:v})}))}}/>
+            <BlendIfSlider label="Below" disabled={true}
+              values={((efx.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange(Object.assign({},efx,{blendIf:Object.assign({},efx.blendIf||{},{underlyingLayer:v})}))}}/>
+          </BlendIfAccordion>
+        </div>
+      )}
+      {tab==="mask" && (
+        <div className="card-body" style={{paddingTop:8}}>
+          {nMasks===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no masks on this effect</div>}
+          {(efx.maskStack||[]).map(function(mk,mi){
+            return (
+              <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+                siblingEffects={props.siblingEffects} ownerNodeId={props.ownerNodeId}
+                isFirst={mi===0} isLast={mi===(efx.maskStack||[]).length-1}
+                onMove={function(dir){
+                  var ms=(efx.maskStack||[]).slice()
+                  var ni=Math.max(0,Math.min(ms.length-1,mi+dir))
+                  if(ni===mi) return
+                  var tmp=ms[mi]; ms[mi]=ms[ni]; ms[ni]=tmp
+                  props.onChange(Object.assign({},efx,{maskStack:ms}))
+                }}
+                onChange={function(nw){
+                  var ms=(efx.maskStack||[]).map(function(x,xi){return xi===mi?nw:x})
+                  props.onChange(Object.assign({},efx,{maskStack:ms}))
+                }}
+                onDel={function(){
+                  var ms=(efx.maskStack||[]).filter(function(_,xi){return xi!==mi})
+                  props.onChange(Object.assign({},efx,{maskStack:ms}))
+                }}
+                onEditEffects={function(){props.onDrillMask(mi)}}
+              />
+            )
+          })}
+          <button className="lv" style={{width:"100%",marginTop:4}} onClick={function(){
+            var ms=[mkMask()].concat(efx.maskStack||[])
+            props.onChange(Object.assign({},efx,{maskStack:ms}))
+          }}>+ add mask</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── ADD EFFECT MENU ─────────────────────────────────── */
+var EFX_GROUPS=[
+  {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
+  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
+  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise"]},
+  {label:"Distort",  items:["wave","twirl","bulge","uv-distort","polar-to-cart","cart-to-polar"]},
+  {label:"Transform",items:["transform"]},
+  {label:"Points",   items:["show-points","point-map","source-at-points"]},
+]
+// Hook: compute a fixed-position rect for a popover relative to an anchor ref.
+// placement: "above" or "below" — menu opens above or below the anchor, whichever fits.
+// Returns a style object suitable for inline style.
+function usePopoverPosition(anchorRef, open, placement) {
+  var posSt=useState(null); var pos=posSt[0], setPos=posSt[1]
+  useEffect(function(){
+    if(!open||!anchorRef.current){setPos(null);return}
+    function recalc(){
+      var el=anchorRef.current; if(!el)return
+      var r=el.getBoundingClientRect()
+      var vh=window.innerHeight, vw=window.innerWidth
+      var prefAbove = placement==="above"
+      var spaceBelow=vh-r.bottom, spaceAbove=r.top
+      var above = prefAbove ? (spaceAbove>=180 || spaceAbove>spaceBelow) : (spaceBelow<180 && spaceAbove>spaceBelow)
+      var width=Math.max(r.width, 180)
+      var left=Math.min(r.left, vw-width-8)
+      left=Math.max(8,left)
+      if(above) setPos({left:left, bottom:(vh-r.top+4), width:width, maxHeight:(spaceAbove-12)+"px"})
+      else      setPos({left:left, top:(r.bottom+4), width:width, maxHeight:(spaceBelow-12)+"px"})
+    }
+    recalc()
+    window.addEventListener("resize",recalc)
+    window.addEventListener("scroll",recalc,true)
+    return function(){
+      window.removeEventListener("resize",recalc)
+      window.removeEventListener("scroll",recalc,true)
+    }
+  },[open])
+  return pos
+}
+
+function AddEfxMenu(props) {
+  var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
+  var anchorRef=useRef(null)
+  var menuRef=useRef(null)
+  var pos=usePopoverPosition(anchorRef, open, "above")
+  useEffect(function(){
+    if(!open)return
+    function h(e){
+      if(anchorRef.current&&anchorRef.current.contains(e.target))return
+      if(menuRef.current&&menuRef.current.contains(e.target))return
+      setOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[open])
+  return (
+    <div ref={anchorRef} style={{position:"relative",flex:2,minWidth:0}}>
+      <button className="ac" style={{width:"100%",height:"100%"}} onClick={function(){setOpen(!open)}}>+ effect</button>
+      {open&&pos&&createPortal(
+        <div ref={menuRef} className="eff-menu" style={pos}>
+          {EFX_GROUPS.map(function(grp){
+            return (
+              <div key={grp.label}>
+                <div className="drop-grp">{grp.label}</div>
+                {grp.items.map(function(t){
+                  return (
+                    <div key={t} className="drop-item" onClick={function(){props.onAdd(t);setOpen(false)}}>{t}</div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+/* ─── EFFECT STACK ────────────────────────────────────── */
+function EfxStack(props) {
+  var lkSt=useState(false); var lkOpen=lkSt[0], setLkOpen=lkSt[1]
+  var lkRef=useRef(null)
+  var lkMenuRef=useRef(null)
+  var lkPos=usePopoverPosition(lkRef, lkOpen, "above")
+  useEffect(function(){
+    if(!lkOpen)return
+    function h(e){
+      if(lkRef.current&&lkRef.current.contains(e.target))return
+      if(lkMenuRef.current&&lkMenuRef.current.contains(e.target))return
+      setLkOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[lkOpen])
+
+  function addEfx(type){props.onChange([mkEfx(type)].concat(props.stack))}
+  function linkStack(stackId){
+    props.onChange([mkEfxStackRef(stackId)].concat(props.stack))
+    setLkOpen(false)
+  }
+  function upd(id,nw){props.onChange(props.stack.map(function(e){return e.id===id?nw:e}))}
+  function del(id){props.onChange(props.stack.filter(function(e){return e.id!==id}))}
+  function move(idx,dir){
+    var ni=Math.max(0,Math.min(props.stack.length-1,idx+dir))
+    if(ni===idx)return
+    var a=props.stack.slice(),tmp=a[idx];a[idx]=a[ni];a[ni]=tmp;props.onChange(a)
+  }
+
+  // Effect Stack nodes available to link
+  var efxStacks = (props.nodes||[]).filter(function(n){
+    return n.type==="stack"&&n.stackType==="effect"&&n.id!==props.selfId
+  })
+
+  return (
+    <div>
+      <div style={{padding:"2px 10px 0",marginBottom:1}}>
+        <span style={{fontSize:7,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>↓ top to bottom</span>
+      </div>
+      {props.stack.length===0 && <div className="empty">no effects</div>}
+      {props.stack.map(function(efx,i){
+        if(efx.type==="__stackref__") return (
+          <StackRefCard key={efx.id} item={efx} nodes={props.nodes||[]} stackType="effect"
+            isFirst={i===0} isLast={i===props.stack.length-1}
+            onChange={function(nw){upd(efx.id,nw)}}
+            onDel={function(){del(efx.id)}}
+            onMove={function(dir){move(i,dir)}}
+            onNavigate={props.onNavigate}/>
+        )
+        return (
+          <EfxCard key={efx.id} efx={efx} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+            onNavigate={props.onNavigate}
+            siblingEffects={props.stack.filter(function(s){return s.id!==efx.id&&s.maskStack&&s.maskStack.length>0})}
+            ownerNodeId={props.selfId}
+            isFirst={i===0} isLast={i===props.stack.length-1}
+            onChange={function(nw){upd(efx.id,nw)}}
+            onDel={function(){del(efx.id)}}
+            onMove={function(dir){move(i,dir)}}
+            onPromote={props.onPromote ? function(){props.onPromote({slot:props.basePath&&props.basePath.slotKey,afterId:efx.id,withSub:true,stackType:"effect"})} : null}
+            onDrillMask={function(mi){
+              if(!props.navPush||!props.basePath)return
+              var curEfx=props.stack.find(function(e){return e.id===efx.id})||efx
+              var targetMask=(curEfx.maskStack||[])[mi]
+              if(!targetMask)return
+              props.navPush({label:efx.name||efx.type,kind:"effect",id:efx.id,
+                slotKey:props.basePath.slotKey,parentSteps:props.basePath.steps||[]})
+              props.navPush({label:targetMask.name||targetMask.channel||"mask",kind:"mask",id:targetMask.id,
+                slotKey:props.basePath.slotKey,parentSteps:(props.basePath.steps||[]).concat([{kind:"effect",id:efx.id}])})
+            }}
+          />
+        )
+      })}
+      <div style={{display:"flex",gap:4,marginTop:6,alignItems:"stretch",minHeight:36}}>
+        {/* + effect — 2 parts */}
+        <AddEfxMenu onAdd={addEfx}/>
+        {/* + stack — 2 parts */}
+        <div ref={lkRef} style={{position:"relative",flex:2,minWidth:0}}>
+          <button className="ac" style={{width:"100%",height:"100%",fontSize:11}}
+            onClick={function(){setLkOpen(!lkOpen)}}>+ stack</button>
+          {lkOpen&&lkPos&&createPortal(
+            <div ref={lkMenuRef} className="eff-menu" style={lkPos}>
+              {efxStacks.length===0
+                ? <div className="drop-item" style={{color:"var(--mu)",cursor:"default"}}>no effect stacks yet</div>
+                : efxStacks.map(function(n){
+                    return(
+                      <div key={n.id} className="drop-item" onClick={function(){linkStack(n.id)}}>
+                        {n.name}
+                      </div>
+                    )
+                  })
+              }
+            </div>,
+            document.body
+          )}
+        </div>
+        {/* extract — 1 part, only when available */}
+        {props.onExtract&&props.stack.length>0&&(
+          <button className="promote-btn" style={{flex:1,minWidth:0,fontSize:10}}
+            onClick={props.onExtract} title="Extract stack to a reusable Stack node">⊞ extract</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ─── MASK STACK PANEL ────────────────────────────────── */
+function MaskStackPanel(props) {
+  var lkSt=useState(false); var lkOpen=lkSt[0], setLkOpen=lkSt[1]
+  var lkRef=useRef(null)
+  var lkMenuRef=useRef(null)
+  var lkPos=usePopoverPosition(lkRef, lkOpen, "above")
+  useEffect(function(){
+    if(!lkOpen)return
+    function h(e){
+      if(lkRef.current&&lkRef.current.contains(e.target))return
+      if(lkMenuRef.current&&lkMenuRef.current.contains(e.target))return
+      setLkOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[lkOpen])
+
+  function addMask(){props.onChange([mkMask()].concat(props.stack))}
+  function linkStack(stackId){
+    props.onChange([mkMaskStackRef(stackId)].concat(props.stack))
+    setLkOpen(false)
+  }
+  function upd(id,nw){props.onChange(props.stack.map(function(m){return m.id===id?nw:m}))}
+  function del(id){props.onChange(props.stack.filter(function(m){return m.id!==id}))}
+  function move(idx,dir){
+    var ni=Math.max(0,Math.min(props.stack.length-1,idx+dir)); if(ni===idx)return
+    var a=props.stack.slice(),tmp=a[idx];a[idx]=a[ni];a[ni]=tmp; props.onChange(a)
+  }
+
+  var mskStacks = (props.nodes||[]).filter(function(n){
+    return n.type==="stack"&&n.stackType==="mask"&&n.id!==props.selfId
+  })
+
+  return (
+    <div>
+      {props.stack.length===0 && <div className="empty">no masks</div>}
+      {props.stack.map(function(mk,mi){
+        if(mk.type==="__stackref__") return (
+          <StackRefCard key={mk.id} item={mk} nodes={props.nodes||[]} stackType="mask"
+            isFirst={mi===0} isLast={mi===props.stack.length-1}
+            onChange={function(nw){upd(mk.id,nw)}}
+            onDel={function(){del(mk.id)}}
+            onMove={function(dir){move(mi,dir)}}
+            onNavigate={props.onNavigate}/>
+        )
+        return (
+          <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+            siblingEffects={props.siblingEffects} ownerNodeId={props.ownerNodeId}
+            isFirst={mi===0} isLast={mi===props.stack.length-1}
+            onMove={function(dir){move(mi,dir)}}
+            onChange={function(nw){upd(mk.id,nw)}}
+            onDel={function(){del(mk.id)}}
+            onPromote={props.onPromote ? function(){props.onPromote({slot:props.basePath&&props.basePath.slotKey,afterId:mk.id,withSub:true,stackType:"mask"})} : null}
+            onEditEffects={function(){
+              if(!props.navPush||!props.basePath)return
+              props.navPush({label:mk.name||mk.channel||"mask",kind:"mask",id:mk.id,
+                slotKey:props.basePath.slotKey,parentSteps:props.basePath.steps||[]})
+            }}
+          />
+        )
+      })}
+      <div style={{display:"flex",gap:4,marginTop:6,alignItems:"stretch",minHeight:36}}>
+        {/* + mask — 2 parts */}
+        <button className="lv" style={{flex:2,minWidth:0,fontSize:11}}
+          onClick={addMask}>+ mask</button>
+        {/* + stack — 2 parts */}
+        <div ref={lkRef} style={{position:"relative",flex:2,minWidth:0}}>
+          <button className="lv" style={{width:"100%",height:"100%",fontSize:11}}
+            onClick={function(){setLkOpen(!lkOpen)}}>+ stack</button>
+          {lkOpen&&lkPos&&createPortal(
+            <div ref={lkMenuRef} className="eff-menu" style={lkPos}>
+              {mskStacks.length===0
+                ? <div className="drop-item" style={{color:"var(--mu)",cursor:"default"}}>no mask stacks yet</div>
+                : mskStacks.map(function(n){
+                    return(
+                      <div key={n.id} className="drop-item" onClick={function(){linkStack(n.id)}}>
+                        {n.name}
+                      </div>
+                    )
+                  })
+              }
+            </div>,
+            document.body
+          )}
+        </div>
+        {/* extract — 1 part, only when available */}
+        {props.onExtract&&props.stack.length>0&&(
+          <button className="promote-btn" style={{flex:1,minWidth:0,fontSize:10}}
+            onClick={props.onExtract} title="Extract stack to a reusable Stack node">⊞ extract</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ─── SLOT PANEL ──────────────────────────────────────── */
+function SlotPanel(props) {
+  var slot=props.slot, onChange=props.onChange, nodes=props.nodes, selfId=props.selfId
+  var tabSt=useState("source"); var tab=tabSt[0], setTab=tabSt[1]
+  var nEfx=(slot.effectStack||[]).length, nMask=(slot.maskStack||[]).length
+  var tabs=[
+    {id:"source", label:"Source"},
+    {id:"effects",label:"Effects"+(nEfx>0?" ("+nEfx+")":""),color:"ac"},
+    {id:"masks",  label:"Masks"+(nMask>0?" ("+nMask+")":""),color:"lv"},
+  ]
+  var inner = (
+    <>
+      <TabBar tabs={tabs} active={tab} onChange={setTab}/>
+      {tab==="source" && (
+        <div className="card-body">
+          <NRef l="source" v={slot.refId} nodes={nodes} selfId={selfId} iC={props.iC} fn={function(v){onChange(Object.assign({},slot,{refId:v}))}}/>
+          <Sl l="fill" v={slot.fillOpacity==null?100:slot.fillOpacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){onChange(Object.assign({},slot,{fillOpacity:v}))}}/>
+        </div>
+      )}
+      {tab==="effects" && (
+        <div style={{padding:10}}>
+          <EfxStack key={(slot.effectStack||[]).map(function(e){return e.id}).join(",")}
+            stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
+            basePath={{slotKey:(props.slotKey||"")+".effectStack", steps:[]}}
+            onNavigate={props.onNavigate}
+            onPromote={props.onPromote}
+            onChange={function(es){onChange(Object.assign({},slot,{effectStack:es}))}}
+            onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"effect",owner:props.owner})} : null}/>
+        </div>
+      )}
+      {tab==="masks" && (
+        <div style={{padding:10}}>
+          <MaskStackPanel key={(slot.maskStack||[]).map(function(e){return e.id}).join(",")}
+            stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush} iC={props.iC}
+            basePath={{slotKey:(props.slotKey||"")+".maskStack", steps:[]}}
+            onNavigate={props.onNavigate}
+            onPromote={props.onPromote}
+            onChange={function(ms){onChange(Object.assign({},slot,{maskStack:ms}))}}
+            onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"mask",owner:props.owner})} : null}/>
+        </div>
+      )}
+    </>
+  )
+  if(props.headless) return inner
+  return (
+    <div className="card">
+      <div className="card-hdr" style={{background:props.accent==="var(--ac)"?"rgba(36,204,168,.06)":"rgba(208,72,152,.06)"}}>
+        <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:props.accent}}>{props.label}</span>
+        {props.dspSlot&&props.slotKey&&props.owner&&(function(){
+          var ownerId=props.owner.id||props.owner
+          var ds=props.dispSlot
+          var isThis=ds&&ds.nodeId===ownerId&&ds.slot===props.slotKey
+          var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
+          var col=!isThis?"var(--mu)":"var(--lv)"
+          var ttip=!isThis?"Preview this input":ds.mode==="pixels"?"Previewing pixels · tap for mask":"Previewing mask · tap to stop"
+          return <button className="icon-btn sm"
+            onClick={function(e){e.stopPropagation();props.dspSlot(ownerId,props.slotKey)}}
+            style={{color:col,fontSize:18}} title={ttip}>{icon}</button>
+        })()}
+      </div>
+      {inner}
+    </div>
+  )
+}
+
+/* ─── BLENDER PROPS ───────────────────────────────────── */
+function BlenderProps(props) {
+  var node=props.node, onChange=props.onChange, nodes=props.nodes
+  // Wrap onPromote to inject nodeId — EfxStack/MaskStackPanel don't know which node they're inside
+  var wrappedPromote=props.onPromote?function(tp){props.onPromote(Object.assign({nodeId:node.id},tp))}:null
+  var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
+  // All hooks must be declared before any early return to satisfy Rules of Hooks
+  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  var blendTabSt=useState("pixels"); var blendTab=blendTabSt[0], setBlendTab=blendTabSt[1]
+  // Layout mode state — MUST be declared here, not below the conditional early
+  // return. Previous placement caused React error #300 (changing hook count)
+  // whenever the drill-down was entered/exited.
+  var BP_LAYOUT_KEY = "nlics:bp-layout:v2"  // v2: default accordion, resets v1 tabs pref
+  var layoutSt=useState(function(){
+    try{var v=localStorage.getItem(BP_LAYOUT_KEY);return v||"accordion"}catch(e){return "accordion"}
+  })
+  var layout=layoutSt[0], setLayoutRaw=layoutSt[1]
+  function setLayout(v){setLayoutRaw(v);try{localStorage.setItem(BP_LAYOUT_KEY,v)}catch(e){}}
+  function navPush(item){setNavStack(function(s){return s.concat([item])})}
+  function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
+
+  if(navStack.length>0){
+    var top=navStack[navStack.length-1]
+    // Reconstruct full steps from the last entry: parentSteps + [{kind,id}]
+    var topSteps=(top.parentSteps||[]).concat(top.kind?[{kind:top.kind,id:top.id}]:top.steps||[])
+    // Resolve target from CURRENT node state
+    var drillTarget=resolvePath(node,top.slotKey,topSteps)
+    if(!drillTarget){
+      setTimeout(function(){setNavStack([])},0)
+      return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target no longer exists — returning…</div>
+    }
+    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx)})}
+    // Build basePath for child components so they push correctly
+    var childBasePath={slotKey:top.slotKey,steps:topSteps}
+    return (
+      <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
+        <div className="breadcrumb">
+          <span className="bc-item" onClick={function(){setNavStack([])}}>{node.name||"Blender"}</span>
+          {(function(){
+            var sk=navStack[0]&&navStack[0].slotKey||""
+            var ctx=sk.indexOf("inputA")>=0?"Input A":sk.indexOf("inputB")>=0?"Input B":
+              sk==="outEfx"||sk==="outMask"?"Output":
+              sk.indexOf("layers[")>=0?("Layer "+(parseInt((sk.match(/layers\[(\d+)\]/)||[,"?"])[1])+1)):
+              sk==="effectStack"?"Effects":sk==="maskStack"?"Masks":null
+            if(!ctx) return null
+            return (<span style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+              <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
+              <span className="bc-item" onClick={function(){setNavStack([])}} style={{color:"var(--di)"}}>
+                {ctx}
+              </span>
+            </span>)
+          })()}
+          {navStack.map(function(n,i){
+            var isCur=i===navStack.length-1
+            return (
+              <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
+                <span className={"bc-item"+(isCur?" cur":"")}
+                  onClick={function(){jumpTo(i)}}>
+                  {n.label}
+                </span>
+              </span>
+            )
+          })}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:10}}>
+          {(function(){
+            var isEffectDrill=top.kind==="effect"
+            var stackToShow=isEffectDrill?(drillTarget.maskStack||[]):(drillTarget.effectStack||[])
+            var stackLabel=isEffectDrill?"masks on effect":"effects on mask"
+            if(isEffectDrill){
+              return (<div>
+                <div className="stack-lbl">{stackLabel}</div>
+                <MaskStackPanel
+                  key={stackToShow.map(function(m){return m.id}).join(",")}
+                  stack={stackToShow} nodes={nodes} selfId={node.id}
+                  navPush={navPush} iC={props.iC}
+                  basePath={childBasePath}
+                  onNavigate={props.onNavigate}
+                  onPromote={wrappedPromote}
+                  onChange={function(ms){
+                    var newNode=updatePath(node,top.slotKey,topSteps,function(efx){
+                      return Object.assign({},efx,{maskStack:ms})
+                    })
+                    onChange(newNode)
+                  }}/>
+              </div>)
+            }
+            return (<div>
+              <div className="stack-lbl">{stackLabel}</div>
+              <EfxStack
+                key={stackToShow.map(function(e){return e.id}).join(",")}
+                stack={stackToShow}
+                nodes={nodes} selfId={node.id}
+                navPush={navPush}
+                basePath={childBasePath}
+                onNavigate={props.onNavigate}
+                onPromote={wrappedPromote}
+                onChange={function(es){
+                  var newNode=updatePath(node,top.slotKey,topSteps,function(mask){
+                    return Object.assign({},mask,{effectStack:es})
+                  })
+                  onChange(newNode)
+                }}/>
+            </div>)
+          })()}
+        </div>
+      </div>
+    )
+  }
+
+  var nOutEfx=(node.outEfx||[]).length, nOutMask=(node.outMask||[]).length
+  var outTabs=[
+    {id:"effects",label:"Effects"+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
+    {id:"masks",  label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
+  ]
+  // Per-blender collapse state (accordion) / active-tab set (tabs) — lives on node._ui
+  var ui = node._ui || {}
+  function setUi(patch){
+    onChange(Object.assign({},node,{_ui:Object.assign({},ui,patch)}))
+  }
+  // Collapse state for each section (default: all expanded)
+  var collapsed = ui.collapsed || {}
+  function toggleCollapse(key){
+    var nc=Object.assign({},collapsed); nc[key]=!nc[key]
+    setUi({collapsed:nc})
+  }
+  // Multi-select tabs (default: all on so the layout switch doesn't hide everything)
+  var activeTabs = ui.bpTabs || {inputA:true, blend:true, inputB:true, output:true}
+  function toggleTab(key){
+    var na=Object.assign({},activeTabs)
+    na[key]=!na[key]
+    // Ensure at least one tab remains active
+    if(!na.inputA&&!na.blend&&!na.inputB&&!na.output)na[key]=true
+    setUi({bpTabs:na})
+  }
+
+  // Section renderers — closures over state. `headless` flag omits the
+  // section's own title header when the Acc wrapper provides one.
+  function renderInputA(headless){
+    return (
+      <SlotPanel label="Input A" slot={node.inputA} accent="var(--ac)"
+        nodes={nodes} selfId={node.id} navPush={navPush}
+        slotKey="inputA" owner={node} iC={props.iC}
+        headless={headless}
+        onNavigate={props.onNavigate}
+        onPromote={wrappedPromote}
+        dspSlot={props.dspSlot} dispSlot={props.dispSlot}
+        onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
+        onExtract={props.onExtract ? props.onExtract : null}/>
+    )
+  }
+  function renderBlend(headless){
+    var blendTabs=[{id:"pixels",label:"Pixels"},{id:"masks",label:"Masks"}]
+    var pixelsBody=(
+      <div className="card-body">
+        <Se l="mode" v={node.mode} opts={BMODES} fn={function(v){onChange(Object.assign({},node,{mode:v}))}}/>
+        <Sl l="amount" v={node.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){onChange(Object.assign({},node,{amount:v}))}}/>
+
+        {COMMUTATIVE_MODES[node.mode] && (
+          <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",lineHeight:1.5,fontStyle:"italic"}}>
+            order has no effect in {node.mode} mode
+          </div>
+        )}
+        <PR l="channels">
+          <div style={{display:"flex",gap:4}}>
+            {["R","G","B","A"].map(function(ch){
+              var bc=node.blendChannels||{R:true,G:true,B:true,A:true}
+              var on=bc[ch]!==false
+              var cols={R:"#e05050",G:"#50d050",B:"#5080f0",A:"var(--mu)"}
+              return <button key={ch} onClick={function(){
+                  var nb=Object.assign({R:true,G:true,B:true,A:true},bc)
+                  nb[ch]=!on; onChange(Object.assign({},node,{blendChannels:nb}))}}
+                style={{padding:"4px 0",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                  cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
+                  background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)",
+                  width:36,textAlign:"center"}}>
+                {ch}</button>})}
+          </div>
+        </PR>
+        <BlendIfAccordion>
+          <BlendIfSlider label={"Input A"+(node.switched?"":" (top)")}
+            values={(node.blendIf&&node.blendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+            onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{thisLayer:v})}))}}/>
+          <BlendIfSlider label={"Input B"+(node.switched?" (top)":"")}
+            values={(node.blendIf&&node.blendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+            onChange={function(v){onChange(Object.assign({},node,{blendIf:Object.assign({},node.blendIf||{},{underlyingLayer:v})}))}}/>
+        </BlendIfAccordion>
+      </div>
+    )
+    var masksBody=(
+      <div className="card-body">
+        <Se l="mode" v={node.maskMode||"add"} opts={MASK_BMODES}
+          fn={function(v){onChange(Object.assign({},node,{maskMode:v}))}}/>
+        <Sl l="amount" v={node.maskAmount==null?100:node.maskAmount} mn={0} mx={100} st={1}
+          fmt={function(v){return Math.round(v)+"%"}}
+          fn={function(v){onChange(Object.assign({},node,{maskAmount:v}))}}/>
+        <BlendIfAccordion>
+          <BlendIfSlider label={"Input A"+(node.switched?"":" (top)")}
+            values={(node.maskBlendIf&&node.maskBlendIf.thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+            onChange={function(v){onChange(Object.assign({},node,{maskBlendIf:Object.assign({},node.maskBlendIf||{},{thisLayer:v})}))}}/>
+          <BlendIfSlider label={"Input B"+(node.switched?" (top)":"")}
+            values={(node.maskBlendIf&&node.maskBlendIf.underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+            onChange={function(v){onChange(Object.assign({},node,{maskBlendIf:Object.assign({},node.maskBlendIf||{},{underlyingLayer:v})}))}}/>
+        </BlendIfAccordion>
+      </div>
+    )
+    var body=(<div><TabBar tabs={blendTabs} active={blendTab} onChange={setBlendTab}/>{blendTab==="pixels"?pixelsBody:masksBody}</div>)
+    if(headless) return body
+    return (
+      <div className="card" style={{marginBottom:10}}>
+        <div className="card-hdr">
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--di)"}}>Blend</span>
+          <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}}
+            className={node.switched?"ac":"ghost"}
+            style={{fontSize:10,padding:"0 10px",minHeight:28}}>
+            {node.switched?"B over A":"A over B"}
+          </button>
+        </div>
+        {body}
+      </div>
+    )
+  }
+  function renderInputB(headless){
+    return (
+      <SlotPanel label="Input B" slot={node.inputB} accent="var(--co)"
+        nodes={nodes} selfId={node.id} navPush={navPush}
+        slotKey="inputB" owner={node} iC={props.iC}
+        headless={headless}
+        onNavigate={props.onNavigate}
+        onPromote={wrappedPromote}
+        dspSlot={props.dspSlot} dispSlot={props.dispSlot}
+        onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
+        onExtract={props.onExtract ? props.onExtract : null}/>
+    )
+  }
+  function renderOutput(headless){
+    var body = (
+      <>
+        <div className="card-body" style={{paddingBottom:0}}>
+          <Sl l="fill" v={node.outFillOpacity==null?100:node.outFillOpacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){onChange(Object.assign({},node,{outFillOpacity:v}))}}/>
+          <Sl l="opacity" v={node.outOpacity==null?100:node.outOpacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){onChange(Object.assign({},node,{outOpacity:v}))}}/>
+        </div>
+        <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
+        {outTab==="effects" && (
+          <div style={{padding:10}}>
+            <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              basePath={{slotKey:"outEfx", steps:[]}}
+              onNavigate={props.onNavigate}
+              onPromote={wrappedPromote}
+              onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}
+              onExtract={props.onExtract ? function(){props.onExtract({slot:"outEfx",slotObj:{effectStack:node.outEfx||[]},kind:"effect",owner:node})} : null}/>
+          </div>
+        )}
+        {outTab==="masks" && (
+          <div style={{padding:10}}>
+            <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush} iC={props.iC}
+              basePath={{slotKey:"outMask", steps:[]}}
+              onNavigate={props.onNavigate}
+              onPromote={wrappedPromote}
+              onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}
+              onExtract={props.onExtract ? function(){props.onExtract({slot:"outMask",slotObj:{maskStack:node.outMask||[]},kind:"mask",owner:node})} : null}/>
+          </div>
+        )}
+      </>
+    )
+    if(headless) return body
+    return (
+      <div className="card">
+        <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
+          {props.dspSlot&&(function(){
+            var ds=props.dispSlot
+            var isThis=ds&&ds.nodeId===node.id&&ds.slot==="output"
+            var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
+            var col=!isThis?"var(--mu)":"var(--lv)"
+            var tip=!isThis?"Preview output":ds.mode==="pixels"?"output pixels · tap for mask":"output mask · tap to stop"
+            return <button className="icon-btn sm"
+              onClick={function(e){e.stopPropagation();props.dspSlot(node.id,"output")}}
+              style={{color:col,fontSize:18}} title={tip}>{icon}</button>
+          })()}
+        </div>
+        {body}
+      </div>
+    )
+  }
+
+  // Accordion wrapper: header is the section title with chevron, body flows
+  // directly beneath as part of the same rounded box (no duplicated title,
+  // no double borders). Matches card radius exactly.
+  // extra: optional JSX rendered right-aligned in the header (e.g. A over B toggle)
+  // Uses a wrapper div so the extra element can stopPropagation without nesting buttons
+  function Acc(sKey, label, accent, headerBg, renderFn, extra){
+    var isCollapsed = !!collapsed[sKey]
+    return (
+      <div key={sKey} className="card" style={{marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",
+          background:headerBg||"var(--sf)",
+          borderBottom:isCollapsed?"none":"1px solid var(--bd)",
+          borderRadius:isCollapsed?8:"8px 8px 0 0",minHeight:"var(--tap)"}}>
+          <button onClick={function(){toggleCollapse(sKey)}}
+            style={{flex:1,display:"flex",alignItems:"center",gap:8,
+              padding:"0 10px",background:"none",border:"none",
+              color:accent||"var(--tx)",cursor:"pointer",minHeight:"var(--tap)",
+              fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+              textTransform:"uppercase",letterSpacing:".1em",textAlign:"left"}}>
+            <span className={"bp-chevron"+(isCollapsed?"":" open")} style={{color:accent||"var(--mu)"}}>›</span>
+            <span style={{flex:1}}>{label}</span>
+          </button>
+          {extra&&(<div onClick={function(e){e.stopPropagation()}} style={{paddingRight:8,flexShrink:0}}>
+            {extra}
+          </div>)}
+        </div>
+        {!isCollapsed && renderFn(true)}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{padding:0,overflowY:"auto"}}>
+      {/* Layout toolbar */}
+      <div className="bp-toolbar">
+        <div className="bp-toggle" role="tablist" aria-label="Blender panel layout">
+          <button className={layout==="accordion"?"active":""}
+            onClick={function(){setLayout("accordion")}}
+            title="Accordion — stacked collapsible sections">
+            {/* rows icon — horizontal stripes */}
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <rect x="3" y="4"  width="14" height="3" rx="1"/>
+              <rect x="3" y="9"  width="14" height="3" rx="1"/>
+              <rect x="3" y="14" width="14" height="3" rx="1"/>
+            </svg>
+          </button>
+          <button className={layout==="tabs"?"active":""}
+            onClick={function(){setLayout("tabs")}}
+            title="Tabs — multi-select columns">
+            {/* columns icon — vertical stripes */}
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <rect x="3"  y="3" width="3" height="14" rx="1"/>
+              <rect x="9"  y="3" width="3" height="14" rx="1"/>
+              <rect x="15" y="3" width="3" height="14" rx="1"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {layout==="tabs" ? (
+        <div>
+          <div className="bp-tabs">
+            <button className={"bp-tab"+(activeTabs.inputA?" on ac":"")} onClick={function(){toggleTab("inputA")}}>Input A</button>
+            <button className={"bp-tab"+(activeTabs.blend?" on di":"")} onClick={function(){toggleTab("blend")}}>Blend</button>
+            <button className={"bp-tab"+(activeTabs.inputB?" on co":"")} onClick={function(){toggleTab("inputB")}}>Input B</button>
+            <button className={"bp-tab"+(activeTabs.output?" on lv":"")} onClick={function(){toggleTab("output")}}>Output</button>
+          </div>
+          <div style={{padding:"4px 10px 10px"}}>
+            {activeTabs.inputA && <div style={{marginBottom:10}}>{renderInputA(false)}</div>}
+            {activeTabs.blend  && renderBlend(false)}
+            {activeTabs.inputB && <div style={{marginBottom:10}}>{renderInputB(false)}</div>}
+            {activeTabs.output && renderOutput(false)}
+          </div>
+        </div>
+      ) : (
+        <div style={{padding:"0 10px 10px"}}>
+          {Acc("inputA","Input A","var(--ac)","rgba(36,204,168,.06)",renderInputA,
+            (function(){
+              var ownerId=node.id
+              var ds=props.dispSlot
+              var isThis=ds&&ds.nodeId===ownerId&&ds.slot==="inputA"
+              var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
+              var col=!isThis?"var(--mu)":"var(--lv)"
+              return props.dspSlot?<button className="icon-btn sm"
+                onClick={function(e){e.stopPropagation();props.dspSlot(ownerId,"inputA")}}
+                style={{color:col,fontSize:18}}
+                title={!isThis?"Preview":ds&&ds.mode==="pixels"?"Pixels · tap mask":"Mask · tap off"}>
+                {icon}</button>:null
+            })())}
+          {Acc("blend", "Blend",  "var(--di)",null, renderBlend,
+            <button onClick={function(){onChange(Object.assign({},node,{switched:!node.switched}))}}
+              className={node.switched?"ac":"ghost"}
+              style={{fontSize:10,padding:"0 10px",minHeight:28}}>
+              {node.switched?"B over A":"A over B"}
+            </button>)}
+          {Acc("inputB","Input B","var(--co)","rgba(208,72,152,.06)",renderInputB,
+            (function(){
+              var ownerId=node.id
+              var ds=props.dispSlot
+              var isThis=ds&&ds.nodeId===ownerId&&ds.slot==="inputB"
+              var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
+              var col=!isThis?"var(--mu)":"var(--lv)"
+              return props.dspSlot?<button className="icon-btn sm"
+                onClick={function(e){e.stopPropagation();props.dspSlot(ownerId,"inputB")}}
+                style={{color:col,fontSize:18}}
+                title={!isThis?"Preview":ds&&ds.mode==="pixels"?"Pixels · tap mask":"Mask · tap off"}>
+                {icon}</button>:null
+            })())}
+          {Acc("output","Output", "var(--lv)","rgba(176,96,240,.06)",renderOutput,
+            (function(){
+              var ownerId=node.id
+              var ds=props.dispSlot
+              var isThis=ds&&ds.nodeId===ownerId&&ds.slot==="output"
+              var icon=!isThis?"◎":ds.mode==="pixels"?"◉":"◈"
+              var col=!isThis?"var(--mu)":"var(--lv)"
+              return props.dspSlot?<button className="icon-btn sm"
+                onClick={function(e){e.stopPropagation();props.dspSlot(ownerId,"output")}}
+                style={{color:col,fontSize:18}}
+                title={!isThis?"Preview":ds&&ds.mode==="pixels"?"Pixels · tap mask":"Mask · tap off"}>
+                {icon}</button>:null
+            })())}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── NODE ITEM ───────────────────────────────────────── */
+var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","tile":"#20a890","grid":"#48a8d0","spiral":"#d0a048","polar-grid":"#a048d0","phyllotaxis":"#48d090","scatter":"#d07048","blender":"#b82880","layers":"#e06828","stack":"#24acc4","promoted":"#d4b428"}
+/* ─── DISPLAY MODE BUTTON ──────────────────────────────── */
+// Renders a stacked-layers SVG icon in a round-rect.
+// A small triangle badge in the bottom-right signals multiple modes.
+// Tap: cycle off→comp→mask. Long-press: popover with labelled options.
+function DisplayModeBtn(props) {
+  // props: active (bool), maskMode (bool), onDsp (fn), size (number)
+  var pressTimer=useRef(null)
+  var popSt=useState(false); var pop=popSt[0], setPop=popSt[1]
+  var anchorRef=useRef(null)
+  var menuRef=useRef(null)
+  var pos=usePopoverPosition(anchorRef, pop, "above")
+
+  useEffect(function(){
+    if(!pop) return
+    function h(e){
+      if(anchorRef.current&&anchorRef.current.contains(e.target)) return
+      if(menuRef.current&&menuRef.current.contains(e.target)) return
+      setPop(false)
+    }
+    document.addEventListener("mousedown",h)
+    document.addEventListener("touchstart",h)
+    return function(){
+      document.removeEventListener("mousedown",h)
+      document.removeEventListener("touchstart",h)
+    }
+  },[pop])
+
+  function startPress(){
+    pressTimer.current=setTimeout(function(){
+      pressTimer.current=null
+      setPop(true)
+    }, 400)
+  }
+  function endPress(e){
+    if(pressTimer.current){
+      clearTimeout(pressTimer.current); pressTimer.current=null
+      // Short tap — cycle
+      props.onDsp()
+    }
+    // Long press opened popover — don't cycle
+  }
+  function cancelPress(){
+    if(pressTimer.current){ clearTimeout(pressTimer.current); pressTimer.current=null }
+  }
+
+  var sz=props.size||28
+  var isOn=props.active
+  var isMask=props.maskMode
+  // Colours
+  var col=isOn?(isMask?"var(--lv)":"var(--lv)"):"var(--mu)"
+  var bg=isOn?"rgba(176,96,240,.12)":"none"
+  var border=isOn?"1px solid "+(isMask?"var(--lv)":"var(--lv)"):"1px solid transparent"
+
+  var modes=[
+    {key:"off",   label:"Off",        icon:"○"},
+    {key:"comp",  label:"Composite",  icon:"◉"},
+    {key:"mask",  label:"Mask only",  icon:"◈"},
+  ]
+  var curMode=!isOn?"off":isMask?"mask":"comp"
+
+  return (
+    <div style={{position:"relative",display:"inline-flex"}}>
+      <button ref={anchorRef}
+        onMouseDown={startPress} onMouseUp={endPress} onMouseLeave={cancelPress}
+        onTouchStart={startPress} onTouchEnd={endPress} onTouchCancel={cancelPress}
+        onClick={function(e){e.preventDefault()}}
+        title={"Display: "+curMode+" — tap to cycle, hold to pick"}
+        style={{width:sz,height:sz,padding:0,background:bg,border:border,
+          borderRadius:6,cursor:"pointer",display:"inline-flex",alignItems:"center",
+          justifyContent:"center",flexShrink:0,position:"relative",transition:"all .15s"}}>
+        {/* Stacked layers icon */}
+        <svg width={sz-8} height={sz-8} viewBox="0 0 18 18" fill="none" stroke={col} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 12l7 4 7-4"/>
+          <path d="M2 9l7 4 7-4"/>
+          <path d="M2 6l7-4 7 4"/>
+        </svg>
+        {/* Triangle badge — signals multiple modes */}
+        <svg width={8} height={8} viewBox="0 0 8 8" style={{position:"absolute",bottom:1,right:1}}>
+          <path d="M8 8 L0 8 L8 0 Z" fill={isOn?"var(--lv)":"var(--bd)"}/>
+        </svg>
+      </button>
+      {pop&&pos&&createPortal(
+        <div ref={menuRef} style={Object.assign({},pos,{
+          position:"fixed",zIndex:9000,background:"var(--pn)",
+          border:"1px solid var(--bd)",borderRadius:10,
+          boxShadow:"0 -6px 24px rgba(0,0,0,.7)",
+          minWidth:140,padding:"6px 0"})}>
+          <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
+            letterSpacing:".1em",padding:"4px 12px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
+            Display mode
+          </div>
+          {modes.map(function(m){
+            var isActive=m.key===curMode
+            return (
+              <div key={m.key} onClick={function(){
+                  if(m.key==="off"&&isOn) props.onDsp()
+                  else if(m.key==="comp"&&(!isOn||isMask)) props.onDsp()
+                  else if(m.key==="mask"&&(!isOn||!isMask)) props.onDsp()
+                  setPop(false)
+                }}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
+                  cursor:"pointer",background:isActive?"var(--sl)":"none",
+                  color:isActive?"var(--lv)":"var(--mu)"}}>
+                <span style={{fontSize:16,width:20,textAlign:"center"}}>{m.icon}</span>
+                <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}>{m.label}</span>
+                {isActive&&<span style={{marginLeft:"auto",fontSize:9,color:"var(--lv)"}}>✓</span>}
+              </div>
+            )
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+function NodeItem(props) {
+  var node=props.node
+  var edSt=useState(false);    var ed=edSt[0],     setEd=edSt[1]
+  var nmSt=useState(node.name); var nm=nmSt[0],    setNm=nmSt[1]
+  var armSt=useState(false);   var armed=armSt[0], setArmed=armSt[1]
+  var inR=useRef(null),timerR=useRef(null)
+  useEffect(function(){setNm(node.name)},[node.name])
+  useEffect(function(){if(ed&&inR.current)inR.current.focus()},[ed])
+  useEffect(function(){return function(){if(timerR.current)clearTimeout(timerR.current)}},[])
+  function commit(){setEd(false);if(nm.trim())props.onRen(nm.trim());else setNm(node.name)}
+  function handleDel(e){
+    e.stopPropagation()
+    if(!armed){setArmed(true);timerR.current=setTimeout(function(){setArmed(false)},3000)}
+    else{clearTimeout(timerR.current);setArmed(false);props.onDel(node.id)}
+  }
+  return (
+    <div className={"nrow"+(props.isSel?" sel":"")+(props.isDsp?" dsp":"")+(!node.enabled?" off":"")}
+      onClick={function(){if(armed){setArmed(false);clearTimeout(timerR.current);return}props.onSel(node.id)}}>
+      <div style={{width:10,height:10,borderRadius:"50%",background:TDOT[node.type]||"#555",flexShrink:0}}/>
+      <div style={{flex:1,overflow:"hidden",minWidth:0}}>
+        {ed
+          ? <input ref={inR} className="ninput" value={nm} onChange={function(e){setNm(e.target.value)}} onBlur={commit}
+              onKeyDown={function(e){if(e.key==="Enter")commit();if(e.key==="Escape"){setEd(false);setNm(node.name)}}}
+              onClick={function(e){e.stopPropagation()}}/>
+          : <span onDoubleClick={function(e){e.stopPropagation();setEd(true)}}
+              style={{fontSize:13,color:props.isDsp?"var(--lv)":node.enabled?"var(--tx)":"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block",userSelect:"none"}}>
+              {node.name}
+            </span>
+        }
+      </div>
+      <span className={"ftag "+(node.type==="stack"?"tstack":node.type==="promoted"?"tprom":node.type==="layers"?"tco":node.section===1?"tgn":"tco")}
+        style={node.type==="layers"?{borderColor:"#e06828",color:"#e06828",background:"rgba(224,104,40,.1)"}:{}}>
+        {node.type==="stack"?(node.stackType||"effect")+" stack":node.type==="layers"?"layer comp":node.type}
+      </span>
+      <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onTog(node.id)}} style={{color:node.enabled?"var(--ac)":"var(--mu)"}}>
+        {node.enabled?"●":"○"}
+      </button>
+      {(function(){
+        // Sub-flag driving (dispSlot) → purple, mirrors sub icon
+        // Top-level user control (dispId===node, no dispSlot) → teal --ac
+        // Off → muted ◎
+        var nds=props.dispSlot&&props.dispSlot.nodeId===node.id?props.dispSlot:null
+        var icon,col,tip
+        if(nds){
+          icon=nds.mode==="pixels"?"◉":"◈"
+          col="var(--lv)"
+          var slotLabel=nds.slot==="inputA"?"Input A":nds.slot==="inputB"?"Input B":"Output"
+          tip=slotLabel+" · "+(nds.mode==="pixels"?"pixels":"mask")+" · tap for composite"
+        } else if(props.isDsp){
+          icon=props.isMaskDisp?"◈":"◉"
+          col="var(--ac)"
+          tip=props.isMaskDisp?"output mask · tap off":"composite · tap for mask"
+        } else {
+          icon="◎"; col="var(--mu)"; tip="Set as live preview"
+        }
+        return <button className="icon-btn sm"
+          onClick={function(e){e.stopPropagation();props.onDsp(node.id)}}
+          style={{color:col,fontSize:20}} title={tip}>{icon}</button>
+      })()}
+      <button onClick={handleDel} style={{minHeight:32,padding:"0 8px",fontSize:armed?9:14,background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?56:32}}>
+        {armed?"confirm ×":"×"}
+      </button>
+    </div>
+  )
+}
+
+/* ─── ADD MENU ────────────────────────────────────────── */
+function AddMenu(props) {
+  var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
+  var anchorRef=useRef(null)
+  var menuRef=useRef(null)
+  var pos=usePopoverPosition(anchorRef, open, "above")
+  useEffect(function(){
+    if(!open)return
+    function h(e){
+      if(anchorRef.current&&anchorRef.current.contains(e.target))return
+      if(menuRef.current&&menuRef.current.contains(e.target))return
+      setOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[open])
+  var s1standard=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Geometry"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
+  var s1advanced=[{t:"tile",l:"Tile"}]
+  var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
+  return (
+    <div ref={anchorRef} style={{position:"relative"}}>
+      <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
+      {open&&pos&&createPortal(
+        <div ref={menuRef} className="drop-menu" style={pos}>
+          {props.sec===1?[
+            s1standard.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>}),
+            <div key="__adv__" style={{padding:"5px 14px 4px",fontSize:8,color:"var(--mu)",
+              textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
+              borderTop:"1px solid var(--bd)",borderBottom:"1px solid var(--bd)",background:"var(--bg)"}}>
+              Advanced
+            </div>,
+            s1advanced.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})
+          ]:s2items.map(function(item){return <div key={item.t} className="drop-item" onClick={function(){props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+/* ─── LIVE PREVIEW ────────────────────────────────────── */
+function LivePreview(props) {
+  var zSt=useState(1); var zoom=zSt[0], setZoom=zSt[1]
+  var fSt=useState("png"); var fmt=fSt[0], setFmt=fSt[1]
+  var fsStyle = props.fullscreen
+    ? {position:"fixed",top:0,left:0,width:"100%",height:"100%",
+       zIndex:500,background:"var(--bg)",WebkitOverflowScrolling:"touch"}
+    : {flex:1,minHeight:0}
+  return (
+    <div style={Object.assign({display:"flex",flexDirection:"column",overflow:"hidden"},fsStyle)}>
+      <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"var(--pn)",borderBottom:"1px solid var(--bd)",flexShrink:0,overflowX:"auto"}}>
+        <select value={String(props.sz)} onChange={function(e){props.onResize(parseInt(e.target.value))}} style={{width:58,fontSize:10,padding:"3px 4px",flexShrink:0}}>
+          {["256","400","512","768","1024"].map(function(s){return <option key={s} value={s}>{s}</option>})}
+        </select>
+        <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.max(.25,z-.25)})}} style={{fontSize:16,width:32,height:32}}>-</button>
+        <span style={{fontSize:10,color:"var(--di)",minWidth:30,textAlign:"center",flexShrink:0}}>{Math.round(zoom*100)}%</span>
+        <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.min(4,z+.25)})}} style={{fontSize:16,width:32,height:32}}>+</button>
+        <button onClick={function(){setZoom(1)}} style={{fontSize:10,padding:"0 8px",minHeight:30,flexShrink:0}}>1:1</button>
+        <select value={fmt} onChange={function(e){setFmt(e.target.value)}} style={{width:50,fontSize:10,padding:"3px 3px",flexShrink:0}}>
+          {["png","jpeg","webp"].map(function(f){return <option key={f}>{f}</option>})}
+        </select>
+        <button className="ac" onClick={function(){props.onExport(fmt)}} style={{padding:"0 10px",fontSize:11,flexShrink:0}}>↓</button>
+        <span style={{flex:1}}/>
+        <button className={"hico"+(props.fullscreen?" exit":"")}
+          title={props.fullscreen?"Exit fullscreen":"Fullscreen preview"}
+          onClick={props.onFullscreen}
+          style={{fontSize:16,width:32,height:32,flexShrink:0}}>{props.fullscreen?"⊠":"⊡"}</button>
+      </div>
+      <div className="checker" style={{flex:1,overflow:"auto",display:"flex",alignItems:"center",justifyContent:"center",padding:20,position:"relative"}}>
+        {!props.active && (
+          <div style={{position:"absolute",textAlign:"center",pointerEvents:"none"}}>
+            <div style={{fontSize:40,color:"var(--bd)",marginBottom:12}}>◎</div>
+            <div style={{fontSize:12,color:"var(--mu)"}}>Tap ◎ on any item to preview</div>
+          </div>
+        )}
+        <div style={{transform:"scale("+zoom+")",transformOrigin:"center center",boxShadow:"0 12px 60px rgba(0,0,0,.85)",outline:"1px solid var(--bd)",lineHeight:0}}>
+          <canvas ref={props.cvRef} width={props.sz} height={props.sz} style={{display:"block",imageRendering:zoom>2?"pixelated":"auto"}}/>
+        </div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",background:"var(--pn)",borderTop:"1px solid var(--bd)",flexShrink:0}}>
+        <span style={{fontSize:9,color:"var(--mu)"}}>{props.sz}x{props.sz}px</span>
+        {props.active && <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>[{props.active.type}]</span>}
+        <span style={{flex:1}}/>
+        <span style={{fontSize:9,color:"var(--mu)",letterSpacing:".08em",fontFamily:"'IBM Plex Mono',monospace"}}>{(typeof __BUILD_HASH__!=="undefined"?__BUILD_HASH__:"dev")+" · Selena"}</span>
+      </div>
+    </div>
+  )
+}
+
+/* ─── DIVIDER HOOK ──────────────────────────────────────── */
+// Drag state is tracked in App via refs; onPointerMove/Up are on the root div
+// so they fire even as the pointer moves across the entire app area — no
+// external document listeners needed, no iframe boundary issues.
+function useDivider(vert, onDragStart) {
+  var divRef = useRef(null)
+
+  function onPointerDown(e) {
+    e.preventDefault()
+    var el = divRef.current
+    if (el) el.classList.add("drag")
+    onDragStart(e.clientX, e.clientY, vert, function() {
+      if (el) el.classList.remove("drag")
+    })
+  }
+
+  return { ref: divRef, onPointerDown: onPointerDown }
+}
+
+/* ─── INITIAL STATE ─────────────────────────────────────── */
+function initState() {
+  function ef(id,t,p,o,bm,ms){return{id:id,type:t,enabled:true,params:p,opacity:o||100,blendMode:bm||"normal",maskStack:ms||[]}}
+  function mk(id,refId,ch,inv,str,o,bm,es){return{id:id,refId:refId,channel:ch||"luminosity",invert:inv||false,strength:str||1,opacity:o||100,blendMode:bm||"multiply",effectStack:es||[]}}
+  function sl(refId,efx,msk){return{refId:refId,effectStack:efx||[],maskStack:msk||[]}}
+  var nodes=[
+    {id:"g1",name:"BG Gradient", type:"gradient",section:1,enabled:true,props:{gType:"radial",c1:"#180068",c2:"#030316",s1:0,s2:1,angle:90,cx:.5,cy:.45,r:.95,sa:0,alpha:1}},
+    {id:"g2",name:"Perlin Noise",type:"noise",   section:1,enabled:true,props:{nType:"perlin",c1:"#5533ee",c2:"#000000",scale:.042,oct:5,seed:7,alpha:1}},
+    {id:"g3",name:"Dot Pattern", type:"pattern", section:1,enabled:true,props:{pType:"dots",c1:"#ffffff",c2:"#000000",scale:.12,sw:.1,angle:0,dr:.025,ds:.09,alpha:1}},
+    {id:"g4",name:"Glow Orb",    type:"shape",   section:1,enabled:true,props:{shapeType:"ellipse",x:.5,y:.5,sz:.62,rot:0,fill:"#2288ff",stroke:"#000",strokeW:0,pts:5,innerR:.45,sides:5,ringR:.62,alpha:1}},
+    {id:"g5",name:"Star Shape",  type:"shape",   section:1,enabled:true,props:{shapeType:"star",x:.5,y:.5,sz:.38,rot:0,fill:"#ffffff",stroke:"#000",strokeW:0,pts:7,innerR:.42,sides:5,ringR:.62,alpha:1}},
+    {id:"b1",name:"BG+Noise",    type:"blender", section:2,enabled:true,inputA:sl("g1"),inputB:sl("g2",[ef("e1","blur",{radius:3})]),mode:"overlay",amount:60,switched:false,outEfx:[],outMask:[]},
+    {id:"b2",name:"BG+Orb",      type:"blender", section:2,enabled:true,inputA:sl("b1"),inputB:sl("g4",[ef("e2","blur",{radius:24})]),mode:"screen",amount:100,switched:false,outEfx:[],outMask:[]},
+    {id:"b3",name:"Final Output",type:"blender", section:2,enabled:true,
+      inputA:sl("b2"),
+      inputB:sl("g5",[ef("e3","blur",{radius:5})],[mk("m1","g3","luminosity",false,1,100,"multiply")]),
+      mode:"screen",amount:90,switched:false,
+      outEfx:[ef("e4","exposure",{stops:.35})],outMask:[]}
+  ]
+  return {nodes:nodes,dispId:"b3"}
+}
+
+/* ─── SETTINGS SHEET ─────────────────────────────────────── */
+function SegCtrl(props) {
+  return (
+    <div className="seg-ctrl">
+      {props.options.map(function(opt) {
+        var on = props.value === opt.v
+        return (
+          <button key={opt.v}
+            className={"seg-btn" + (on ? " on" + (props.accent ? " "+props.accent : "") : "")}
+            onClick={function(){ props.onChange(opt.v) }}>
+            {opt.l}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function SettingsSheet(props) {
+  // props: open, onClose, settings, onSettings
+  // settings: {viewMode, previewPinned, stickyHeaders, panelStyle}
+  var s = props.settings
+  function set(k, v) { props.onSettings(Object.assign({}, s, {[k]: v})) }
+
+  if (!props.open) return null
+  return (
+    <div className="sheet-scrim" style={{pointerEvents:"auto",background:"rgba(4,4,18,.72)"}}>
+      <div style={{position:"absolute",inset:0}} onClick={props.onClose}/>
+      <div className="sheet-body" style={{position:"relative"}}>
+        <div className="sheet-grip"/>
+        <div className="sheet-hdr">
+          <span className="sheet-title">Layout Settings</span>
+          <button className="ghost" style={{fontSize:20,minHeight:36}} onClick={props.onClose}>×</button>
+        </div>
+        <div className="sheet-scroll">
+
+          <div className="setting-grp">
+            <div className="setting-grp-lbl">View mode</div>
+            <div className="setting-row">
+              <div>
+                <div className="setting-lbl">Layout style</div>
+                <div className="setting-desc">Split keeps lists and preview in separate resizable panels. Unified scrolls everything in one column.</div>
+              </div>
+            </div>
+            <SegCtrl
+              value={s.viewMode}
+              options={[{v:"split",l:"Split"},{v:"unified",l:"Unified scroll"}]}
+              accent="ac"
+              onChange={function(v){ set("viewMode", v) }}/>
+          </div>
+
+          {s.viewMode==="unified" && (
+            <div className="setting-grp">
+              <div className="setting-grp-lbl">Unified options</div>
+              <div className="setting-row">
+                <div style={{flex:1}}>
+                  <div className="setting-lbl">Preview</div>
+                  <div className="setting-desc">Pinned keeps the preview locked at the top while lists scroll below. Scrollable lets the preview scroll with the lists.</div>
+                </div>
+              </div>
+              <SegCtrl
+                value={s.previewPinned?"pinned":"scrollable"}
+                options={[{v:"pinned",l:"Pinned"},{v:"scrollable",l:"Scrollable"}]}
+                accent="ac"
+                onChange={function(v){ set("previewPinned", v==="pinned") }}/>
+
+              <div className="setting-row" style={{marginTop:16}}>
+                <div style={{flex:1}}>
+                  <div className="setting-lbl">Section headers</div>
+                  <div className="setting-desc">Sticky keeps §1 and §2 headers fixed while you scroll their contents. Flowing lets them scroll away.</div>
+                </div>
+              </div>
+              <SegCtrl
+                value={s.stickyHeaders?"sticky":"flowing"}
+                options={[{v:"sticky",l:"Sticky"},{v:"flowing",l:"Flowing"}]}
+                onChange={function(v){ set("stickyHeaders", v==="sticky") }}/>
+            </div>
+          )}
+
+          <div className="setting-grp">
+            <div className="setting-grp-lbl">Project</div>
+            <div className="setting-row">
+              <span className="setting-lbl">Auto-save interval</span>
+              <select value={props.autoSaveInt||0} onChange={function(e){props.onAutoSaveInt(Number(e.target.value))}}
+                style={{background:"var(--el)",color:"var(--tx)",border:"1px solid var(--bd)",
+                  borderRadius:4,padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}>
+                <option value={0}>Off</option>
+                <option value={1}>1 min</option>
+                <option value={2}>2 min</option>
+                <option value={5}>5 min</option>
+                <option value={10}>10 min</option>
+              </select>
+            </div>
+            <div className="setting-desc">Auto-saves locally on interval and on app close. Use ↓ to save a file.</div>
+            <div className="setting-grp-lbl">Node settings panel</div>
+            <div className="setting-row">
+              <div style={{flex:1}}>
+                <div className="setting-lbl">Panel style</div>
+                <div className="setting-desc">Inline expands settings below the node row, pushing content down. Sheet slides up from the bottom as an overlay, keeping the list visible.</div>
+              </div>
+            </div>
+            <SegCtrl
+              value={s.panelStyle}
+              options={[{v:"inline",l:"Inline"},{v:"sheet",l:"Sheet"}]}
+              onChange={function(v){ set("panelStyle", v) }}/>
+          </div>
+
+          <div className="setting-grp">
+            <div className="setting-grp-lbl">Orientation</div>
+            <div className="setting-row">
+              <div style={{flex:1}}>
+                <div className="setting-lbl">Layout axis</div>
+                <div className="setting-desc">Vertical stacks panels top/bottom. Horizontal places them side by side.</div>
+              </div>
+              <SegCtrl
+                value={props.isVert?"vert":"horiz"}
+                options={[{v:"vert",l:"Vertical"},{v:"horiz",l:"Horizontal"}]}
+                onChange={function(v){ props.onIsVert(v==="vert") }}/>
+            </div>
+            {props.isVert && (
+              <div>
+                <div className="setting-row" style={{marginTop:12}}>
+                  <div style={{flex:1}}>
+                    <div className="setting-lbl">Panel order</div>
+                    <div className="setting-desc">Choose whether the preview or the lists appear at the top.</div>
+                  </div>
+                </div>
+                <SegCtrl
+                  value={props.flipped?"preview-top":"lists-top"}
+                  options={[{v:"preview-top",l:"Preview top"},{v:"lists-top",l:"Lists top"}]}
+                  onChange={function(v){ props.onFlipped(v==="preview-top") }}/>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── NODE DETAIL SHEET (panel style = sheet) ──────────────── */
+/* ─── LAYER CARD ───────────────────────────────────────── */
+// Extracted from LayerCompProps.map() — each layer needs its own hook scope.
+// useState inside .map() violates Rules of Hooks (error #300 on rename/reorder).
+function LayerCard(props) {
+  var lyr=props.lyr, li=props.li
+  var tabSt=useState("source"); var layerTab=tabSt[0], setLayerTab=tabSt[1]
+  // Hoist ALL hooks including nested tab state — can't use useState inside conditionals/IIFEs
+  var lyBTSt=useState("pixels"); var lyBT=lyBTSt[0], setLyBT=lyBTSt[1]
+  var nEfx=(lyr.effectStack||[]).length, nMask=(lyr.maskStack||[]).length
+  var lyrTabs=[
+    {id:"source",  label:"Source"},
+    {id:"effects", label:"Fx"+(nEfx>0?" ("+nEfx+")":""), color:"ac"},
+    {id:"masks",   label:"Mask"+(nMask>0?" ("+nMask+")":""), color:"lv"},
+    {id:"layer",   label:"Layer"},
+  ]
+  var isCollapsed = props.collapsed || false
+  var delArmedSt=useState(false); var delArmed=delArmedSt[0], setDelArmed=delArmedSt[1]
+  return (
+    <div className="card" style={{marginBottom:8}}>
+      <div className="card-hdr" style={{background:"rgba(224,104,40,.06)",
+        borderBottom:isCollapsed?"none":"1px solid var(--bd)",
+        borderRadius:isCollapsed?8:"8px 8px 0 0"}}>
+        <span className={"bp-chevron"+(isCollapsed?"":" open")}
+          onClick={props.onToggleCollapse}
+          style={{color:"#e06828",flexShrink:0,fontSize:18}}>›</span>
+        <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+          <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
+          <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
+        </div>
+        <button className="icon-btn sm" onClick={function(){props.onChange({enabled:lyr.enabled===false})}}
+          style={{color:lyr.enabled===false?"var(--mu)":"#e06828",fontSize:18}}>
+          {lyr.enabled===false?"○":"●"}
+        </button>
+        <InlineRename value={lyr.name} fallback={"layer "+(props.totalLayers-li)}
+          onChange={function(nw){props.onChange({name:nw})}}
+          labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
+        <button
+          onClick={function(){
+            if(props.totalLayers<=1) return
+            if(delArmed){props.onDel();setDelArmed(false)}
+            else setDelArmed(true)
+          }}
+          onBlur={function(){setDelArmed(false)}}
+          disabled={props.totalLayers<=1}
+          style={{minHeight:32,padding:"0 8px",fontSize:delArmed?9:14,
+            color:props.totalLayers<=1?"var(--bd)":delArmed?"var(--dng)":"var(--mu)",
+            background:delArmed?"rgba(224,48,96,.12)":"none",
+            border:delArmed?"1px solid var(--dng)":"none",
+            borderRadius:6,minWidth:delArmed?56:32,
+            cursor:props.totalLayers<=1?"default":"pointer",transition:"all .15s"}}>
+          {props.totalLayers<=1?"×":delArmed?"confirm ×":"×"}
+        </button>
+      </div>
+      {!isCollapsed && <TabBar tabs={lyrTabs} active={layerTab} onChange={setLayerTab}/>}
+      {!isCollapsed && layerTab==="source" && (
+        <div className="card-body">
+          <NRef l="source" v={lyr.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC} mode="source"
+            fn={function(v){props.onChange({refId:v})}}/>
+          <Sl l="fill" v={lyr.fillOpacity==null?100:lyr.fillOpacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){props.onChange({fillOpacity:v})}}/>
+        </div>
+      )}
+      {!isCollapsed && layerTab==="effects" && (
+        <div style={{padding:10}}>
+          <EfxStack
+            key={(lyr.effectStack||[]).map(function(e){return e.id}).join(",")}
+            stack={lyr.effectStack||[]} nodes={props.nodes} selfId={props.selfId}
+            navPush={props.navPush} iC={props.iC}
+            basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
+            onNavigate={props.onNavigate}
+            onPromote={props.onPromote}
+            onChange={function(es){props.onChange({effectStack:es})}}/>
+        </div>
+      )}
+      {!isCollapsed && layerTab==="masks" && (
+        <div style={{padding:10}}>
+          <MaskStackPanel
+            key={(lyr.maskStack||[]).map(function(m){return m.id}).join(",")}
+            stack={lyr.maskStack||[]} nodes={props.nodes} selfId={props.selfId}
+            navPush={props.navPush} iC={props.iC}
+            basePath={{slotKey:"layers["+li+"].maskStack", steps:[]}}
+            onNavigate={props.onNavigate}
+            onPromote={props.onPromote}
+            onChange={function(ms){props.onChange({maskStack:ms})}}/>
+        </div>
+      )}
+      {!isCollapsed && layerTab==="layer" && (
+          <div>
+            <TabBar tabs={[{id:"pixels",label:"Pixels"},{id:"masks",label:"Masks"}]} active={lyBT} onChange={setLyBT}/>
+            {lyBT==="pixels"?(
+              <div className="card-body">
+                <Se l="blend" v={lyr.blendMode||"normal"} opts={BMODES}
+                  fn={function(v){props.onChange({blendMode:v})}}/>
+                <Sl l="opacity" v={lyr.opacity==null?100:lyr.opacity} mn={0} mx={100} st={1}
+                  fmt={function(v){return Math.round(v)+"%"}}
+                  fn={function(v){props.onChange({opacity:v})}}/>
+                {COMMUTATIVE_MODES[lyr.blendMode] && (
+                  <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",fontStyle:"italic"}}>
+                    order has no effect in {lyr.blendMode} mode
+                  </div>
+                )}
+          <PR l="channels">
+            <div style={{display:"flex",gap:4}}>
+              {["R","G","B","A"].map(function(ch){
+                var bc=lyr.blendChannels||{R:true,G:true,B:true,A:true}
+                var on=bc[ch]!==false
+                var cols={R:"#e05050",G:"#50d050",B:"#5080f0",A:"var(--mu)"}
+                return <button key={ch} onClick={function(){
+                    var nb=Object.assign({R:true,G:true,B:true,A:true},bc)
+                    nb[ch]=!on; props.onChange({blendChannels:nb})}}
+                  style={{padding:"4px 0",borderRadius:4,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                    cursor:"pointer",border:"1px solid "+(on?cols[ch]:"var(--bd)"),
+                    background:on?"rgba(255,255,255,.06)":"none",color:on?cols[ch]:"var(--mu)",
+                    width:36,textAlign:"center"}}>
+                  {ch}</button>})}
+            </div>
+          </PR>
+<BlendIfAccordion>
+            <BlendIfSlider label="This"
+              values={((lyr.blendIf||{}).thisLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange({blendIf:Object.assign({},lyr.blendIf||{},{thisLayer:v})})}}/>
+            <BlendIfSlider label="Below"
+              hidden={props.isLast}
+              values={((lyr.blendIf||{}).underlyingLayer)||{s0:0,s1:0,h1:255,h0:255}}
+              onChange={function(v){props.onChange({blendIf:Object.assign({},lyr.blendIf||{},{underlyingLayer:v})})}}/>
+          </BlendIfAccordion>
+              </div>
+            ):(
+              <div className="card-body">
+                <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 8px 84px",fontStyle:"italic",lineHeight:1.5}}>
+                  How this layer's matte (source alpha × mask) composites over layers below.
+                </div>
+                <Se l="mode" v={lyr.maskMode||"add"} opts={MASK_BMODES}
+                  fn={function(v){props.onChange({maskMode:v})}}/>
+                <Sl l="amount" v={lyr.maskAmount==null?100:lyr.maskAmount} mn={0} mx={100} st={1}
+                  fmt={function(v){return Math.round(v)+"%"}}
+                  fn={function(v){props.onChange({maskAmount:v})}}/>
+              </div>
+            )}
+          </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── LAYER COMP PROPS ─────────────────────────────────── */
+function LayerCompProps(props) {
+  var node=props.node, onChange=props.onChange, nodes=props.nodes
+  var wrappedPromote=props.onPromote?function(tp){props.onPromote(Object.assign({nodeId:node.id},tp))}:null
+  var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
+  // ALL hooks must be above any early return — Rules of Hooks
+  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  function navPush(item){setNavStack(function(s){return s.concat([item])})}
+  function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
+
+  // Drill-down into layer effectStack → mask effects chain
+  if(navStack.length>0){
+    var top=navStack[navStack.length-1]
+    var topSteps=(top.parentSteps||[]).concat(top.kind?[{kind:top.kind,id:top.id}]:top.steps||[])
+    var drillTarget=resolvePath(node, top.slotKey, topSteps)
+    if(!drillTarget){
+      setTimeout(function(){setNavStack([])},0)
+      return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target gone — returning…</div>
+    }
+    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx)})}
+    var childBasePath={slotKey:top.slotKey,steps:topSteps}
+    var isEffectDrill=top.kind==="effect"
+    var stackToShow=isEffectDrill?(drillTarget.maskStack||[]):(drillTarget.effectStack||[])
+    return (
+      <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
+        <div className="breadcrumb">
+          <span className="bc-item" onClick={function(){setNavStack([])}}>{node.name}</span>
+          {(function(){
+            var sk=navStack[0]&&navStack[0].slotKey||""
+            var ctx=sk.indexOf("inputA")>=0?"Input A":sk.indexOf("inputB")>=0?"Input B":
+              sk==="outEfx"||sk==="outMask"?"Output":
+              sk.indexOf("layers[")>=0?("Layer "+(parseInt((sk.match(/layers\[(\d+)\]/)||[,"?"])[1])+1)):
+              sk==="effectStack"?"Effects":sk==="maskStack"?"Masks":null
+            if(!ctx) return null
+            return (<span style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+              <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
+              <span className="bc-item" onClick={function(){setNavStack([])}} style={{color:"var(--di)"}}>
+                {ctx}
+              </span>
+            </span>)
+          })()}
+          {navStack.map(function(n,i){
+            var isCur=i===navStack.length-1
+            return (
+              <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
+                <span className={"bc-item"+(isCur?" cur":"")}
+                  onClick={function(){jumpTo(i)}}>
+                  {n.label}
+                </span>
+              </span>
+            )
+          })}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:10}}>
+          {isEffectDrill?(
+            <MaskStackPanel
+              key={stackToShow.map(function(m){return m.id}).join(",")}
+              stack={stackToShow} nodes={nodes} selfId={node.id}
+              navPush={navPush} iC={props.iC}
+              basePath={childBasePath}
+              onNavigate={props.onNavigate}
+              onPromote={wrappedPromote}
+              onChange={function(ms){
+                var newNode=updatePath(node,top.slotKey,topSteps,function(efx){
+                  return Object.assign({},efx,{maskStack:ms})
+                })
+                onChange(newNode)
+              }}/>
+          ):(
+            <EfxStack
+              key={stackToShow.map(function(e){return e.id}).join(",")}
+              stack={stackToShow}
+              nodes={nodes} selfId={node.id}
+              navPush={navPush} iC={props.iC}
+              basePath={childBasePath}
+              onNavigate={props.onNavigate}
+              onPromote={wrappedPromote}
+              onChange={function(es){
+                var newNode=updatePath(node, top.slotKey, topSteps, function(mask){
+                  return Object.assign({},mask,{effectStack:es})
+                })
+                onChange(newNode)
+              }}/>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  var layers = node.layers || []
+  // Accordion collapse state per layer — lives in node._ui.layerCollapsed
+  var lcpUi = node._ui || {}
+  function setLcpUi(patch){ onChange(Object.assign({},node,{_ui:Object.assign({},lcpUi,patch)})) }
+  var layerCollapsed = lcpUi.layerCollapsed || {}
+  function toggleLayerCollapse(lid){
+    var nc=Object.assign({},layerCollapsed); nc[lid]=!nc[lid]
+    setLcpUi({layerCollapsed:nc})
+  }
+  function updLayer(idx, patch){
+    var nl=layers.map(function(l,i){return i===idx?Object.assign({},l,patch):l})
+    onChange(Object.assign({},node,{layers:nl,_ui:lcpUi}))
+  }
+  function addLayer(){
+    onChange(Object.assign({},node,{layers:[mkLayer()].concat(layers)}))
+  }
+  function delLayer(idx){
+    if(layers.length<=1) return
+    onChange(Object.assign({},node,{layers:layers.filter(function(_,i){return i!==idx})}))
+  }
+  function moveLayer(idx, dir){
+    var ni=Math.max(0,Math.min(layers.length-1,idx+dir))
+    if(ni===idx) return
+    var a=layers.slice(); var tmp=a[idx]; a[idx]=a[ni]; a[ni]=tmp
+    onChange(Object.assign({},node,{layers:a}))
+  }
+  var outTabs=[
+    {id:"effects",label:"Effects"+((node.outEfx||[]).length>0?" ("+(node.outEfx||[]).length+")":""),color:"ac"},
+    {id:"masks",  label:"Masks"+((node.outMask||[]).length>0?" ("+(node.outMask||[]).length+")":""),color:"lv"},
+  ]
+  return (
+    <div style={{padding:10,overflowY:"auto"}}>
+      {/* Layers list — top of list = top layer (applied last) */}
+      <div style={{marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+          <span style={{fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+            textTransform:"uppercase",letterSpacing:".1em",color:"#e06828",flex:1}}>Layers</span>
+          <button className="ac" style={{fontSize:10,padding:"0 10px",minHeight:30}} onClick={addLayer}>+ layer</button>
+        </div>
+        {layers.map(function(lyr,li){
+          return (
+            <LayerCard key={lyr.id} lyr={lyr} li={li}
+              isFirst={li===0} isLast={li===layers.length-1}
+              totalLayers={layers.length}
+              collapsed={!!layerCollapsed[lyr.id]}
+              onToggleCollapse={function(){toggleLayerCollapse(lyr.id)}}
+              nodes={nodes} selfId={node.id} iC={props.iC}
+              navPush={navPush} onNavigate={props.onNavigate}
+              onPromote={wrappedPromote}
+              onMove={function(dir){moveLayer(li,dir)}}
+              onDel={function(){delLayer(li)}}
+              onChange={function(patch){updLayer(li,patch)}}/>
+          )
+        })}
+      </div>
+
+      {/* Output effects + masks */}
+      <div className="card">
+        <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+            textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
+        </div>
+        <div className="card-body" style={{paddingBottom:0}}>
+          <Sl l="fill" v={node.outFillOpacity==null?100:node.outFillOpacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){onChange(Object.assign({},node,{outFillOpacity:v}))}}/>
+          <Sl l="opacity" v={node.outOpacity==null?100:node.outOpacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){onChange(Object.assign({},node,{outOpacity:v}))}}/>
+        </div>
+        <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
+        {outTab==="effects" && (
+          <div style={{padding:10}}>
+            <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              basePath={{slotKey:"outEfx", steps:[]}}
+              onNavigate={props.onNavigate}
+              onPromote={wrappedPromote}
+              onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}/>
+          </div>
+        )}
+        {outTab==="masks" && (
+          <div style={{padding:10}}>
+            <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush} iC={props.iC}
+              basePath={{slotKey:"outMask", steps:[]}}
+              onNavigate={props.onNavigate}
+              onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}/>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function NodeDetailSheet(props) {
+  // props: node, sec, open, onClose, onUpdate, onLoad, nodes, dispId, onDsp
+  var sheetRef=useRef(null)
+  var dragRef=useRef(null)  // {startY, startH, sheetEl}
+  var heightSt=useState(null); var sheetH=heightSt[0], setSheetH=heightSt[1]
+
+  function onGripDown(e){
+    var el=sheetRef.current; if(!el)return
+    e.preventDefault()
+    var startY=e.touches?e.touches[0].clientY:e.clientY
+    var startH=el.offsetHeight
+    dragRef.current={startY:startY, startH:startH}
+    function onMove(ev){
+      if(!dragRef.current)return
+      var y=ev.touches?ev.touches[0].clientY:ev.clientY
+      var delta=dragRef.current.startY-y   // drag up = expand
+      var newH=Math.max(120, Math.min(window.innerHeight*0.92, dragRef.current.startH+delta))
+      setSheetH(newH)
+    }
+    function onUp(){
+      dragRef.current=null
+      document.removeEventListener("mousemove",onMove)
+      document.removeEventListener("mouseup",onUp)
+      document.removeEventListener("touchmove",onMove)
+      document.removeEventListener("touchend",onUp)
+    }
+    document.addEventListener("mousemove",onMove,{passive:false})
+    document.addEventListener("mouseup",onUp)
+    document.addEventListener("touchmove",onMove,{passive:false})
+    document.addEventListener("touchend",onUp)
+  }
+
+  if (!props.open || !props.node) return null
+  var isDsp = props.dispId === props.node.id
+  var sheetStyle = sheetH ? {maxHeight:sheetH+"px"} : {}
+  return (
+    <div className="sheet-scrim" onClick={function(e){ if(e.target===e.currentTarget) props.onClose() }}>
+      <div className="node-sheet" ref={sheetRef} style={sheetStyle}>
+        {/* Draggable grip pill — original visual design, drag to resize */}
+        <div className="sheet-grip"
+          style={{cursor:"row-resize",touchAction:"none",padding:"12px 40px",
+            marginTop:-10,marginBottom:-6,display:"flex",justifyContent:"center"}}
+          onMouseDown={onGripDown}
+          onTouchStart={onGripDown}>
+          <div style={{width:40,height:4,background:"var(--bd)",borderRadius:2}}/>
+        </div>
+        <div className="node-sheet-hdr">
+          <span style={{flex:1,fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
+            color:"var(--tx)",fontWeight:500}}>
+            {props.node.name}
+          </span>
+          {/* Display toggle — same ◎/◉ as the list item */}
+          {props.onDsp && (function(){
+            var nds=props.dispSlot&&props.dispSlot.nodeId===props.node.id?props.dispSlot:null
+            var icon,col,tip
+            if(nds){
+              icon=nds.mode==="pixels"?"◉":"◈"
+              col="var(--lv)"
+              var slotLabel=nds.slot==="inputA"?"Input A":nds.slot==="inputB"?"Input B":"Output"
+              tip=slotLabel+" · "+(nds.mode==="pixels"?"pixels":"mask")+" · tap for composite"
+            } else if(isDsp){
+              icon=props.dispMask?"◈":"◉"; col="var(--ac)"
+              tip=props.dispMask?"output mask · tap off":"composite · tap for mask"
+            } else { icon="◎"; col="var(--mu)"; tip="Set as live preview" }
+            return <button className="icon-btn sm"
+              onClick={function(){props.onDsp(props.node.id)}}
+              style={{color:col,fontSize:20,marginRight:4}} title={tip}>{icon}</button>
+          })()}
+          <button className="ghost" style={{fontSize:20,minHeight:36}} onClick={props.onClose}>×</button>
+        </div>
+        <div className="node-sheet-scroll">
+          {props.sec===1
+            ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad} nodes={props.nodes} iC={props.iC}/>
+            : props.node.type==="stack"
+              ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
+                  onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
+              : props.node.type==="layers"
+                ? <LayerCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
+                    onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                : props.node.type==="promoted"
+                ? <PromotedProps node={props.node} nodes={props.nodes}/>
+                : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
+                    onPromote={props.onPromote} onExtract={props.onExtract} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
+          }
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── STACK PROPS ──────────────────────────────────────── */
+// A Stack node is a named, reusable effect or mask stack.
+// Its UI is identical to the inline stack in a blender/stack input's tab.
+function StackProps(props) {
+  var node=props.node, onChange=props.onChange, nodes=props.nodes
+  var wrappedPromote=props.onPromote?function(tp){props.onPromote(Object.assign({nodeId:node.id},tp))}:null
+  var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
+  // Hoist hook above early return
+  var unused=useState(null) // placeholder so hook count is stable
+
+  function navPush(item){setNavStack(function(s){return s.concat([item])})}
+  function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
+
+  // Drill-down for mask → effect editing (path-based, no stale closures)
+  if(navStack.length>0){
+    var top=navStack[navStack.length-1]
+    var topStepsS=(top.parentSteps||[]).concat(top.kind?[{kind:top.kind,id:top.id}]:top.steps||[])
+    var drillMask=resolvePath(node,top.slotKey,topStepsS)
+    if(!drillMask){
+      setTimeout(function(){setNavStack([])},0)
+      return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target no longer exists — returning…</div>
+    }
+    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx)})}
+    return (
+      <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
+        <div className="breadcrumb">
+          <button className="ghost" style={{fontSize:13,padding:"0 6px 0 0",minHeight:32}} onClick={navPop}>Back</button>
+          <span className="bc-item" onClick={function(){setNavStack([])}}
+            style={{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>{node.name}</span>
+          {navStack.map(function(n,i){
+            var isCur=i===navStack.length-1
+            return (
+              <span key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{color:"var(--mu)"}}>›</span>
+                <span className={"bc-item"+(isCur?" cur":"")}
+                  onClick={isCur?null:function(){jumpTo(i)}}
+                  style={isCur?null:{cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>
+                  {n.label}
+                </span>
+              </span>
+            )
+          })}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:10}}>
+          <EfxStack
+            key={(drillMask.effectStack||[]).map(function(e){return e.id}).join(",")}
+            stack={drillMask.effectStack||[]} nodes={nodes} selfId={node.id}
+            navPush={navPush}
+            basePath={{slotKey:top.slotKey,steps:topStepsS}}
+            onNavigate={props.onNavigate}
+            onPromote={wrappedPromote}
+            onChange={function(es){
+              var newNode=updatePath(node,top.slotKey,topSteps,function(mask){
+                return Object.assign({},mask,{effectStack:es})
+              })
+              onChange(newNode)
+            }}/>
+        </div>
+      </div>
+    )
+  }
+
+  var isEffect = node.stackType==="effect"
+  var accentColor = isEffect ? "var(--ac)" : "var(--lv)"
+  var accentBg    = isEffect ? "rgba(36,204,168,.06)" : "rgba(176,96,240,.06)"
+
+  return (
+    <div style={{padding:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{fontSize:9,padding:"1px 7px",borderRadius:4,
+          background:isEffect?"rgba(36,204,168,.12)":"rgba(176,96,240,.12)",
+          color:accentColor,
+          border:isEffect?"1px solid rgba(36,204,168,.25)":"1px solid rgba(176,96,240,.3)"}}>
+          {isEffect ? "Effect Stack" : "Mask Stack"}
+        </span>
+      </div>
+
+      {/* Preview source — applies the stack to this source for live preview only */}
+      <div className="card" style={{marginBottom:10}}>
+        <div className="card-hdr" style={{background:"rgba(180,180,80,.06)"}}>
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+            textTransform:"uppercase",letterSpacing:".1em",color:"#c8c040"}}>
+            Preview source
+          </span>
+          <span style={{fontSize:9,color:"var(--mu)"}}>for preview only · not composited</span>
+        </div>
+        <div className="card-body">
+          <NRef l="source" v={node.previewRefId||null} nodes={nodes} selfId={node.id} iC={props.iC}
+            fn={function(v){onChange(Object.assign({},node,{previewRefId:v||null}))}}/>
+          {node.previewRefId && (
+            <div style={{fontSize:9,color:"var(--mu)",marginTop:6,lineHeight:1.5}}>
+              Tap ◎ on this node to preview. {isEffect?"Effects":"The mask"} will be applied to the selected source. This reference is ignored during compositing.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {isEffect ? (
+        <EfxStack
+          stack={node.effectStack||[]}
+          nodes={nodes}
+          selfId={node.id}
+          navPush={navPush}
+          basePath={{slotKey:"effectStack",steps:[]}}
+          onNavigate={props.onNavigate}
+          onPromote={wrappedPromote}
+          onChange={function(es){onChange(Object.assign({},node,{effectStack:es}))}}
+        />
+      ) : (
+        <MaskStackPanel
+          stack={node.maskStack||[]}
+          nodes={nodes}
+          selfId={node.id}
+          navPush={navPush} iC={props.iC}
+          basePath={{slotKey:"maskStack",steps:[]}}
+          onNavigate={props.onNavigate}
+          onChange={function(ms){onChange(Object.assign({},node,{maskStack:ms}))}}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ─── PROMOTED PROPS ───────────────────────────────────── */
+function PromotedProps(props) {
+  var node=props.node
+  var tp=node.tapPath||{}
+  var srcNode=props.nodes.find(function(n){return n.id===tp.nodeId})
+  return (
+    <div style={{padding:12}}>
+      <div className="card" style={{marginBottom:10}}>
+        <div className="card-hdr"><span style={{fontSize:11,color:"#e8c840",fontFamily:"'Syne',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em"}}>Promoted Tap</span></div>
+        <div className="card-body" style={{fontSize:11,lineHeight:1.8}}>
+          <div><span style={{color:"var(--mu)"}}>Source: </span><span style={{color:"var(--tx)"}}>{srcNode?srcNode.name:"unknown"}</span></div>
+          <div><span style={{color:"var(--mu)"}}>Slot: </span><span style={{color:"var(--tx)"}}>{tp.slot||"—"}</span></div>
+          <div><span style={{color:"var(--mu)"}}>Stack type: </span><span style={{color:"var(--tx)"}}>{tp.stackType||"—"}</span></div>
+          <div><span style={{color:"var(--mu)"}}>After item: </span><span style={{color:"var(--tx)"}}>{tp.afterId||"—"}</span></div>
+          <div><span style={{color:"var(--mu)"}}>Includes sub-stack: </span><span style={{color:"var(--tx)"}}>{tp.withSub?"yes":"no"}</span></div>
+        </div>
+      </div>
+      <div style={{fontSize:10,color:"var(--mu)",textAlign:"center",padding:"4px 0"}}>Read-only tap on intermediate pipeline state. Delete this node to remove the tap (check no references point to it first).</div>
+    </div>
+  )
+}
+
+/* ─── SECTION (stickyHeader + sheet panel style) ─── */
+function Section(props) {
+  var items = props.nodes.filter(function(n){ return n.section===props.sec })
+  var color = props.sec===1 ? "var(--gn)" : "var(--co)"
+  var shdrCls = "shdr" + (props.stickyHeaders ? " sticky" : "")
+  // In split mode (inScroll=false): section is a flex column that fills available
+  // space with an internal scroll area. In unified/scroll mode (inScroll=true):
+  // section expands to natural height and the parent container scrolls.
+  var outerStyle = props.inScroll
+    ? {borderBottom:"1px solid var(--bd)"}
+    : {display:"flex",flexDirection:"column",flex:props.collapsed?"0 0 auto":1,
+       overflow:"hidden",borderBottom:"1px solid var(--bd)"}
+  var innerStyle = props.inScroll
+    ? {}
+    : {flex:1,overflowY:"auto",overflowX:"hidden"}
+  return (
+    <div style={outerStyle}>
+      <div className={shdrCls} style={{cursor:"pointer"}} onClick={props.onToggle}>
+        <span style={{fontSize:12,color:props.collapsed?"var(--mu)":"var(--di)"}}>{props.collapsed?"▶":"▼"}</span>
+        <span className="slbl" style={{flex:1,color}}>{props.title}</span>
+        <span style={{fontSize:11,color:"var(--mu)",marginRight:8}}>{items.length}</span>
+        <div onClick={function(e){e.stopPropagation()}}><AddMenu sec={props.sec} onAdd={props.onAdd}/></div>
+      </div>
+      {!props.collapsed && (
+        <div style={innerStyle}>
+          {items.length===0 && <div className="empty">no items — tap + Add</div>}
+          {/* Regular (non-promoted) items */}
+          {items.filter(function(n){return n.type!=="promoted"}).map(function(node){
+            var isSel = props.selId===node.id
+            var isDsp = props.dispId===node.id
+            return (
+              <div key={node.id} id={"ni-"+node.id}>
+                <NodeItem node={node} isSel={isSel} isDsp={isDsp}
+                  isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
+                  dispSlot={props.dispSlot}
+                  onSel={function(id){ props.onSel(id===props.selId?null:id) }}
+                  onDsp={props.onDsp} onDel={props.onDel}
+                  onRen={function(name){ props.onRen(node.id,name) }}
+                  onTog={props.onTog}/>
+                {isSel && props.panelStyle!=="sheet" && (
+                  <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
+                    {props.sec===1
+                      ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} nodes={props.nodes} iC={props.iC}/>
+                      : node.type==="blender"
+                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
+                        : node.type==="layers"
+                          ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                        : node.type==="stack"
+                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                          : null
+                    }
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          {/* Promoted taps — grouped */}
+          {props.sec===2 && items.filter(function(n){return n.type==="promoted"}).length>0 && (
+            <div>
+              <div className="prom-group-hdr">
+                <span style={{fontSize:9,color:"#e8c840",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"IBM Plex Mono,monospace"}}>Promoted taps</span>
+                <span style={{fontSize:9,color:"var(--mu)",marginLeft:6}}>{items.filter(function(n){return n.type==="promoted"}).length}</span>
+              </div>
+              {items.filter(function(n){return n.type==="promoted"}).map(function(node){
+                var isSel = props.selId===node.id
+                var isDsp = props.dispId===node.id
+                return (
+                  <div key={node.id} id={"ni-"+node.id}>
+                    <NodeItem node={node} isSel={isSel} isDsp={isDsp}
+                      isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
+                      dispSlot={props.dispSlot}
+                      onSel={function(id){ props.onSel(id===props.selId?null:id) }}
+                      onDsp={props.onDsp} onDel={props.onDel}
+                      onRen={function(name){ props.onRen(node.id,name) }}
+                      onTog={props.onTog}/>
+                    {isSel && props.panelStyle!=="sheet" && (
+                      <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
+                        <PromotedProps node={node} nodes={props.nodes}/>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── UNIFIED SCROLL LAYOUT ───────────────────────────────── */
+function UnifiedLayout(props) {
+  // props: settings, sp, cvRef, active, sz, onResize, onExport, dragRef, appRef, s1Col, setS1Col, s2Col, setS2Col
+  var s = props.settings
+  var resizeRef = useRef(null)
+
+  function onResizeHandleDown(e) {
+    e.preventDefault()
+    var el = resizeRef.current
+    if (el) el.classList.add("drag")
+    var app = props.appRef.current
+    var tot = app ? app.offsetHeight : window.innerHeight
+    var startY = e.clientY
+    var startH = props.previewH
+
+    function onMove(me) {
+      var delta = me.clientY - startY
+      var next = Math.max(15, Math.min(80, startH + (delta / tot) * 100))
+      props.setPreviewH(next)
+    }
+    function onUp() {
+      if (el) el.classList.remove("drag")
+      document.removeEventListener("pointermove", onMove)
+      document.removeEventListener("pointerup", onUp)
+    }
+    document.addEventListener("pointermove", onMove)
+    document.addEventListener("pointerup", onUp)
+  }
+
+  var previewBlock = (
+    <div style={{height:props.previewH+"vh",display:"flex",flexDirection:"column"}}>
+      <props.LivePreviewCmp cvRef={props.cvRef} active={props.active} sz={props.sz}
+        onResize={props.onResize} onExport={props.onExport}/>
+    </div>
+  )
+
+  var resizeHandle = (
+    <div ref={resizeRef} className="unified-resize-handle"
+      onPointerDown={onResizeHandleDown}
+      style={{userSelect:"none"}}/>
+  )
+
+  if (s.previewPinned) {
+    // flex:1 + minHeight:0 fills the space left after HeaderBar without overflowing the viewport
+    return (
+      <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{flexShrink:0}}>
+          {previewBlock}
+          {resizeHandle}
+        </div>
+        <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+          <Section sec={1} title="§1 · Creators" {...props.sp}
+            collapsed={props.s1Col} onToggle={function(){props.setS1Col(!props.s1Col)}}
+            stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
+          <Section sec={2} title="§2 · Compositors" {...props.sp}
+            collapsed={props.s2Col} onToggle={function(){props.setS2Col(!props.s2Col)}}
+            stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
+          <div style={{height:24}}/>
+        </div>
+      </div>
+    )
+  }
+
+  // Free scroll — everything in one column
+  return (
+    <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+      {previewBlock}
+      {resizeHandle}
+      <Section sec={1} title="§1 · Creators" {...props.sp}
+        collapsed={props.s1Col} onToggle={function(){props.setS1Col(!props.s1Col)}}
+        stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
+      <Section sec={2} title="§2 · Compositors" {...props.sp}
+        collapsed={props.s2Col} onToggle={function(){props.setS2Col(!props.s2Col)}}
+        stickyHeaders={s.stickyHeaders} panelStyle={s.panelStyle} inScroll={true}/>
+      <div style={{height:24}}/>
+    </div>
+  )
+}
+
+/* ─── APP ROOT ──────────────────────────────────────────── */
+function App() {
+  var init = initState()
+  var s1 = useState(init.nodes);  var nodes=s1[0],   setNodes=s1[1]
+  var s2 = useState(init.dispId); var dispId=s2[0],  setDispId=s2[1]
+  var s2m= useState(false);      var dispMask=s2m[0],setDispMask=s2m[1]
+  var s2s= useState(null);       var dispSlot=s2s[0],setDispSlot=s2s[1]  // {nodeId,slot,mode}
+  var s3 = useState(null);        var selId=s3[0],   setSelId=s3[1]
+  var s4 = useState(36);          var leftW=s4[0],   setLeftW=s4[1]
+  var s5 = useState(56);          var topH=s5[0],    setTopH=s5[1]
+  var s6 = useState(false);       var s1Col=s6[0],   setS1Col=s6[1]
+  var s7 = useState(false);       var s2Col=s7[0],   setS2Col=s7[1]
+  var s8 = useState(false);       var isVert=s8[0],  setIsVert=s8[1]
+  var s9 = useState(true);        var flipped=s9[0], setFlipped=s9[1]  // default: preview on top
+  var s10= useState(false);       var leftFS=s10[0], setLeftFS=s10[1]
+  var s11= useState(false);       var rightFS=s11[0],setRightFS=s11[1]
+  var s12= useState(400);         var sz=s12[0],     setSz=s12[1]
+
+  // Settings state
+  var DEFAULTS = {viewMode:"split",previewPinned:true,stickyHeaders:true,panelStyle:"inline",previewH:44,isVert:false,flipped:true}
+  var ss1 = useState(DEFAULTS)
+  var settings=ss1[0], setSettings=ss1[1]
+  var ss2 = useState(false); var settingsOpen=ss2[0], setSettingsOpen=ss2[1]
+  var ss3 = useState(44);   var previewH=ss3[0],    setPreviewH=ss3[1]    // unified preview height %
+  // Sheet-mode selected node
+  var ss4 = useState(null);  var sheetNode=ss4[0],   setSheetNode=ss4[1]   // {node, sec}
+
+  var appRef=useRef(null), cvRef=useRef(null), iC=useRef(new Map()), stRef=useRef({nodes:nodes,dispId:dispId})
+  var histRef  = useRef([])        // undo ring: array of {nodes} snapshots
+  var toastSt  = useState(false);  var toastOn=toastSt[0], setToastOn=toastSt[1]
+  var toastTmr = useRef(null)
+  var projNameSt=useState("Untitled"); var projName=projNameSt[0],setProjName=projNameSt[1]
+  var autoSaveIntSt=useState(0); var autoSaveInt=autoSaveIntSt[0],setAutoSaveInt=autoSaveIntSt[1]
+  var autoSaveTmr=useRef(null)
+  var fileInputRef=useRef(null)
+  var loadDialogSt=useState(false); var loadDialog=loadDialogSt[0],setLoadDialog=loadDialogSt[1]
+  var recentProjSt=useState(function(){
+    try{var r=localStorage.getItem("nlics:recent");return r?JSON.parse(r):[]}catch(e){return[]}
+  }); var recentProj=recentProjSt[0],setRecentProj=recentProjSt[1]
+
+  function pushHistory(snapshot) {
+    var ring = histRef.current
+    ring.push(JSON.parse(JSON.stringify(snapshot)))
+    if (ring.length > 30) ring.shift()
+  }
+  function showToast() {
+    setToastOn(true)
+    if (toastTmr.current) clearTimeout(toastTmr.current)
+    toastTmr.current = setTimeout(function(){ setToastOn(false) }, 1600)
+  }
+  // ── Project save / load ──────────────────────────────────────────────────
+  function saveProject(setDefault) {
+    try {
+      var savedAt=new Date().toISOString()
+      var payload={version:"1.0",appName:"Selena",fileType:"nlics",name:projName,savedAt:savedAt,nodes:nodes}
+      var data = JSON.stringify(payload, null, 2)
+      var blob = new Blob([data], {type:"application/json"})
+      var url = URL.createObjectURL(blob)
+      var a = document.createElement("a")
+      a.href=url; a.download=(projName||"Untitled").replace(/[^a-z0-9_-]/gi,"_")+".nlics"
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
+      // Store in recent projects list
+      var entry={name:projName,savedAt:savedAt,nodeCount:nodes.length}
+      var recent=recentProj.filter(function(r){return r.name!==projName}).slice(0,9)
+      recent.unshift(entry)
+      setRecentProj(recent)
+      try{localStorage.setItem("nlics:recent",JSON.stringify(recent))}catch(e){}
+      // Optionally set as default startup project
+      if(setDefault) {
+        try{localStorage.setItem("nlics:default-project",data);localStorage.setItem("nlics:default-project-name",projName)}catch(e){}
+      }
+    } catch(e) { console.error("Save failed",e) }
+  }
+  function loadProject(file) {
+    if(!file) return
+    var reader = new FileReader()
+    reader.onload = function(ev) {
+      try {
+        var data = JSON.parse(ev.target.result)
+        if(data.nodes) {
+          pushHistory({nodes:nodes})
+          setNodes(data.nodes)
+          if(data.name) setProjName(data.name)
+          iC.current = new Map()  // clear image cache
+        }
+      } catch(e) { alert("Could not load project file — invalid format") }
+    }
+    reader.readAsText(file)
+  }
+  function autoSaveNow() {
+    try {
+      var data = JSON.stringify({version:"1.0",name:projName,nodes:nodes,savedAt:new Date().toISOString()})
+      localStorage.setItem("nlics:autosave",data)
+      localStorage.setItem("nlics:autosave:name",projName)
+    } catch(e) {}
+  }
+  // Auto-save interval
+  useEffect(function(){
+    if(autoSaveTmr.current) clearInterval(autoSaveTmr.current)
+    if(autoSaveInt>0) autoSaveTmr.current=setInterval(autoSaveNow, autoSaveInt*60000)
+    return function(){if(autoSaveTmr.current)clearInterval(autoSaveTmr.current)}
+  },[autoSaveInt, nodes, projName])
+  // Auto-save on page unload
+  useEffect(function(){
+    function onUnload(){autoSaveNow()}
+    window.addEventListener("beforeunload",onUnload)
+    return function(){window.removeEventListener("beforeunload",onUnload)}
+  },[nodes,projName])
+
+  function doUndo() {
+    var ring = histRef.current
+    if (ring.length === 0) return
+    var snap = ring.pop()
+    setNodes(snap.nodes)
+    showToast()
+  }
+
+  useEffect(function(){stRef.current={nodes:nodes,dispId:dispId,dispMask:dispMask,dispSlot:dispSlot}},[nodes,dispId,dispMask,dispSlot])
+
+  // ── Persist settings via localStorage ───────────────────────────────────
+  // Works on GitHub Pages, local dev, and any browser.
+  // Wrapped in try/catch — localStorage throws in private mode with full quota.
+  // Load default project on startup if set
+  useEffect(function(){
+    try {
+      var def=localStorage.getItem("nlics:default-project")
+      var defName=localStorage.getItem("nlics:default-project-name")
+      if(def){var d=JSON.parse(def);if(d.nodes){setNodes(d.nodes);if(defName)setProjName(defName)}}
+    }catch(e){}
+  },[])
+
+  var STORAGE_KEY = 'nlics:ui-settings:v1'
+  // v1 suffix means a new app version can change the key to reset stale settings
+
+  // Load on mount — runs once, synchronously reads from localStorage
+  useEffect(function(){
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      var saved = JSON.parse(raw)
+      // Always merge with DEFAULTS so new keys survive app updates
+      var m = Object.assign({}, DEFAULTS, saved)
+      setSettings({
+        viewMode:      m.viewMode,
+        previewPinned: m.previewPinned,
+        stickyHeaders: m.stickyHeaders,
+        panelStyle:    m.panelStyle,
+      })
+      if (m.previewH !== undefined) setPreviewH(m.previewH)
+      if (m.isVert   !== undefined) setIsVert(m.isVert)
+      if (m.flipped  !== undefined) setFlipped(m.flipped)
+      if (m.leftW    !== undefined) setLeftW(m.leftW)
+      if (m.topH     !== undefined) setTopH(m.topH)
+    } catch(e) {}
+  }, [])
+
+  // Save whenever any persisted value changes
+  useEffect(function(){
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        viewMode:      settings.viewMode,
+        previewPinned: settings.previewPinned,
+        stickyHeaders: settings.stickyHeaders,
+        panelStyle:    settings.panelStyle,
+        previewH:      previewH,
+        isVert:        isVert,
+        flipped:       flipped,
+        leftW:         leftW,
+        topH:          topH,
+      }))
+    } catch(e) {}
+  }, [settings, previewH, isVert, flipped, leftW, topH])
+
+  useEffect(function(){
+    function onKey(e){
+      if((e.ctrlKey||e.metaKey)&&e.key==="z"&&!e.shiftKey){
+        e.preventDefault(); doUndo()
+      }
+    }
+    document.addEventListener("keydown",onKey)
+    return function(){document.removeEventListener("keydown",onKey)}
+  },[])
+  useEffect(function(){
+    function check(){setIsVert(window.innerWidth<700)}
+    check(); window.addEventListener("resize",check)
+    return function(){window.removeEventListener("resize",check)}
+  },[])
+  // Immediate re-render on data changes
+  useEffect(function(){
+    if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask,dispSlot)
+  },[nodes,dispId,sz,dispMask,dispSlot])
+  // Deferred re-render on layout changes — waits for browser reflow so
+  // canvas has correct dimensions and cvRef is attached to the live canvas
+  useEffect(function(){
+    var t = setTimeout(function(){
+      if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask,dispSlot)
+    }, 60)
+    return function(){ clearTimeout(t) }
+  },[flipped,isVert])
+
+  function loadUrl(url){
+    if(!url)return
+    // Don't skip if already in cache but not yet loaded (blob URLs land here immediately)
+    var existing=iC.current.get(url)
+    if(existing&&existing.complete&&existing.naturalWidth)return  // already fully loaded
+    var img=new Image()
+    // blob: URLs are same-origin — crossOrigin header causes CORS failure on blobs
+    if(!url.startsWith("blob:"))img.crossOrigin="anonymous"
+    img.onload=function(){iC.current.set(url,img);var st=stRef.current;renderPipeline(cvRef.current,st.dispId,st.nodes,iC.current)}
+    img.onerror=function(){iC.current.set(url,{complete:false,naturalWidth:0})}
+    iC.current.set(url,img)
+    img.src=url
+  }
+  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
+  function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id){setDispId(null);setDispMask(false);setDispSlot(null)}}
+  function upd(u){
+    setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})
+    // Keep sheet node in sync if it's the one being updated
+    setSheetNode(function(sn){ return sn&&sn.node.id===u.id ? {node:u,sec:u.section} : sn })
+  }
+  function ren(id,name){pushHistory({nodes:nodes});setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{name:name}):n})})}
+  function tog(id){setNodes(function(p){return p.map(function(n){return n.id===id?Object.assign({},n,{enabled:!n.enabled}):n})})}
+  // Single display-state setter — mutual exclusivity enforced here.
+  // All display changes go through this. Clears everything else first.
+  function setDisplay(state){
+    // state: null | {type:"node",id,mask:bool} | {type:"slot",nodeId,slot,mode}
+    if(!state){
+      setDispId(null); setDispMask(false); setDispSlot(null)
+      return
+    }
+    if(state.type==="node"){
+      setDispSlot(null)                    // clear any slot flag
+      setDispId(state.id)
+      setDispMask(state.mask||false)
+    } else if(state.type==="slot"){
+      setDispMask(false)                   // clear node mask mode
+      setDispId(state.nodeId)              // keep node lit in the list
+      setDispSlot({nodeId:state.nodeId,slot:state.slot,mode:state.mode})
+    }
+  }
+  // Top-level node display button — cycles: off → composite → mask → off
+  // If a sub-flag is driving, first tap takes top-level control (composite).
+  function dsp(id){
+    var subActive=dispSlot&&dispSlot.nodeId===id
+    if(subActive){
+      setDisplay({type:"node",id:id,mask:false})
+    } else if(dispId===id){
+      if(!dispMask) setDisplay({type:"node",id:id,mask:true})
+      else setDisplay(null)
+    } else {
+      setDisplay({type:"node",id:id,mask:false})
+    }
+  }
+  // Sub-flag (slot) display button — cycles: off → pixels → mask → off
+  // Clearing all other flags is handled by setDisplay.
+  function dspSlot(nodeId,slot){
+    if(dispSlot&&dispSlot.nodeId===nodeId&&dispSlot.slot===slot){
+      if(dispSlot.mode==="pixels") setDisplay({type:"slot",nodeId:nodeId,slot:slot,mode:"mask"})
+      else setDisplay(null)
+    } else {
+      setDisplay({type:"slot",nodeId:nodeId,slot:slot,mode:"pixels"})
+    }
+  }
+  function sel(id){setSelId(function(p){return p===id?null:id})}
+  function doExport(fmt){var cv=cvRef.current;if(!cv)return;var a=document.createElement("a");a.download="nlics."+fmt;a.href=cv.toDataURL(fmt==="jpeg"?"image/jpeg":fmt==="webp"?"image/webp":"image/png",.95);a.click()}
+
+  // Drag state — held in refs so pointer handlers don't need re-registration
+  var dragRef  = useRef(null)  // {vert, start, pct0, onEnd}
+
+  function handleDragStart(cx, cy, vert, onEnd) {
+    var app = appRef.current; if (!app) return
+    var tot = vert ? app.offsetHeight : app.offsetWidth
+    dragRef.current = {
+      vert: vert,
+      start: vert ? cy : cx,
+      pct0:  vert ? topH : leftW,
+      tot:   tot,
+      onEnd: onEnd
+    }
+  }
+  function handleRootPointerMove(e) {
+    var dr = dragRef.current; if (!dr) return
+    var coord = dr.vert ? e.clientY : e.clientX
+    var delta = coord - dr.start
+    // When flipped+vert the preview is on top and controls at bottom.
+    // topH drives the bottom (controls) panel — dragging divider down should
+    // shrink controls (topH decreases), so we negate the delta.
+    var sign  = (dr.vert && flipped) ? -1 : 1
+    var next  = Math.max(15, Math.min(85, dr.pct0 + sign * (delta / dr.tot) * 100))
+    if (dr.vert) setTopH(next); else setLeftW(next)
+  }
+  function handleRootPointerUp(e) {
+    var dr = dragRef.current; if (!dr) return
+    if (dr.onEnd) dr.onEnd()
+    dragRef.current = null
+  }
+
+  var hDivHook = useDivider(false, handleDragStart)
+  var vDivHook = useDivider(true,  handleDragStart)
+  var divHook  = isVert ? vDivHook : hDivHook
+  var active=nodes.find(function(n){return n.id===dispId})||null
+  function selWithSheet(id) {
+    var actual = id===selId ? null : id
+    setSelId(actual)
+    if (settings.panelStyle==="sheet" && actual) {
+      var node = nodes.find(function(n){return n.id===actual})
+      if (node) setSheetNode({node:node, sec:node.section})
+    } else {
+      setSheetNode(null)
+    }
+  }
+  function handlePromote(tapPath) {
+    var suggestName = "Tap " + (tapPath.stackType||"") + " " + (tapPath.afterId||"").slice(0,4)
+    var name
+    if(window.prompt) {
+      var result = window.prompt("Name this tap point:", suggestName)
+      if(result === null) return  // user cancelled — do nothing
+      name = result.trim() || suggestName
+    } else {
+      name = suggestName
+    }
+    var pNode = mkPromoted(name, tapPath)
+    pNode.section = 2
+    pushHistory({nodes:nodes})
+    setNodes(function(p){ return p.concat([pNode]) })
+  }
+  function handleExtract(info) {
+    // info: {slot, slotObj, kind:"effect"|"mask", owner}
+    var suggestName = (info.owner ? info.owner.name+" " : "") + (info.kind==="effect"?"Effect":"Mask")+" Stack"
+    var name = window.prompt ? (window.prompt("Name this new Stack:", suggestName)||suggestName) : suggestName
+    var newStack = mkStack(info.kind)
+    newStack.name = name
+    if(info.kind==="effect"){
+      newStack.effectStack = (info.slotObj.effectStack||[]).slice()
+    } else {
+      newStack.maskStack = (info.slotObj.maskStack||[]).slice()
+    }
+    var stackRefItem = info.kind==="effect" ? mkEfxStackRef(newStack.id) : mkMaskStackRef(newStack.id)
+
+    // Build the updated owner node from info.owner (current at call time)
+    function applySlotUpdate(n) {
+      if(!info.owner||n.id!==info.owner.id)return n
+      var updated = Object.assign({},n)
+      if(info.slot==="inputA"){
+        updated.inputA = Object.assign({},n.inputA,{
+          effectStack: info.kind==="effect" ? [stackRefItem] : n.inputA.effectStack,
+          maskStack:   info.kind==="mask"   ? [stackRefItem] : n.inputA.maskStack,
+        })
+      } else if(info.slot==="inputB"){
+        updated.inputB = Object.assign({},n.inputB,{
+          effectStack: info.kind==="effect" ? [stackRefItem] : n.inputB.effectStack,
+          maskStack:   info.kind==="mask"   ? [stackRefItem] : n.inputB.maskStack,
+        })
+      } else if(info.slot==="outEfx"){
+        updated.outEfx = [stackRefItem]
+      } else if(info.slot==="outMask"){
+        updated.outMask = [stackRefItem]
+      }
+      return updated
+    }
+    var updatedOwner = applySlotUpdate(info.owner)
+
+    pushHistory({nodes:nodes})
+    setNodes(function(p){ return p.concat([newStack]).map(applySlotUpdate) })
+    // Keep sheetNode in sync so sheet panel mode sees the change immediately
+    setSheetNode(function(sn){
+      return sn&&info.owner&&sn.node.id===info.owner.id
+        ? {node:updatedOwner, sec:info.owner.section} : sn
+    })
+  }
+
+  function handleNavigate(id) {
+    var node = nodes.find(function(n){return n.id===id})
+    if (!node) return
+    setSelId(id)
+    if (settings.panelStyle === "sheet") setSheetNode({node: node, sec: node.section})
+    if (node.section === 1) setS1Col(false)
+    else setS2Col(false)
+    // Scroll to the node in the list after state has updated and panel has expanded
+    setTimeout(function(){
+      var el=document.getElementById("ni-"+id)
+      if(el) el.scrollIntoView({behavior:"smooth",block:"nearest"})
+    }, 120)
+  }
+
+  var sp={nodes:nodes,selId:selId,dispId:dispId,dispMask:dispMask,dispSlot:dispSlot,dspSlot:dspSlot,
+    onSel:selWithSheet,onDsp:dsp,onDel:del,onAdd:add,onUpd:upd,onLoad:loadUrl,onRen:ren,onTog:tog,
+    panelStyle:settings.panelStyle,onPromote:handlePromote,onExtract:handleExtract,onNavigate:handleNavigate,
+    iC:iC}
+
+  var leftBoxStyle = Object.assign(
+    {display:rightFS?"none":"flex",flexDirection:"column",background:"var(--pn)"},
+    leftFS ? {position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:200,width:"100vw",height:"100vh"}
+    : isVert ? {height:topH+"%",flexShrink:0,overflow:"hidden"}
+    : {width:leftW+"%",flexShrink:0,overflow:"hidden"}
+  )
+  var rightBoxStyle = Object.assign(
+    {display:leftFS?"none":"flex",flexDirection:"column",flex:1,overflow:"hidden"},
+    rightFS ? {position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:200} : {}
+  )
+
+  function handleResize(s){setSz(s);setTimeout(function(){var st=stRef.current;renderPipeline(cvRef.current,st.dispId,st.nodes,iC.current)},30)}
+
+  var anyFS = leftFS || rightFS
+
+  // Header bar — shared across both layout modes
+  function HeaderBar(hProps) {
+    return (
+      <div style={{display:"flex",alignItems:"center",padding:"8px 12px",gap:8,background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
+        <span style={{fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:800,color:"var(--ac)",letterSpacing:".2em"}}>Selena</span>
+        <input defaultValue={projName}
+          onBlur={function(e){setProjName(e.target.value)}}
+          onKeyDown={function(e){if(e.key==="Enter"||e.key==="Escape")e.target.blur()}}
+          style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"var(--tx)",
+            background:"none",border:"none",borderBottom:"1px solid var(--bd)",
+            outline:"none",width:90,padding:"1px 4px",marginLeft:4}}
+          placeholder="project name"/>
+        <button onClick={function(){saveProject(false)}} className="hico" title="Save project">↓</button>
+        <button onClick={function(){setLoadDialog(true)}} className="hico" title="Load project">↑</button>
+        <input ref={fileInputRef} type="file" accept=".nlics,.selena,.json,application/json,*/*"
+          style={{display:"none"}} onChange={function(e){loadProject(e.target.files[0]);e.target.value="";setLoadDialog(false)}}/>
+        <span style={{flex:1}}/>
+        <button className="hico" title="Layout settings" onClick={function(){setSettingsOpen(true)}}>⚙</button>
+        <button className={"hico"+(rightFS?" exit":"")} title={rightFS?"Exit preview fullscreen":"Fullscreen preview"} onClick={function(){setRightFS(!rightFS)}}>{rightFS?"⊠":"⊡"}</button>
+        {hProps.showExpand && <button className={"hico"+(leftFS?" exit":"")} onClick={function(){setLeftFS(!leftFS)}}>{leftFS?"⊠":"⊞"}</button>}
+      </div>
+    )
+  }
+  function PreviewBar(pProps) {
+    return (
+      <div style={{display:"flex",alignItems:"center",padding:"8px 12px",gap:8,background:"var(--bg)",borderBottom:"1px solid var(--bd)",flexShrink:0}}>
+        <span className="slbl" style={{fontSize:10,color:"var(--di)"}}>Preview</span>
+        {active
+          ? <span style={{fontSize:9,padding:"2px 8px",borderRadius:4,background:"rgba(176,96,240,.14)",color:"#c87aff",border:"1px solid rgba(176,96,240,.28)"}}>◉ {active.name}</span>
+          : <span style={{fontSize:9,color:"var(--mu)"}}>none selected</span>}
+        <span style={{flex:1}}/>
+        <button className={"hico"+(rightFS?" exit":"")} title={rightFS?"Exit full screen":"Full screen preview"}
+          onClick={function(){setRightFS(!rightFS)}}>{rightFS?"⊠":"⊡"}</button>
+      </div>
+    )
+  }
+
+
+  // ── Load project dialog ────────────────────────────────────────────────────
+  var LoadDialog = loadDialog ? (
+    <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(4,4,18,.88)",display:"flex",alignItems:"flex-end"}}
+      onClick={function(e){if(e.target===e.currentTarget)setLoadDialog(false)}}>
+      <div style={{width:"100%",background:"var(--pn)",borderRadius:"18px 18px 0 0",maxHeight:"70vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",padding:"14px 16px 8px",borderBottom:"1px solid var(--bd)"}}>
+          <span style={{flex:1,fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13}}>Load Project</span>
+          <button className="icon-btn" onClick={function(){setLoadDialog(false)}} style={{fontSize:20,color:"var(--mu)"}}>×</button>
+        </div>
+        <div style={{overflowY:"auto",flex:1,padding:"8px 0"}}>
+          {recentProj.length>0&&<div>
+            <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace"}}>Recent</div>
+            {recentProj.map(function(r,i){
+              var defName=localStorage.getItem("nlics:default-project-name")||""
+              var isDefault=r.name===defName
+              return (
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,color:isDefault?"var(--lv)":"var(--tx)"}}>{r.name}</div>
+                    <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
+                      {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  {isDefault
+                    ? <span style={{fontSize:8,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",
+                        border:"1px solid var(--lv)",borderRadius:3,padding:"1px 5px",
+                        flexShrink:0,letterSpacing:".06em",textTransform:"uppercase"}}>default</span>
+                    : <button onClick={function(){
+                        try{localStorage.setItem("nlics:default-project-name",r.name)}catch(e){}
+                        setLoadDialog(false); setTimeout(function(){setLoadDialog(true)},0)
+                      }} style={{width:20,height:20,minWidth:20,minHeight:20,borderRadius:"50%",
+                        border:"2px solid var(--bd)",background:"none",
+                        flexShrink:0,cursor:"pointer",padding:0}}/>
+                  }
+                </div>
+              )
+            })}
+          </div>}
+          <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",marginTop:8}}>Current project</div>
+          <div style={{padding:"10px 16px",display:"flex",gap:10,alignItems:"center"}}>
+            <div style={{flex:1,fontSize:12,color:"var(--tx)"}}>{projName} <span style={{fontSize:9,color:"var(--mu)"}}>({nodes.length} nodes)</span></div>
+            <button onClick={function(){saveProject(false)}} style={{fontSize:10,padding:"4px 12px",borderRadius:4,border:"1px solid var(--ac)",color:"var(--ac)",background:"rgba(36,204,168,.08)",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}}>
+              save
+            </button>
+          </div>
+          <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",marginTop:8}}>Browse files</div>
+          <div style={{padding:"10px 16px"}}>
+            <button onClick={function(){fileInputRef.current&&fileInputRef.current.click()}}
+              style={{width:"100%",padding:"12px",borderRadius:8,border:"1px solid var(--bd)",
+                background:"var(--el)",color:"var(--tx)",cursor:"pointer",fontSize:12,fontFamily:"'IBM Plex Mono',monospace"}}>
+              Browse .nlics files…
+            </button>
+            <div style={{fontSize:9,color:"var(--mu)",marginTop:6,lineHeight:1.5}}>
+              Opens your device file picker. Navigate to where your .nlics files are saved.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null
+
+  return (
+    <div ref={appRef} onPointerMove={handleRootPointerMove} onPointerUp={handleRootPointerUp}
+      style={{display:settings.viewMode==="unified"?"block":"flex",flexDirection:isVert?"column":"row",height:"100vh",width:"100vw",overflow:"hidden",background:"var(--bg)",fontFamily:"'IBM Plex Mono','Courier New',monospace",fontSize:12,color:"var(--tx)"}}>
+      {LoadDialog}
+      <StyleInjector />
+
+      <SettingsSheet open={settingsOpen} onClose={function(){setSettingsOpen(false)}}
+        settings={settings} onSettings={setSettings}
+        isVert={isVert} onIsVert={setIsVert}
+        flipped={flipped} onFlipped={setFlipped}
+        autoSaveInt={autoSaveInt} onAutoSaveInt={setAutoSaveInt}/>
+
+      <NodeDetailSheet
+        open={settings.panelStyle==="sheet" && sheetNode!==null}
+        node={sheetNode?sheetNode.node:null}
+        sec={sheetNode?sheetNode.sec:null}
+        onClose={function(){setSheetNode(null);setSelId(null)}}
+        onUpdate={upd} onLoad={loadUrl} nodes={nodes} iC={iC}
+        dispId={dispId} dispMask={dispMask} dispSlot={dispSlot} onDsp={dsp} dspSlot={dspSlot}
+        onPromote={handlePromote} onExtract={handleExtract} onNavigate={handleNavigate}/>
+
+      {anyFS && (
+        <button className="fs-escape" onClick={function(){setLeftFS(false);setRightFS(false)}}>
+          ⊠ exit fullscreen
+        </button>
+      )}
+
+      {settings.viewMode==="unified" ? (
+        <div style={{height:"100vh",display:"flex",flexDirection:"column"}}>
+          <HeaderBar showExpand={false}/>
+          <UnifiedLayout
+            settings={settings}
+            sp={sp}
+            cvRef={cvRef}
+            active={active}
+            sz={sz}
+            previewH={previewH}
+            setPreviewH={setPreviewH}
+            onResize={handleResize}
+            onExport={doExport}
+            appRef={appRef}
+            s1Col={s1Col} setS1Col={setS1Col}
+            s2Col={s2Col} setS2Col={setS2Col}
+            LivePreviewCmp={LivePreview}
+          />
+        </div>
+      ) : (
+        <div style={{display:"contents"}}>
+          <div style={flipped&&isVert ? rightBoxStyle : leftBoxStyle}>
+            {flipped&&isVert
+              ? <PreviewBar/>
+              : <HeaderBar showExpand={true}/>
+            }
+            {flipped&&isVert
+              ? <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport} fullscreen={rightFS} onFullscreen={function(){setRightFS(!rightFS)}}/>
+              : <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",position:"relative"}}>
+                  <Section sec={1} title="§1 · Creators" {...sp}
+                    collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
+                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
+                  <Section sec={2} title="§2 · Compositors" {...sp}
+                    collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}}
+                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
+                  {settings.panelStyle==="sheet"&&sheetNode&&(
+                    <div style={{position:"absolute",inset:0,background:"rgba(4,4,18,.65)",
+                      zIndex:650,pointerEvents:"auto"}}
+                      onClick={function(){setSheetNode(null);setSelId(null)}}/>
+                  )}
+                </div>
+            }
+          </div>
+
+          <div ref={divHook.ref} onPointerDown={divHook.onPointerDown} className={isVert?"divv":"divh"} style={{userSelect:"none"}}/>
+
+          <div style={flipped&&isVert ? leftBoxStyle : rightBoxStyle}>
+            {flipped&&isVert
+              ? <HeaderBar showExpand={true}/>
+              : <PreviewBar/>
+            }
+            {flipped&&isVert
+              ? <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",position:"relative"}}>
+                  <Section sec={1} title="§1 · Creators" {...sp}
+                    collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
+                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
+                  <Section sec={2} title="§2 · Compositors" {...sp}
+                    collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}}
+                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
+                  {settings.panelStyle==="sheet"&&sheetNode&&(
+                    <div style={{position:"absolute",inset:0,background:"rgba(4,4,18,.65)",
+                      zIndex:650,pointerEvents:"auto"}}
+                      onClick={function(){setSheetNode(null);setSelId(null)}}/>
+                  )}
+                </div>
+              : <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport} fullscreen={rightFS} onFullscreen={function(){setRightFS(!rightFS)}}/>
+            }
+          </div>
+        </div>
+      )}
+
+      <div className={"undo-toast"+(toastOn?" show":"")}>↩ undo restored</div>
+    </div>
+  )
+}
+
+
+/* ─── ERROR BOUNDARY ────────────────────────────────────── */
+class ErrorBoundary extends Component {
+  constructor(p){ super(p); this.state = { err: null, info: null } }
+  static getDerivedStateFromError(err){ return { err: err } }
+  componentDidCatch(err, info){
+    this.setState({ err: err, info: info })
+    if(typeof console!=="undefined"&&console.error)console.error("NLICS boundary:", err, info)
+  }
+  render(){
+    if(this.state.err){
+      return (
+        <div style={{minHeight:"100vh",padding:20,background:"#05050d",color:"#e0a0b0",
+          fontFamily:"'IBM Plex Mono',monospace",fontSize:12,lineHeight:1.5}}>
+          <div style={{fontSize:16,color:"#e03060",marginBottom:10,fontWeight:700}}>NLICS crashed</div>
+          <div style={{marginBottom:10,color:"#c8d0e8"}}>
+            {String(this.state.err&&this.state.err.message||this.state.err)}
+          </div>
+          {this.state.info&&this.state.info.componentStack&&(
+            <pre style={{fontSize:10,color:"#8090c0",whiteSpace:"pre-wrap",
+              background:"#0d0d22",padding:10,borderRadius:6,maxHeight:"40vh",overflow:"auto"}}>
+              {this.state.info.componentStack}
+            </pre>
+          )}
+          <button onClick={function(){location.reload()}}
+            style={{marginTop:16,padding:"10px 20px",background:"#24cca8",border:"none",
+            borderRadius:6,color:"#040412",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
+            Reload
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+export default function AppWithBoundary(){
+  return <ErrorBoundary><App/></ErrorBoundary>
+}
