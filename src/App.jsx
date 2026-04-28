@@ -7149,7 +7149,9 @@ function App() {
     try {
       var def=localStorage.getItem("nlics:default-project")
       var defName=localStorage.getItem("nlics:default-project-name")
-      if(def){
+      if(defName==="__blank__"){
+        setNodes([]); setProjName("Untitled")
+      } else if(def){
         var d=JSON.parse(def)
         if(d&&d.nodes&&d.nodes.length>0){
           setNodes(d.nodes)
@@ -7535,6 +7537,28 @@ function App() {
           <button className="icon-btn" onClick={function(){setLoadDialog(false)}} style={{fontSize:20,color:"var(--mu)"}}>×</button>
         </div>
         <div style={{overflowY:"auto",flex:1,padding:"8px 0"}}>
+          {/* Blank project — always available as default option */}
+          <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace"}}>Blank</div>
+          {(function(){
+            var blankIsDefault=(localStorage.getItem("nlics:default-project-name")||"")==="__blank__"
+            return (
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
+                <div style={{flex:1,cursor:"pointer"}} onClick={function(){
+                  setNodes([]);setProjName("Untitled");setLoadDialog(false)
+                }}>
+                  <div style={{fontSize:12,color:blankIsDefault?"var(--lv)":"var(--tx)"}}>Blank Project</div>
+                  <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>Start with an empty canvas</div>
+                </div>
+                {blankIsDefault
+                  ? <span style={{fontSize:8,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",border:"1px solid var(--lv)",borderRadius:3,padding:"1px 5px",flexShrink:0,letterSpacing:".06em",textTransform:"uppercase"}}>default</span>
+                  : <button onClick={function(){
+                      try{localStorage.setItem("nlics:default-project-name","__blank__");localStorage.removeItem("nlics:default-project")}catch(e){}
+                      setLoadDialog(false); setTimeout(function(){setLoadDialog(true)},0)
+                    }} style={{width:20,height:20,minWidth:20,minHeight:20,borderRadius:"50%",border:"2px solid var(--bd)",background:"none",flexShrink:0,cursor:"pointer",padding:0}}/>
+                }
+              </div>
+            )
+          })()}
           {recentProj.length>0&&<div>
             <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace"}}>Recent</div>
             {recentProj.map(function(r,i){
