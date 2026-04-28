@@ -2645,23 +2645,20 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       // Apply points-domain effects in FORWARD order (0 → n) before gShape renders.
       // Forward order = top-of-stack first, matching user's expectation:
       // Point Map (top) transforms points, Source at Points (below) uses result.
-      if(n.effectStack&&n.effectStack.length>0){
-        for(var pei=n.effectStack.length-1;pei>=0;pei--){
-          var pefx=n.effectStack[pei]
-          if(!pefx.enabled||pefx.domain!=="points")continue
-          if(pefx.type==="show-points"||pefx.type==="source-at-points")continue
-          if(cv._points) cv._points=applyEfxToPoints(cv._points,pefx,w,h)
-        }
+      var shapeEfxAll=(n.outEfx||n.effectStack||[])
+      for(var pei=0;pei<shapeEfxAll.length;pei++){
+        var pefx=shapeEfxAll[pei]
+        if(!pefx.enabled||pefx.domain!=="points")continue
+        if(pefx.type==="show-points"||pefx.type==="source-at-points")continue
+        if(cv._points) cv._points=applyEfxToPoints(cv._points,pefx,w,h)
       }
       // Write modified _points back so gShape reads them via ctx.canvas._points
       ctx.canvas._points=cv._points
       ctx.clearRect(0,0,w,h)
       gShape(ctx,n.props,w,h)
-      // Apply pixel-domain effects from creator's own effectStack
-      if(n.effectStack&&n.effectStack.length>0){
-        var pixEfx=(n.outEfx||n.effectStack||[]).filter(function(e){return e.enabled&&e.domain!=="points"})
-        if(pixEfx.length>0) applyEfxStk(ctx,pixEfx,cmap,cache,iC,w,h,new Set(vis))
-      }
+      // Apply pixel-domain effects
+      var pixEfxAll=shapeEfxAll.filter(function(e){return e.enabled&&e.domain!=="points"})
+      if(pixEfxAll.length>0) applyEfxStk(ctx,pixEfxAll,cmap,cache,iC,w,h,new Set(vis))
     }
     else if(n.type==="gradient")gGrad(ctx,n.props,w,h)
     else if(n.type==="noise")gNoise(ctx,n.props,w,h)
