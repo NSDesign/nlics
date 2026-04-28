@@ -2101,11 +2101,10 @@ function applyEfxToPoints(pts,efx,w,h) {
 }
 
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
-  if(!stack||!stack.length)return
-  var spDeferred=[]  // show-points deferred to end (always on top)
-  for(var ei=0;ei<stack.length;ei++){
+  // Iterate bottom-to-top: last item in list is applied first (bottom layer),
+  // first item in list is applied last (top layer). Standard layer convention.
+  for(var ei=stack.length-1;ei>=0;ei--){
     var efx=stack[ei]; if(!efx.enabled) continue
-    if(efx.type==="show-points"){ spDeferred.push(efx); continue }
     // Points-domain effects: transform _points, skip canvas
     if(efx.domain==="points"&&efx.type!=="show-points"&&efx.type!=="source-at-points"){
       if(ctx.canvas&&ctx.canvas._points)
@@ -2295,23 +2294,6 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
     applyBack(pre.data,post,mv,efx.opacity,efx.blendMode||"normal",efx.blendChannels,efx.blendIf)
     ctx.putImageData(pre,0,0)
   }
-  // Flush deferred show-points — always on top regardless of stack order
-  spDeferred.forEach(function(spEfx){
-    var spp=spEfx.params||{}, spts=ctx.canvas&&ctx.canvas._points
-    if(!spts||!spts.length) return
-    var sDr=Math.max(1,(spp.size||6)/2), sColor=spp.color||"#00ccff"
-    var sStyle=spp.style||"circle", sOp=spp.opacity==null?.8:spp.opacity
-    ctx.save(); ctx.globalAlpha=sOp; ctx.fillStyle=sColor; ctx.strokeStyle=sColor; ctx.lineWidth=1
-    spts.forEach(function(pt){
-      var sx=pt.x*w, sy=pt.y*h; ctx.beginPath()
-      if(sStyle==="square") ctx.rect(sx-sDr,sy-sDr,sDr*2,sDr*2)
-      else if(sStyle==="crosshair"){ctx.moveTo(sx-sDr*1.5,sy);ctx.lineTo(sx+sDr*1.5,sy);ctx.moveTo(sx,sy-sDr*1.5);ctx.lineTo(sx,sy+sDr*1.5);ctx.stroke()}
-      else ctx.arc(sx,sy,sDr,0,Math.PI*2)
-      if(sStyle!=="crosshair") ctx.fill()
-      if(spp.showLabels&&spp.labelAttr){var v=pt[spp.labelAttr];if(v!=null){ctx.fillStyle=spp.labelColor||"#fff";ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace";ctx.fillText(typeof v==="number"?v.toFixed(2):String(v),sx+sDr+2,sy-sDr-2)}}
-    })
-    ctx.restore()
-  })
 }
 function maskToAlpha(ctx,stack,cmap,cache,iC,w,h,vis) {
   var mv=compMasks(stack,cmap,cache,iC,w,h,vis);if(!mv)return
@@ -2367,13 +2349,7 @@ function resolveSlotBase(slot,cmap,cache,iC,w,h,vis) {
     for(var si=0;si<w*h;si++) sid.data[si*4+3]=Math.round(sid.data[si*4+3]*sf)
     ctx.putImageData(sid,0,0)
   }
-  if(slot.effectStack&&slot.effectStack.length>0){
-    var hadPt=slot.effectStack.some(function(e){return e.enabled&&e.domain==="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
-    applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis))
-    if(hadPt&&cv._shapeProps&&cv._points&&cv._points.length>0){
-      ctx.clearRect(0,0,w,h); gShape(ctx,cv._shapeProps,w,h)
-    }
-  }
+  if(slot.effectStack&&slot.effectStack.length>0)applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis))
   return cv
 }
 // Compute effective matte for a slot: source_alpha × maskStack result.
@@ -2627,29 +2603,11 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     else if(n.type==="noise")gNoise(ctx,n.props,w,h)
     else if(n.type==="pattern")gPat(ctx,n.props,w,h)
     else if(n.type==="tile")gTile(ctx,n.props,cmap,cache,iC,w,h,vis)
-    else if(n.type==="grid"||n.type==="spiral"||n.type==="polar-grid"||n.type==="phyllotaxis"||n.type==="scatter"){
-      var gFn={"grid":gGrid,"spiral":gSpiral,"polar-grid":gPolarGrid,"phyllotaxis":gPhyllotaxis,"scatter":gScatter}[n.type]
-      if(gFn) gFn(ctx,n.props,w,h)
-      cv._points=ctx.canvas._points
-      var synProps=Object.assign({},n.props,{shapeType:n.type})
-      cv._shapeProps=synProps
-      if(n.effectStack&&n.effectStack.length>0){
-        for(var gpei=0;gpei<n.effectStack.length;gpei++){
-          var gpefx=n.effectStack[gpei]
-          if(!gpefx.enabled||gpefx.domain!=="points")continue
-          if(gpefx.type==="show-points"||gpefx.type==="source-at-points")continue
-          if(cv._points) cv._points=applyEfxToPoints(cv._points,gpefx,w,h)
-        }
-      }
-      ctx.clearRect(0,0,w,h); gShape(ctx,synProps,w,h)
-      if(n.effectStack&&n.effectStack.length>0){
-        var gpixEfx=n.effectStack.filter(function(e){return e.enabled&&e.domain!=="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
-        if(gpixEfx.length>0) applyEfxStk(ctx,gpixEfx,cmap,cache,iC,w,h,new Set(vis))
-        // source-at-points and show-points handled via applyEfxStk below on full stack
-        var fullStk=n.effectStack.filter(function(e){return e.enabled&&(e.type==="source-at-points"||e.type==="show-points")})
-        if(fullStk.length>0) applyEfxStk(ctx,fullStk,cmap,cache,iC,w,h,new Set(vis))
-      }
-    }
+    else if(n.type==="grid")     {gGrid(ctx,n.props,w,h);      cv._points=ctx.canvas._points}
+    else if(n.type==="spiral")   {gSpiral(ctx,n.props,w,h);    cv._points=ctx.canvas._points}
+    else if(n.type==="polar-grid"){gPolarGrid(ctx,n.props,w,h);cv._points=ctx.canvas._points}
+    else if(n.type==="phyllotaxis"){gPhyllotaxis(ctx,n.props,w,h);cv._points=ctx.canvas._points}
+    else if(n.type==="scatter")  {gScatter(ctx,n.props,w,h);   cv._points=ctx.canvas._points}
     else if(n.type==="image")gImg(ctx,n.props,iC,w,h)
     cache.set(id,cv);return cv
   }
@@ -5110,9 +5068,6 @@ function EfxStack(props) {
 
   return (
     <div>
-      <div style={{padding:"2px 10px 0",marginBottom:1}}>
-        <span style={{fontSize:7,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>↓ top to bottom</span>
-      </div>
       {props.stack.length===0 && <div className="empty">no effects</div>}
       {props.stack.map(function(efx,i){
         if(efx.type==="__stackref__") return (
@@ -7596,9 +7551,3 @@ class ErrorBoundary extends Component {
 export default function AppWithBoundary(){
   return <ErrorBoundary><App/></ErrorBoundary>
 }
-      <PR l="labels">
-        <button className={p.showLabels?"ac":"ghost"} style={{flex:1,minHeight:32,fontSize:11}} onClick={function(){up({showLabels:!p.showLabels})}}>{p.showLabels?"on":"off"}</button>
-      </PR>
-      {p.showLabels&&<Se l="attr" v={p.labelAttr||"pointIndex"} opts={["pointIndex","pointCount","x","y","rowNorm","colNorm","row","col","ringIndex","angleNorm","radiusNorm","spiralT","fibIndex","scatterIndex","scale","rotation","opacity","sourceIndex"]} fn={function(v){up({labelAttr:v})}}/>}
-      {p.showLabels&&<Co l="label col" v={p.labelColor||"#fff"} fn={function(v){up({labelColor:v})}}/>}
-      {p.showLabels&&<Sl l="label sz" v={p.labelSize||9} mn={6} mx={16} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>}
