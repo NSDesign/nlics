@@ -2295,6 +2295,23 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
     applyBack(pre.data,post,mv,efx.opacity,efx.blendMode||"normal",efx.blendChannels,efx.blendIf)
     ctx.putImageData(pre,0,0)
   }
+  // Flush deferred show-points — always on top regardless of stack order
+  spDeferred.forEach(function(spEfx){
+    var spp=spEfx.params||{}, spts=ctx.canvas&&ctx.canvas._points
+    if(!spts||!spts.length) return
+    var sDr=Math.max(1,(spp.size||6)/2), sColor=spp.color||"#00ccff"
+    var sStyle=spp.style||"circle", sOp=spp.opacity==null?.8:spp.opacity
+    ctx.save(); ctx.globalAlpha=sOp; ctx.fillStyle=sColor; ctx.strokeStyle=sColor; ctx.lineWidth=1
+    spts.forEach(function(pt){
+      var sx=pt.x*w, sy=pt.y*h; ctx.beginPath()
+      if(sStyle==="square") ctx.rect(sx-sDr,sy-sDr,sDr*2,sDr*2)
+      else if(sStyle==="crosshair"){ctx.moveTo(sx-sDr*1.5,sy);ctx.lineTo(sx+sDr*1.5,sy);ctx.moveTo(sx,sy-sDr*1.5);ctx.lineTo(sx,sy+sDr*1.5);ctx.stroke()}
+      else ctx.arc(sx,sy,sDr,0,Math.PI*2)
+      if(sStyle!=="crosshair") ctx.fill()
+      if(spp.showLabels&&spp.labelAttr){var v=pt[spp.labelAttr];if(v!=null){ctx.fillStyle=spp.labelColor||"#fff";ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace";ctx.fillText(typeof v==="number"?v.toFixed(2):String(v),sx+sDr+2,sy-sDr-2)}}
+    })
+    ctx.restore()
+  })
 }
 function maskToAlpha(ctx,stack,cmap,cache,iC,w,h,vis) {
   var mv=compMasks(stack,cmap,cache,iC,w,h,vis);if(!mv)return
