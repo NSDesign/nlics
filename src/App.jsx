@@ -7293,9 +7293,55 @@ function App() {
     )
   }
 
+
+  // ── Load project dialog ────────────────────────────────────────────────────
+  var LoadDialog = loadDialog ? (
+    <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(4,4,18,.88)",display:"flex",alignItems:"flex-end"}}
+      onClick={function(e){if(e.target===e.currentTarget)setLoadDialog(false)}}>
+      <div style={{width:"100%",background:"var(--pn)",borderRadius:"18px 18px 0 0",maxHeight:"70vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",padding:"14px 16px 8px",borderBottom:"1px solid var(--bd)"}}>
+          <span style={{flex:1,fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13}}>Load Project</span>
+          <button className="icon-btn" onClick={function(){setLoadDialog(false)}} style={{fontSize:20,color:"var(--mu)"}}>×</button>
+        </div>
+        <div style={{overflowY:"auto",flex:1,padding:"8px 0"}}>
+          {recentProj.length>0&&<div>
+            <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace"}}>Recent</div>
+            {recentProj.map(function(r,i){return (
+              <div key={i} style={{padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
+                <div style={{fontSize:12,color:"var(--tx)"}}>{r.name}</div>
+                <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
+                  {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}
+                </div>
+              </div>
+            )})}
+          </div>}
+          <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",marginTop:8}}>Current project</div>
+          <div style={{padding:"10px 16px",display:"flex",gap:10,alignItems:"center"}}>
+            <div style={{flex:1,fontSize:12,color:"var(--tx)"}}>{projName} <span style={{fontSize:9,color:"var(--mu)"}}>({nodes.length} nodes)</span></div>
+            <button onClick={function(){saveProject(true)}} style={{fontSize:10,padding:"4px 12px",borderRadius:4,border:"1px solid var(--lv)",color:"var(--lv)",background:"rgba(176,96,240,.1)",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}}>
+              save &amp; set default
+            </button>
+          </div>
+          <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",marginTop:8}}>Browse files</div>
+          <div style={{padding:"10px 16px"}}>
+            <button onClick={function(){fileInputRef.current&&fileInputRef.current.click()}}
+              style={{width:"100%",padding:"12px",borderRadius:8,border:"1px solid var(--bd)",
+                background:"var(--el)",color:"var(--tx)",cursor:"pointer",fontSize:12,fontFamily:"'IBM Plex Mono',monospace"}}>
+              Browse .nlics files…
+            </button>
+            <div style={{fontSize:9,color:"var(--mu)",marginTop:6,lineHeight:1.5}}>
+              Opens your device file picker. Navigate to where your .nlics files are saved.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null
+
   return (
     <div ref={appRef} onPointerMove={handleRootPointerMove} onPointerUp={handleRootPointerUp}
       style={{display:settings.viewMode==="unified"?"block":"flex",flexDirection:isVert?"column":"row",height:"100vh",width:"100vw",overflow:"hidden",background:"var(--bg)",fontFamily:"'IBM Plex Mono','Courier New',monospace",fontSize:12,color:"var(--tx)"}}>
+      {LoadDialog}
       <StyleInjector />
 
       <SettingsSheet open={settingsOpen} onClose={function(){setSettingsOpen(false)}}
