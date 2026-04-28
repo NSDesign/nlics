@@ -5068,7 +5068,6 @@ function EfxStack(props) {
 
   return (
     <div>
-      <div style={{padding:"2px 10px 0"}}><span style={{fontSize:7,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>↓ top to bottom</span></div>
       {props.stack.length===0 && <div className="empty">no effects</div>}
       {props.stack.map(function(efx,i){
         if(efx.type==="__stackref__") return (
