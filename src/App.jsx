@@ -2101,10 +2101,11 @@ function applyEfxToPoints(pts,efx,w,h) {
 }
 
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
-  // Iterate bottom-to-top: last item in list is applied first (bottom layer),
-  // first item in list is applied last (top layer). Standard layer convention.
-  for(var ei=stack.length-1;ei>=0;ei--){
+  if(!stack||!stack.length)return
+  var spDeferred=[]  // show-points deferred to end (always on top)
+  for(var ei=0;ei<stack.length;ei++){
     var efx=stack[ei]; if(!efx.enabled) continue
+    if(efx.type==="show-points"){spDeferred.push(efx);continue}
     // Points-domain effects: transform _points, skip canvas
     if(efx.domain==="points"&&efx.type!=="show-points"&&efx.type!=="source-at-points"){
       if(ctx.canvas&&ctx.canvas._points)
@@ -2294,6 +2295,28 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
     applyBack(pre.data,post,mv,efx.opacity,efx.blendMode||"normal",efx.blendChannels,efx.blendIf)
     ctx.putImageData(pre,0,0)
   }
+
+  // Flush deferred show-points — always rendered on top regardless of stack position
+  spDeferred.forEach(function(spEfx){
+    var spp=spEfx.params||{}, spts=ctx.canvas&&ctx.canvas._points
+    if(!spts||!spts.length) return
+    var sDr=Math.max(1,(spp.size||6)/2), sClr=spp.color||"#00ccff"
+    var sSty=spp.style||"circle", sOp=spp.opacity==null?.8:spp.opacity
+    ctx.save(); ctx.globalAlpha=sOp; ctx.fillStyle=sClr; ctx.strokeStyle=sClr; ctx.lineWidth=1
+    spts.forEach(function(pt){
+      var sx=pt.x*w, sy=pt.y*h; ctx.beginPath()
+      if(sSty==="square") ctx.rect(sx-sDr,sy-sDr,sDr*2,sDr*2)
+      else if(sSty==="crosshair"){ctx.moveTo(sx-sDr*1.5,sy);ctx.lineTo(sx+sDr*1.5,sy);ctx.moveTo(sx,sy-sDr*1.5);ctx.lineTo(sx,sy+sDr*1.5);ctx.stroke()}
+      else ctx.arc(sx,sy,sDr,0,Math.PI*2)
+      if(sSty!=="crosshair") ctx.fill()
+      if(spp.showLabels&&spp.labelAttr){
+        var lv=pt[spp.labelAttr]
+        if(lv!=null){ctx.fillStyle=spp.labelColor||"#fff";ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
+          ctx.fillText(typeof lv==="number"?lv.toFixed(2):String(lv),sx+sDr+2,sy-sDr-2)}
+      }
+    })
+    ctx.restore()
+  })
 }
 function maskToAlpha(ctx,stack,cmap,cache,iC,w,h,vis) {
   var mv=compMasks(stack,cmap,cache,iC,w,h,vis);if(!mv)return
@@ -2330,7 +2353,13 @@ function resolveSlot(slot,cmap,cache,iC,w,h,vis) {
   if(slot.enabled===false)return null
   var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis));if(!base)return null
   var cv=clCv(base,w,h),ctx=cv.getContext("2d")
-  if(slot.effectStack&&slot.effectStack.length>0)applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis))
+  if(slot.effectStack&&slot.effectStack.length>0){
+    var hadPtEfx=slot.effectStack.some(function(e){return e.enabled&&e.domain==="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
+    applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis))
+    if(hadPtEfx&&cv._shapeProps&&cv._points&&cv._points.length>0){
+      ctx.clearRect(0,0,w,h); gShape(ctx,cv._shapeProps,w,h)
+    }
+  }
   if(slot.maskStack&&slot.maskStack.length>0)maskToAlpha(ctx,slot.maskStack,cmap,cache,iC,w,h,new Set(vis))
   return cv
 }
@@ -2603,11 +2632,29 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     else if(n.type==="noise")gNoise(ctx,n.props,w,h)
     else if(n.type==="pattern")gPat(ctx,n.props,w,h)
     else if(n.type==="tile")gTile(ctx,n.props,cmap,cache,iC,w,h,vis)
-    else if(n.type==="grid")     {gGrid(ctx,n.props,w,h);      cv._points=ctx.canvas._points}
-    else if(n.type==="spiral")   {gSpiral(ctx,n.props,w,h);    cv._points=ctx.canvas._points}
-    else if(n.type==="polar-grid"){gPolarGrid(ctx,n.props,w,h);cv._points=ctx.canvas._points}
-    else if(n.type==="phyllotaxis"){gPhyllotaxis(ctx,n.props,w,h);cv._points=ctx.canvas._points}
-    else if(n.type==="scatter")  {gScatter(ctx,n.props,w,h);   cv._points=ctx.canvas._points}
+    else if(n.type==="grid"||n.type==="spiral"||n.type==="polar-grid"||n.type==="phyllotaxis"||n.type==="scatter"){
+      // Route standalone geo nodes through same pre-pass+re-render as shape+shapeType nodes
+      var gFn2={"grid":gGrid,"spiral":gSpiral,"polar-grid":gPolarGrid,"phyllotaxis":gPhyllotaxis,"scatter":gScatter}[n.type]
+      if(gFn2) gFn2(ctx,n.props,w,h)
+      cv._points=ctx.canvas._points
+      var synProps=Object.assign({},n.props,{shapeType:n.type})
+      cv._shapeProps=synProps
+      // Pre-pass: apply pt-domain effects FORWARD before rendering
+      if(n.effectStack&&n.effectStack.length>0){
+        for(var gpi=0;gpi<n.effectStack.length;gpi++){
+          var gpefx=n.effectStack[gpi]; if(!gpefx.enabled||gpefx.domain!=="points")continue
+          if(gpefx.type==="show-points"||gpefx.type==="source-at-points")continue
+          if(cv._points) cv._points=applyEfxToPoints(cv._points,gpefx,w,h)
+        }
+      }
+      ctx.clearRect(0,0,w,h); gShape(ctx,synProps,w,h)
+      if(n.effectStack&&n.effectStack.length>0){
+        var gpx=n.effectStack.filter(function(e){return e.enabled&&e.domain!=="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
+        if(gpx.length) applyEfxStk(ctx,gpx,cmap,cache,iC,w,h,new Set(vis))
+        var gsat=n.effectStack.filter(function(e){return e.enabled&&(e.type==="source-at-points"||e.type==="show-points")})
+        if(gsat.length) applyEfxStk(ctx,gsat,cmap,cache,iC,w,h,new Set(vis))
+      }
+    }
     else if(n.type==="image")gImg(ctx,n.props,iC,w,h)
     cache.set(id,cv);return cv
   }
@@ -5068,6 +5115,9 @@ function EfxStack(props) {
 
   return (
     <div>
+      <div style={{padding:"2px 10px 1px"}}>
+        <span style={{fontSize:7,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:".04em"}}>↓ applies top → bottom</span>
+      </div>
       {props.stack.length===0 && <div className="empty">no effects</div>}
       {props.stack.map(function(efx,i){
         if(efx.type==="__stackref__") return (
