@@ -2559,13 +2559,23 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     else if(n.type==="shape"){
       var sType=n.props&&n.props.shapeType
       // Generate _points for ALL shape types first
-      if(sType==="grid")           gGrid(ctx,n.props,w,h)
-      else if(sType==="spiral")    gSpiral(ctx,n.props,w,h)
-      else if(sType==="polar-grid")gPolarGrid(ctx,n.props,w,h)
+      if(sType==="grid")            gGrid(ctx,n.props,w,h)
+      else if(sType==="spiral")     gSpiral(ctx,n.props,w,h)
+      else if(sType==="polar-grid") gPolarGrid(ctx,n.props,w,h)
       else if(sType==="phyllotaxis")gPhyllotaxis(ctx,n.props,w,h)
-      else if(sType==="scatter")   gScatter(ctx,n.props,w,h)
+      else if(sType==="scatter")    gScatter(ctx,n.props,w,h)
       else cv._points=shapePoints(n.props,w,h)  // classic shapes: vertices/perimeter
-      // gShape renders using cv._points (which effects may have already modified)
+      // Pre-apply any points-domain effects BEFORE gShape renders
+      // This allows wave/twirl/bulge etc. in pt mode to warp the point positions
+      if(n.effectStack&&n.effectStack.length>0){
+        n.effectStack.forEach(function(efx){
+          if(!efx.enabled||efx.domain!=="points")return
+          if(efx.type==="show-points"||efx.type==="source-at-points")return
+          if(cv._points) cv._points=applyEfxToPoints(cv._points,efx,w,h)
+        })
+      }
+      // gShape now renders using the (possibly modified) _points
+      ctx.clearRect(0,0,w,h)
       gShape(ctx,n.props,w,h)
     }
     else if(n.type==="gradient")gGrad(ctx,n.props,w,h)
@@ -3020,6 +3030,8 @@ function ThumbItem(props) {
   )
 }
 function NRef(props) {
+  // Safety: nodes must be an array
+  if(!props.nodes||!Array.isArray(props.nodes)) return null
   var mode = props.mode || "all"
   var asMaskSt=useState(props.asMask||false); var asMask=asMaskSt[0], setAsMask=asMaskSt[1]
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
@@ -5899,8 +5911,11 @@ function AddMenu(props) {
 function LivePreview(props) {
   var zSt=useState(1); var zoom=zSt[0], setZoom=zSt[1]
   var fSt=useState("png"); var fmt=fSt[0], setFmt=fSt[1]
+  var fsStyle = props.fullscreen
+    ? {position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:500,background:"var(--bg)"}
+    : {flex:1,minHeight:0}
   return (
-    <div style={{display:"flex",flexDirection:"column",flex:1,minHeight:0,overflow:"hidden"}}>
+    <div style={Object.assign({display:"flex",flexDirection:"column",overflow:"hidden"},fsStyle)}>
       <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"var(--pn)",borderBottom:"1px solid var(--bd)",flexShrink:0,overflowX:"auto"}}>
         <select value={String(props.sz)} onChange={function(e){props.onResize(parseInt(e.target.value))}} style={{width:58,fontSize:10,padding:"3px 4px",flexShrink:0}}>
           {["256","400","512","768","1024"].map(function(s){return <option key={s} value={s}>{s}</option>})}
