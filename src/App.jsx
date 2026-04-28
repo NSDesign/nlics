@@ -513,7 +513,7 @@ function mkEfx(t) {
   if(t==="edge-detect")  params={strength:100, invert:false}
   if(t==="pixelate")     params={size:8}
   if(t==="duotone")      params={shadow:"#0a0a2a", highlight:"#f5e642"}
-  return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[], blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}}, domain:"pixels" }
+  var ptDomain=["point-map","source-at-points"]; return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[], blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}}, domain:ptDomain.includes(t)?"points":"pixels" }
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, fillOpacity:100, opacity:100, blendMode:"multiply", effectStack:[], enabled:true, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[], fillOpacity:100 } }
@@ -2081,7 +2081,12 @@ function applyEfxToPoints(pts,efx,w,h) {
         var outMin=m.min==null?0:m.min, outMax=m.max==null?1:m.max
         var mapped=m.mode==="invert"?(1-inV)*(outMax-outMin)+outMin:inV*(outMax-outMin)+outMin
         var curV=pt[m.outputAttr]==null?1:pt[m.outputAttr]
-        pt[m.outputAttr]=m.multiply?curV*mapped:mapped
+        var cm=m.combine||"replace"
+        if(cm==="replace")      pt[m.outputAttr]=mapped
+        else if(cm==="multiply") pt[m.outputAttr]=curV*mapped
+        else if(cm==="add")      pt[m.outputAttr]=curV+mapped
+        else if(cm==="subtract") pt[m.outputAttr]=curV-mapped
+        else pt[m.outputAttr]=mapped
       })
     })
   }
@@ -4248,13 +4253,8 @@ function EfxPrimary(props) {
               <Se l="mode" v={m.mode||"linear"} opts={["linear","invert"]} fn={function(v){updMapping(mi,{mode:v})}}/>
               <Sl l="min" v={m.min==null?0:m.min} mn={-2} mx={2} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{min:v})}}/>
               <Sl l="max" v={m.max==null?1:m.max} mn={-2} mx={2} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{max:v})}}/>
-              <PR l="combine">
-                {["replace","multiply"].map(function(mo){
-                  var active=(m.multiply?"multiply":"replace")===mo
-                  return <button key={mo} className={active?"ac":"ghost"} style={{flex:1,fontSize:10,minHeight:32}}
-                    onClick={function(){updMapping(mi,{multiply:mo==="multiply"})}}>{mo}</button>
-                })}
-              </PR>
+              <Se l="combine" v={m.combine||"replace"} opts={["replace","add","subtract","multiply"]}
+                fn={function(v){updMapping(mi,{combine:v})}}/>
             </div>
           )
         })}
@@ -4280,8 +4280,8 @@ function EfxPrimary(props) {
                 <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>source {si+1}</span>
                 <button onClick={function(){delSrc(si)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
               </div>
-              <NRef l="node" v={s.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
-                fn={function(v){updSrc(si,{refId:v})}}/>
+              {(function(idx){return <NRef l="node" v={s.refId} nodes={props.nodes||[]} selfId={props.selfId} iC={props.iC}
+                fn={function(v){updSrc(idx,{refId:v})}}/>})(si)}
               <Sl l="weight" v={s.weight==null?1:s.weight} mn={0} mx={10} st={.1}
                 fmt={function(v){return v.toFixed(1)}} fn={function(v){updSrc(si,{weight:v})}}/>
             </div>
@@ -4734,7 +4734,7 @@ function EfxCard(props) {
         <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},efx,{enabled:!efx.enabled}))}} style={{color:efx.enabled?"var(--ac)":"var(--mu)",fontSize:18}}>
           {efx.enabled?"●":"○"}
         </button>
-        {["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","point-map"].includes(efx.type)&&(
+        {["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart"].includes(efx.type)&&(
           <button onClick={function(){props.onChange(Object.assign({},efx,{domain:efx.domain==="points"?"pixels":"points"}))}}
             style={{fontSize:8,padding:"2px 6px",borderRadius:3,cursor:"pointer",
               fontFamily:"'IBM Plex Mono',monospace",
