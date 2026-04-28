@@ -7318,24 +7318,23 @@ function App() {
               var isDefault=r.name===defName
               return (
                 <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
-                  {isDefault
-                    ? <span style={{fontSize:8,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",
-                        border:"1px solid var(--lv)",borderRadius:3,padding:"1px 5px",
-                        flexShrink:0,letterSpacing:".06em",textTransform:"uppercase"}}>default</span>
-                    : <button onClick={function(){
-                        try{localStorage.setItem("nlics:default-project-name",r.name)}catch(e){}
-                        // Force re-render of dialog by toggling loadDialog
-                        setLoadDialog(false); setTimeout(function(){setLoadDialog(true)},0)
-                      }} style={{width:18,height:18,borderRadius:"50%",
-                        border:"2px solid var(--bd)",background:"none",
-                        flexShrink:0,cursor:"pointer",padding:0}}/>
-                  }
                   <div style={{flex:1}}>
                     <div style={{fontSize:12,color:isDefault?"var(--lv)":"var(--tx)"}}>{r.name}</div>
                     <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
                       {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}
                     </div>
                   </div>
+                  {isDefault
+                    ? <span style={{fontSize:8,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",
+                        border:"1px solid var(--lv)",borderRadius:3,padding:"1px 5px",
+                        flexShrink:0,letterSpacing:".06em",textTransform:"uppercase"}}>default</span>
+                    : <button onClick={function(){
+                        try{localStorage.setItem("nlics:default-project-name",r.name)}catch(e){}
+                        setLoadDialog(false); setTimeout(function(){setLoadDialog(true)},0)
+                      }} style={{width:20,height:20,minWidth:20,minHeight:20,borderRadius:"50%",
+                        border:"2px solid var(--bd)",background:"none",
+                        flexShrink:0,cursor:"pointer",padding:0}}/>
+                  }
                 </div>
               )
             })}
