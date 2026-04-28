@@ -6055,13 +6055,13 @@ function AddMenu(props) {
       {open&&pos&&createPortal(
         <div ref={menuRef} className="drop-menu" style={pos}>
           {props.sec===1?[
-            s1standard.map(function(item){return <div key={item.t} className="drop-item" onClick={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>}),
+            s1standard.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>}),
             <div key="__adv__" style={{padding:"5px 14px 4px",fontSize:8,color:"var(--mu)",
               textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
               borderTop:"1px solid var(--bd)",borderBottom:"1px solid var(--bd)",background:"var(--bg)"}}>
               Advanced
             </div>,
-            s1advanced.map(function(item){return <div key={item.t} className="drop-item" onClick={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})
+            s1advanced.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})
           ]:s2items.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
         </div>,
         document.body
