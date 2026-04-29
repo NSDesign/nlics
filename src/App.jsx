@@ -485,6 +485,22 @@ function hasCreatorDefault(type) {
 
 var _uid = 100
 function uid() { return "n" + (_uid++) }
+// Advance _uid past any numeric IDs in loaded nodes to prevent collisions
+function advanceUid(nodes) {
+  if(!nodes||!nodes.length) return
+  function scan(n) {
+    if(!n) return
+    var m=String(n.id||"").match(/^n(\d+)$/)
+    if(m) _uid=Math.max(_uid, parseInt(m[1])+1)
+    // Scan nested: layers, slots, effectStacks, maskStacks
+    if(n.layers) n.layers.forEach(scan)
+    if(n.inputA) scan(n.inputA)
+    if(n.inputB) scan(n.inputB)
+    var stacks=[n.outEfx,n.effectStack,n.maskStack,n.outMask]
+    stacks.forEach(function(s){if(s)s.forEach(function(e){var em=String(e.id||"").match(/^n(\d+)$/);if(em)_uid=Math.max(_uid,parseInt(em[1])+1)})})
+  }
+  nodes.forEach(scan)
+}
 function mkEfx(t) {
   var cfg=ECFG[t]
   var params=cfg ? { [cfg[0]]:cfg[4] } : {}
@@ -7103,6 +7119,7 @@ function App() {
         var data = JSON.parse(ev.target.result)
         if(data.nodes) {
           pushHistory({nodes:nodes})
+          advanceUid(data.nodes)
           setNodes(data.nodes)
           if(data.name) setProjName(data.name)
           iC.current = new Map()  // clear image cache
@@ -7154,6 +7171,7 @@ function App() {
       } else if(def){
         var d=JSON.parse(def)
         if(d&&d.nodes&&d.nodes.length>0){
+          advanceUid(d.nodes)
           setNodes(d.nodes)
           if(defName)setProjName(defName)
         }
