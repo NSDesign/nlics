@@ -486,8 +486,21 @@ function hasCreatorDefault(type) {
 var _uid = 100
 function uid() { return "n" + (_uid++) }
 // Restore _uid from saved project — avoids ID collisions on load
-function restoreUid(savedUid) {
-  if(savedUid&&savedUid>_uid) _uid=savedUid
+// If _uid is stored, use it (fast). Otherwise scan all node IDs (legacy files).
+function restoreUid(savedUid, nodes) {
+  if(savedUid&&savedUid>_uid){ _uid=savedUid; return }
+  // Legacy file — scan all IDs
+  function scan(n) {
+    if(!n) return
+    var m=String(n.id||"").match(/^n(\d+)$/)
+    if(m) _uid=Math.max(_uid,parseInt(m[1])+1)
+    if(n.layers) n.layers.forEach(scan)
+    if(n.inputA) scan(n.inputA); if(n.inputB) scan(n.inputB)
+    ;[n.outEfx,n.effectStack,n.maskStack,n.outMask].forEach(function(s){
+      if(s)s.forEach(function(e){var em=String(e.id||"").match(/^n(\d+)$/);if(em)_uid=Math.max(_uid,parseInt(em[1])+1)})
+    })
+  }
+  if(nodes) nodes.forEach(scan)
 }
 function mkEfx(t) {
   var cfg=ECFG[t]
@@ -7088,7 +7101,7 @@ function App() {
       document.body.appendChild(a); a.click()
       document.body.removeChild(a); URL.revokeObjectURL(url)
       // Store in recent projects list
-      var entry={name:projName,savedAt:savedAt,nodeCount:nodes.length}
+      var entry={name:projName,savedAt:savedAt,nodeCount:nodes.length,_legacy:false}
       var recent=recentProj.filter(function(r){return r.name!==projName}).slice(0,9)
       recent.unshift(entry)
       setRecentProj(recent)
@@ -7107,7 +7120,7 @@ function App() {
         var data = JSON.parse(ev.target.result)
         if(data.nodes) {
           pushHistory({nodes:nodes})
-          restoreUid(data._uid)
+          restoreUid(data._uid, data.nodes)
           setNodes(data.nodes)
           if(data.name) setProjName(data.name)
           iC.current = new Map()  // clear image cache
@@ -7159,7 +7172,7 @@ function App() {
       } else if(def){
         var d=JSON.parse(def)
         if(d&&d.nodes&&d.nodes.length>0){
-          restoreUid(d._uid)
+          restoreUid(d._uid, d.nodes)
           setNodes(d.nodes)
           if(defName)setProjName(defName)
         }
@@ -7454,7 +7467,7 @@ function App() {
             background:"none",border:"none",borderBottom:"1px solid var(--bd)",
             outline:"none",width:90,padding:"1px 4px",marginLeft:4}}
           placeholder="project name"/>
-        <button onClick={function(){setSaveDialog(true)}} className="hico" title="Save project">↓</button>
+        <button onClick={function(){saveProject(false)}} className="hico" title="Save project">↓</button>
         <button onClick={function(){setLoadDialog(true)}} className="hico" title="Load project">↑</button>
         <input ref={fileInputRef} type="file" accept="*"
           style={{display:"none"}} onChange={function(e){loadProject(e.target.files[0]);e.target.value="";setLoadDialog(false)}}/>
@@ -7479,59 +7492,6 @@ function App() {
     )
   }
 
-
-  // ── Save project dialog ─────────────────────────────────────────────────────
-  var SaveDialog = saveDialog ? (
-    <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(4,4,18,.88)",display:"flex",alignItems:"flex-end"}}
-      onClick={function(e){if(e.target===e.currentTarget)setSaveDialog(false)}}>
-      <div style={{width:"100%",background:"var(--pn)",borderRadius:"18px 18px 0 0",overflow:"hidden"}}>
-        <div style={{display:"flex",alignItems:"center",padding:"14px 16px 10px",borderBottom:"1px solid var(--bd)"}}>
-          <span style={{flex:1,fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13}}>Save Project</span>
-          <button className="icon-btn" onClick={function(){setSaveDialog(false)}} style={{fontSize:20,color:"var(--mu)"}}>×</button>
-        </div>
-        <div style={{padding:"10px 16px 24px"}}>
-          <div style={{marginBottom:12}}>
-            <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:".08em"}}>Project name</span>
-            <input defaultValue={projName}
-              onBlur={function(e){setProjName(e.target.value)}}
-              onKeyDown={function(e){if(e.key==="Enter"||e.key==="Escape")e.target.blur()}}
-              style={{display:"block",width:"100%",marginTop:6,fontSize:13,
-                fontFamily:"'IBM Plex Mono',monospace",color:"var(--tx)",
-                background:"var(--el)",border:"1px solid var(--bd)",borderRadius:6,
-                outline:"none",padding:"8px 10px",boxSizing:"border-box"}}/>
-          </div>
-          <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Save to</div>
-          <button onClick={function(){saveProject(false);setSaveDialog(false)}}
-            style={{width:"100%",padding:"14px 16px",marginBottom:10,borderRadius:8,
-              border:"1px solid var(--bd)",background:"var(--el)",color:"var(--tx)",
-              cursor:"pointer",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
-              display:"flex",alignItems:"center",gap:12}}>
-            <span style={{fontSize:20}}>📁</span>
-            <div style={{textAlign:"left"}}>
-              <div style={{fontWeight:600}}>Files</div>
-              <div style={{fontSize:10,color:"var(--mu)",marginTop:2}}>Download .nlics to device</div>
-            </div>
-          </button>
-          <button style={{width:"100%",padding:"14px 16px",borderRadius:8,
-              border:"1px solid var(--bd)",background:"var(--el)",color:"var(--tx)",
-              fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
-              display:"flex",alignItems:"center",gap:12,opacity:.45,cursor:"default"}}>
-            <span style={{fontSize:20}}>☁️</span>
-            <div style={{textAlign:"left"}}>
-              <div style={{fontWeight:600}}>Google Drive</div>
-              <div style={{fontSize:10,color:"var(--mu)",marginTop:2}}>OAuth integration — coming soon</div>
-            </div>
-          </button>
-          <button onClick={function(){saveProject(true);setSaveDialog(false)}}
-            style={{width:"100%",padding:"10px 16px",marginTop:10,borderRadius:8,
-              border:"1px solid var(--lv)",background:"rgba(176,96,240,.08)",color:"var(--lv)",
-              cursor:"pointer",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}>
-            save &amp; set as default project
-          </button>
-        </div>
-      </div>
-    </div>
-  ) : null
 
   // ── Load project dialog ────────────────────────────────────────────────────
   var LoadDialog = loadDialog ? (
@@ -7577,7 +7537,11 @@ function App() {
                     fileInputRef.current&&fileInputRef.current.click()
                     setLoadDialog(false)
                   }}>
-                    <div style={{fontSize:12,color:isDefault?"var(--lv)":"var(--tx)"}}>{r.name}</div>
+                    <div style={{fontSize:12,
+                      color:isDefault?"var(--lv)":r._legacy?"var(--mu)":"var(--tx)",
+                      fontStyle:r._legacy?"italic":"normal"}}>
+                      {r.name}{r._legacy?" ⚠":""}  
+                    </div>
                     <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
                       {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()} · tap to load
                     </div>
@@ -7623,7 +7587,6 @@ function App() {
   return (
     <div ref={appRef} onPointerMove={handleRootPointerMove} onPointerUp={handleRootPointerUp}
       style={{display:settings.viewMode==="unified"?"block":"flex",flexDirection:isVert?"column":"row",height:"100vh",width:"100vw",overflow:"hidden",background:"var(--bg)",fontFamily:"'IBM Plex Mono','Courier New',monospace",fontSize:12,color:"var(--tx)"}}>
-      {SaveDialog}
       {LoadDialog}
       <StyleInjector />
 
