@@ -485,21 +485,9 @@ function hasCreatorDefault(type) {
 
 var _uid = 100
 function uid() { return "n" + (_uid++) }
-// Advance _uid past any numeric IDs in loaded nodes to prevent collisions
-function advanceUid(nodes) {
-  if(!nodes||!nodes.length) return
-  function scan(n) {
-    if(!n) return
-    var m=String(n.id||"").match(/^n(\d+)$/)
-    if(m) _uid=Math.max(_uid, parseInt(m[1])+1)
-    // Scan nested: layers, slots, effectStacks, maskStacks
-    if(n.layers) n.layers.forEach(scan)
-    if(n.inputA) scan(n.inputA)
-    if(n.inputB) scan(n.inputB)
-    var stacks=[n.outEfx,n.effectStack,n.maskStack,n.outMask]
-    stacks.forEach(function(s){if(s)s.forEach(function(e){var em=String(e.id||"").match(/^n(\d+)$/);if(em)_uid=Math.max(_uid,parseInt(em[1])+1)})})
-  }
-  nodes.forEach(scan)
+// Restore _uid from saved project — avoids ID collisions on load
+function restoreUid(savedUid) {
+  if(savedUid&&savedUid>_uid) _uid=savedUid
 }
 function mkEfx(t) {
   var cfg=ECFG[t]
@@ -7091,7 +7079,7 @@ function App() {
   function saveProject(setDefault) {
     try {
       var savedAt=new Date().toISOString()
-      var payload={version:"1.0",appName:"Selena",fileType:"nlics",name:projName,savedAt:savedAt,nodes:nodes}
+      var payload={version:"1.0",appName:"Selena",fileType:"nlics",name:projName,savedAt:savedAt,nodes:nodes,_uid:_uid}
       var data = JSON.stringify(payload, null, 2)
       var blob = new Blob([data], {type:"application/json"})
       var url = URL.createObjectURL(blob)
@@ -7119,7 +7107,7 @@ function App() {
         var data = JSON.parse(ev.target.result)
         if(data.nodes) {
           pushHistory({nodes:nodes})
-          advanceUid(data.nodes)
+          restoreUid(data._uid)
           setNodes(data.nodes)
           if(data.name) setProjName(data.name)
           iC.current = new Map()  // clear image cache
@@ -7130,7 +7118,7 @@ function App() {
   }
   function autoSaveNow() {
     try {
-      var data = JSON.stringify({version:"1.0",name:projName,nodes:nodes,savedAt:new Date().toISOString()})
+      var data = JSON.stringify({version:"1.0",name:projName,nodes:nodes,savedAt:new Date().toISOString(),_uid:_uid})
       localStorage.setItem("nlics:autosave",data)
       localStorage.setItem("nlics:autosave:name",projName)
     } catch(e) {}
@@ -7171,7 +7159,7 @@ function App() {
       } else if(def){
         var d=JSON.parse(def)
         if(d&&d.nodes&&d.nodes.length>0){
-          advanceUid(d.nodes)
+          restoreUid(d._uid)
           setNodes(d.nodes)
           if(defName)setProjName(defName)
         }
