@@ -7543,7 +7543,7 @@ function App() {
                       {r.name}{r._legacy?" ⚠":""}  
                     </div>
                     <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
-                      {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()} · tap to load
+                      {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}{r.data?" · tap to load":" · tap to browse"}
                     </div>
                   </div>
                   {isDefault
@@ -7551,8 +7551,11 @@ function App() {
                         border:"1px solid var(--lv)",borderRadius:3,padding:"1px 5px",
                         flexShrink:0,letterSpacing:".06em",textTransform:"uppercase"}}>default</span>
                     : <button onClick={function(){
-                        try{localStorage.setItem("nlics:default-project-name",r.name)}catch(e){}
-                        setLoadDialog(false); setTimeout(function(){setLoadDialog(true)},0)
+                        try{
+                      localStorage.setItem("nlics:default-project-name",r.name)
+                      if(r.data) localStorage.setItem("nlics:default-project",JSON.stringify(r.data))
+                    }catch(e){}
+                    setLoadDialog(false); setTimeout(function(){setLoadDialog(true)},0)
                       }} style={{width:20,height:20,minWidth:20,minHeight:20,borderRadius:"50%",
                         border:"2px solid var(--bd)",background:"none",
                         flexShrink:0,cursor:"pointer",padding:0}}/>
