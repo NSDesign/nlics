@@ -662,18 +662,25 @@ function phasor(x,y,s,freq,angle,bandwidth,oct) {
 }
 // ── Simplex-style noise (gradient noise, fewer artefacts than value noise) ────
 function simplex2(x,y,s) {
+  // Correct 2D simplex noise (Gustavson algorithm)
   var F2=.5*(Math.sqrt(3)-1), G2=(3-Math.sqrt(3))/6
-  var s2=(x+y)*F2, i=Math.floor(x+s2), j=Math.floor(y+s2)
-  var t=(i+j)*G2, X0=i-t, Y0=j-t, x0=x-X0, y0=y-Y0
-  var i1=x0>y0?1:0, j1=x0>y0?0:1
-  var x1=x0-i1+G2, y1=y0-j1+G2, x2=x0-1+2*G2, y2=y0-1+2*G2
-  function gi(ii,jj){return vh(ii,jj,s)*2-1}
-  function n(xi,yi,gx,gy){var t2=.5-(gx*gx+gy*gy);return t2<0?0:t2*t2*t2*t2*(gi(xi,jj=(j+(jj=0,0)),0)*gx+gi(ii=(i+(ii=0,0)),yi,0)*gy)}
-  // Simple gradient noise as simplex approximation
-  var d0=Math.max(0,.5-(x0*x0+y0*y0)),d1=Math.max(0,.5-(x1*x1+y1*y1)),d2=Math.max(0,.5-(x2*x2+y2*y2))
-  var g0=vh(i,j,s)*2-1, g1=vh(i+i1,j+j1,s+1)*2-1, g2=vh(i+1,j+1,s+2)*2-1
-  var v=70*(d0*d0*d0*d0*(g0*x0+vh(i,j,s+3)*y0)+d1*d1*d1*d1*(g1*x1+vh(i+i1,j+j1,s+4)*y1)+d2*d2*d2*d2*(g2*x2+vh(i+1,j+1,s+5)*y2))
-  return Math.max(0,Math.min(1,(v+1)*.5))
+  // Skew input to simplex grid
+  var sk=(x+y)*F2, i=Math.floor(x+sk), j=Math.floor(y+sk)
+  var t=(i+j)*G2, x0=x-(i-t), y0=y-(j-t)
+  var i1=x0>y0?1:0, j1=1-i1
+  var x1=x0-i1+G2, y1=y0-j1+G2
+  var x2=x0-1+2*G2, y2=y0-1+2*G2
+  // Gradient lookup — hash lattice point to gradient vector
+  function grad(ix,iy,dx,dy){
+    var h=((vh(ix,iy,s)*65536)&7)  // 8 gradient directions
+    var u=h<4?dx:dy, v2=h<4?dy:dx
+    return ((h&1)?-u:u)+((h&2)?-v2:v2)
+  }
+  var n0=0,n1=0,n2=0
+  var t0=.5-x0*x0-y0*y0; if(t0>0){t0*=t0;n0=t0*t0*grad(i,j,x0,y0)}
+  var t1=.5-x1*x1-y1*y1; if(t1>0){t1*=t1;n1=t1*t1*grad(i+i1,j+j1,x1,y1)}
+  var t2=.5-x2*x2-y2*y2; if(t2>0){t2*=t2;n2=t2*t2*grad(i+1,j+1,x2,y2)}
+  return Math.max(0,Math.min(1,(70*(n0+n1+n2)+1)*.5))
 }
 // ── Marble — sinusoidal bands + turbulence ────────────────────────────────────
 function marble(x,y,oct,s,freq,turb) {
