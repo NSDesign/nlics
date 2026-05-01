@@ -410,7 +410,7 @@ var MBMS   = ["multiply","screen","add","subtract","normal"]
 var MCH    = ["luminosity","R","G","B","A"]
 var SHAPES = ["ellipse","rectangle","rounded-rect","polygon","star","ring","grid","spiral","polar-grid","phyllotaxis","scatter"]
 var GTYPES = ["linear","radial","conic"]
-var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value","crystal","phasor"]
+var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value","crystal","phasor","white"]
 var PTYPES = ["checkerboard","stripes","dots","diamond"]
 var ECFG   = {
   brightness: ["value",0,300,1,150],
@@ -602,7 +602,7 @@ function vn(x,y,s) {
   var ix=Math.floor(x), iy=Math.floor(y), fx=x-ix, fy=y-iy
   return vh(ix,iy,s)+(vh(ix+1,iy,s)-vh(ix,iy,s))*sm(fx)+(vh(ix,iy+1,s)-vh(ix,iy,s))*sm(fy)+(vh(ix,iy,s)-vh(ix+1,iy,s)-vh(ix,iy+1,s)+vh(ix+1,iy+1,s))*sm(fx)*sm(fy)
 }
-function octN(x,y,o,s) { var v=0,a=1,f=1,m=0; for(var i=0;i<o;i++){v+=vn(x*f,y*f,s+i)*a;m+=a;a*=.5;f*=2.08} return v/m }
+function octN(x,y,o,s,lac,gain) { lac=lac||2.08;gain=gain||.5; var v=0,a=1,f=1,m=0; for(var i=0;i<o;i++){v+=vn(x*f,y*f,s+i)*a;m+=a;a*=gain;f*=lac} return v/m }
 
 // ── Fractal Brownian Motion (fBm) — like octN but lacunarity/gain control ────
 function fbm(x,y,oct,lacunarity,gain,s) {
@@ -681,6 +681,18 @@ function simplex2(x,y,s) {
   var t1=.5-x1*x1-y1*y1; if(t1>0){t1*=t1;n1=t1*t1*grad(i+i1,j+j1,x1,y1)}
   var t2=.5-x2*x2-y2*y2; if(t2>0){t2*=t2;n2=t2*t2*grad(i+1,j+1,x2,y2)}
   return Math.max(0,Math.min(1,(70*(n0+n1+n2)+1)*.5))
+}
+// ── White noise — uncorrelated random value per pixel ────────────────────────
+function whiteNoise(px,py,seed,grainSize) {
+  var gs=Math.max(1,Math.round(grainSize||1))
+  var gx=Math.floor(px/gs)*gs, gy=Math.floor(py/gs)*gs
+  return vh(gx,gy,seed)
+}
+// ── Octave simplex — simplex looped like perlin ───────────────────────────────
+function octSimplex(x,y,oct,lac,gain,s) {
+  var v=0,a=.5,f=1,m=0
+  for(var i=0;i<oct;i++){v+=simplex2(x*f,y*f,s+i)*a;a*=gain;f*=lac}
+  return Math.max(0,Math.min(1,v+.5))
 }
 // ── Marble — sinusoidal bands + turbulence ────────────────────────────────────
 function marble(x,y,oct,s,freq,turb) {
@@ -1406,8 +1418,10 @@ function gGrad(ctx,p,w,h) {
 function gNoise(ctx,p,w,h) {
   var nType=p.nType||"perlin",c1=p.c1||"#fff",c2=p.c2||"#000"
   var scale=p.scale||.04,oct=p.oct||4,seed=p.seed||1,alpha=p.alpha==null?1:p.alpha
-  var lac=p.lac||2.0,gain=p.gain||.5  // fBm params
-  var wJitter=p.wJitter==null?1:p.wJitter  // worley jitter
+  var lac=p.lac||2.0,gain=p.gain||.5       // lacunarity + gain (perlin, fbm, simplex, value)
+  var wJitter=p.wJitter==null?1:p.wJitter  // worley/crystal jitter
+  var wMode=p.wMode||"f1"                  // worley mode: f1, f2, f2f1
+  var grainSize=p.grainSize||1             // white noise grain size
   var mFreq=p.mFreq||4,mTurb=p.mTurb||2   // marble/wood freq+turb
   var CA=h2r(c1),CB=h2r(c2)
   var ds=2,dw=Math.ceil(w/ds),dh=Math.ceil(h/ds)
@@ -1415,16 +1429,17 @@ function gNoise(ctx,p,w,h) {
   for(var py=0;py<dh;py++) for(var px=0;px<dw;px++){
     var sx=px*scale, sy=py*scale, v
     switch(nType){
-      case "perlin":     v=octN(sx,sy,oct,seed); break
+      case "perlin":     v=octN(sx,sy,oct,seed,lac,gain); break
       case "fbm":        v=fbm(sx,sy,oct,lac,gain,seed); break
       case "turbulence": v=turbulence(sx,sy,oct,seed); break
-      case "worley":     v=worley(sx,sy,seed,wJitter); break
-      case "simplex":    v=simplex2(sx,sy,seed); break
+      case "worley":     { var wF1=worley(sx,sy,seed,wJitter); v=wMode==="f2"?1-wF1:wMode==="f2f1"?crystal(sx,sy,seed,wJitter,"f2f1"):wF1; break }
+      case "simplex":    v=octSimplex(sx,sy,oct,lac,gain,seed); break
       case "marble":     v=marble(sx,sy,oct,seed,mFreq,mTurb); break
       case "wood":       v=wood(sx,sy,oct,seed,mFreq,mTurb); break
-      case "value":      v=vn(sx,sy,seed); break
+      case "value":      v=octSimplex(sx,sy,oct,lac,gain,seed+777); break
       case "crystal":    v=crystal(sx,sy,seed,p.wJitter,p.crystalMode||"f2f1"); break
       case "phasor":     v=phasor(sx,sy,seed,p.pFreq,p.pAngle,p.pBandwidth,oct); break
+      case "white":      v=whiteNoise(px,py,seed,grainSize); break
       default:           v=vh(px,py,seed)
     }
     v=Math.max(0,Math.min(1,v))
@@ -3707,7 +3722,7 @@ function GradP(props) {
 }
 function NoiseP(props) {
   var p=props.p, up=props.up
-  var hasOct=["perlin","fbm","turbulence","marble","wood"].includes(p.nType)
+  var hasOct=["perlin","fbm","turbulence","simplex","value","marble","wood"].includes(p.nType)
   return (
     <div>
       <Se l="type" v={p.nType} opts={NTYPES} fn={function(v){up(Object.assign({},p,{nType:v}))}}/>
@@ -3715,14 +3730,20 @@ function NoiseP(props) {
       <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
       <Sl l="scale" v={p.scale} mn={.005} mx={.4} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
       {hasOct&&<Sl l="octaves" v={p.oct||4} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>}
-      {p.nType==="fbm"&&(
+      {["fbm","perlin","simplex","value"].includes(p.nType)&&(
         <div>
           <Sl l="lacunarity" v={p.lac||2} mn={1} mx={4} st={.1} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{lac:v}))}}/>
           <Sl l="gain" v={p.gain||.5} mn={.1} mx={.9} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gain:v}))}}/>
         </div>
       )}
       {p.nType==="worley"&&(
-        <Sl l="jitter" v={p.wJitter==null?1:p.wJitter} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{wJitter:v}))}}/>
+        <div>
+          <Se l="mode" v={p.wMode||"f1"} opts={["f1","f2","f2f1"]} fn={function(v){up(Object.assign({},p,{wMode:v}))}}/>
+          <Sl l="jitter" v={p.wJitter==null?1:p.wJitter} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{wJitter:v}))}}/>
+        </div>
+      )}
+      {p.nType==="white"&&(
+        <Sl l="grain size" v={p.grainSize||1} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up(Object.assign({},p,{grainSize:v}))}}/>
       )}
       {p.nType==="crystal"&&(
         <div>
