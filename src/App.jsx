@@ -2923,7 +2923,12 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   cache.set(id,cv2);vis.delete(id);return cv2
 }
 function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
-  if(!canvas||!dispId)return
+  if(!canvas)return
+  if(!dispId||!nodes||nodes.length===0){
+    var clrCtx=canvas.getContext("2d")
+    clrCtx.clearRect(0,0,canvas.width,canvas.height)
+    return
+  }
   try {
     var ctx=canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height)
     var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
@@ -7197,13 +7202,15 @@ function App() {
       var defName=localStorage.getItem("nlics:default-project-name")
       if(defName==="__blank__"){
         setNodes([]); setProjName("Untitled")
-      } else if(def){
-        var d=JSON.parse(def)
-        if(d&&d.nodes&&d.nodes.length>0){
-          restoreUid(d._uid, d.nodes)
-          setNodes(d.nodes)
-          if(defName)setProjName(defName)
-        }
+      } else if(def&&defName){
+        try{
+          var d=JSON.parse(def)
+          if(d&&d.nodes&&d.nodes.length>0){
+            restoreUid(d._uid, d.nodes)
+            setNodes(d.nodes)
+            setProjName(defName)
+          }
+        }catch(de){console.warn("Default project parse failed",de)}
       }
     }catch(e){console.warn("Default project load failed:",e)}
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -7497,7 +7504,8 @@ function App() {
           placeholder="project name"/>
         <button onClick={function(){saveProject(false)}} className="hico" title="Save project">↓</button>
         <button onClick={function(){setLoadDialog(true)}} className="hico" title="Load project">↑</button>
-        <input ref={fileInputRef} type="file" accept="*"
+        <input ref={fileInputRef} type="file"
+          accept=".nlics,.json,application/json,application/octet-stream"
           style={{display:"none"}} onChange={function(e){loadProject(e.target.files[0]);e.target.value="";setLoadDialog(false)}}/>
         <span style={{flex:1}}/>
         <button className="hico" title="Layout settings" onClick={function(){setSettingsOpen(true)}}>⚙</button>
@@ -7561,9 +7569,16 @@ function App() {
               return (
                 <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
                   <div style={{flex:1,cursor:"pointer"}} onClick={function(){
-                    // Open file picker filtered to help find this project
-                    fileInputRef.current&&fileInputRef.current.click()
-                    setLoadDialog(false)
+                    if(r.data&&r.data.nodes&&r.data.nodes.length>0){
+                      pushHistory({nodes:nodes})
+                      restoreUid(r.data._uid,r.data.nodes)
+                      setNodes(r.data.nodes)
+                      setProjName(r.name)
+                      setLoadDialog(false)
+                    } else {
+                      fileInputRef.current&&fileInputRef.current.click()
+                      setLoadDialog(false)
+                    }
                   }}>
                     <div style={{fontSize:12,
                       color:isDefault?"var(--lv)":r._legacy?"var(--mu)":"var(--tx)",
