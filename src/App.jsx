@@ -4362,6 +4362,7 @@ function EfxPrimary(props) {
       ;(n.layers||[]).forEach(function(l,li){scanEfxForTfx(l.effectStack,nl+" · layer "+(li+1),n.id)})
     })
     var selTfx=allTfx.find(function(t){return t.efxId===p.efxId})
+    var sp2=selTfx&&selTfx.params
     return (
     <div>
       <div style={{padding:"6px 0 4px",fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:".05em"}}>TRANSFORM SOURCE</div>
@@ -4376,7 +4377,18 @@ function EfxPrimary(props) {
           {t.label}
         </div>
       })}
+      {sp2&&<div style={{padding:"6px 8px",marginTop:4,marginBottom:4,background:"var(--el)",borderRadius:4,
+          fontSize:9,fontFamily:"'IBM Plex Mono',monospace",color:"var(--mu)",lineHeight:1.6}}>
+        <span style={{color:"var(--ac)"}}>source values →</span>{" "}
+        tx:{((sp2.tx||0)*100).toFixed(1)}%{" "}
+        ty:{((sp2.ty||0)*100).toFixed(1)}%{" "}
+        rot:{(sp2.rot||0).toFixed(1)}°{" "}
+        su:{(sp2.su!=null?sp2.su:1).toFixed(2)}{" "}
+        sx:{(sp2.sx!=null?sp2.sx:1).toFixed(2)}{" "}
+        sy:{(sp2.sy!=null?sp2.sy:1).toFixed(2)}
+      </div>}
       {selTfx&&<div style={{marginTop:8}}>
+        <div style={{opacity:selTfx?1:.35,pointerEvents:selTfx?"auto":"none"}}>
         <PR l="position">
           {["off","x","y","xy"].map(function(opt){return <button key={opt}
             className={(p.matchPos===false?"off":p.matchPos||"xy")===opt?"ac":"ghost"}
@@ -4399,6 +4411,7 @@ function EfxPrimary(props) {
         {(p.matchPos&&p.matchPos!==false)&&<Sl l="offset y" v={p.offsetY||0} mn={-1} mx={1} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({offsetY:v})}}/>}
         {(p.matchScale&&p.matchScale!==false)&&<Sl l="offset scale" v={p.offsetScale==null?1:p.offsetScale} mn={.1} mx={4} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up({offsetScale:v})}}/>}
         {p.matchRot&&<Sl l="offset rot" v={p.offsetRot||0} mn={-180} mx={180} st={1} fmt={function(v){return Math.round(v)+"°"}} fn={function(v){up({offsetRot:v})}}/>}
+        </div>
       </div>}
     </div>
   )}
