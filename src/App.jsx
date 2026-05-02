@@ -506,7 +506,8 @@ function mkEfx(t) {
   var cfg=ECFG[t]
   var params=cfg ? { [cfg[0]]:cfg[4] } : {}
   if(t==="curves")    params={inBlack:0,inWhite:255,outBlack:0,outWhite:255,sCurve:0}
-  if(t==="match","transform")    params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
+  if(t==="match")      params={matchPos:"xy",matchScale:false,matchRot:false,sourceId:null,offsetX:0,offsetY:0,offsetScale:1,offsetRot:0}
+  if(t==="transform")  params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
   if(t==="wave")          params={amplitude:.05,freqX:3,freqY:3,phaseX:0,phaseY:0}
   if(t==="twirl")         params={angle:180,radius:.5,cx:.5,cy:.5}
   if(t==="bulge")         params={strength:.5,radius:.7,cx:.5,cy:.5}
@@ -5229,7 +5230,7 @@ var EFX_GROUPS=[
   {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
   {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise"]},
   {label:"Distort",  items:["wave","twirl","bulge","uv-distort","polar-to-cart","cart-to-polar"]},
-  {label:"Transform",items:["transform"]},
+  {label:"Transform",items:["match","transform"]},
   {label:"Points",   items:["show-points","point-map","source-at-points"]},
 ]
 // Hook: compute a fixed-position rect for a popover relative to an anchor ref.
