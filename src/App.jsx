@@ -2251,26 +2251,52 @@ function applyEfxToPoints(pts,efx,w,h) {
 }
 
 function applyMatchEfx(ctx, mp, w, h) {
-  var tpFound=null
-  function findTfxM(stk){(stk||[]).forEach(function(e){if(e.id===mp.efxId)tpFound=e.params})}
-  if(mp.efxId){
+  if(!mp.efxId) return
+  var isStackRef=mp.efxId.indexOf("stack::")=== 0
+  var localOps=[], globalOps=[]
+  function collectTfx(params) {
+    var isLocal=!params.space||params.space==="local"
+    if(isLocal) localOps.push(params); else globalOps.push(params)
+  }
+  if(isStackRef){
+    // Collect all transforms from the referenced stack
+    var stackKey=mp.efxId.slice(7)  // strip "stack::"
+    function findStack(n){
+      var sl=stackKey.split("::")
+      if(sl[0]==="out"&&n.id===sl[1])   return n.outEfx
+      if(sl[0]==="efx"&&n.id===sl[1])   return n.effectStack
+      if(sl[0]==="inputA"&&n.id===sl[1])return n.inputA&&n.inputA.effectStack
+      if(sl[0]==="inputB"&&n.id===sl[1])return n.inputB&&n.inputB.effectStack
+      if(sl[0].indexOf("layer")===0&&n.id===sl[1]){
+        var li=parseInt(sl[0].slice(5)); return n.layers&&n.layers[li]&&n.layers[li].effectStack
+      }
+    }
+    _renderNodes.forEach(function(n){
+      var stk=findStack(n)
+      ;(stk||[]).forEach(function(e){if(e.type==="transform"&&e.enabled)collectTfx(e.params||{})})
+    })
+  } else {
+    // Single transform effect
+    var tpFound=null
+    function findTfxM(stk){(stk||[]).forEach(function(e){if(e.id===mp.efxId)tpFound=e.params})}
     _renderNodes.forEach(function(n){
       findTfxM(n.outEfx); findTfxM(n.effectStack)
       if(n.inputA) findTfxM(n.inputA.effectStack)
       if(n.inputB) findTfxM(n.inputB.effectStack)
       ;(n.layers||[]).forEach(function(l){findTfxM(l.effectStack)})
     })
+    if(!tpFound) return
+    collectTfx(tpFound)
   }
-  if(!tpFound) return
-  var tp=tpFound
-  var matchTx=(mp.matchPos==="off"||mp.matchPos===false||mp.matchPos==="y")?0:(tp.tx||0)
-  var matchTy=(mp.matchPos==="off"||mp.matchPos===false||mp.matchPos==="x")?0:(tp.ty||0)
-  matchTx+=(mp.offsetX||0); matchTy+=(mp.offsetY||0)
-  var matchRot=(mp.matchRot?(tp.rot||0):0)+(mp.offsetRot||0)
-  var baseScale=tp.su!=null?tp.su:1
-  var matchSx=(mp.matchScale==="off"||mp.matchScale===false||mp.matchScale==="y")?1:(tp.sx!=null?tp.sx:1)*baseScale*(mp.offsetScale==null?1:mp.offsetScale)
-  var matchSy=(mp.matchScale==="off"||mp.matchScale===false||mp.matchScale==="x")?1:(tp.sy!=null?tp.sy:1)*baseScale*(mp.offsetScale==null?1:mp.offsetScale)
-  applyTransform(ctx,{tx:matchTx,ty:matchTy,rot:matchRot,su:1,sx:matchSx,sy:matchSy,skX:0,skY:0,space:mp.space||"local"},w,h)
+  if(!localOps.length&&!globalOps.length) return
+  // Apply axis masking and offsets to final effective params
+  // Build synthetic single-pass transform from composed stack values
+  // For simplicity: apply collected ops then offset
+  applyTransformStack(ctx,localOps,globalOps,w,h)
+  // Apply offsets as a follow-on local transform if set
+  var ox=mp.offsetX||0,oy=mp.offsetY||0,or2=mp.offsetRot||0,os=mp.offsetScale==null?1:mp.offsetScale
+  if(ox||oy||or2||os!==1)
+    applyTransformStack(ctx,[{tx:ox,ty:oy,rot:or2,su:os,sx:1,sy:1,skX:0,skY:0}],[],w,h)
 }
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
   if(!stack||!stack.length)return
@@ -4371,21 +4397,30 @@ function EfxPrimary(props) {
   if(efx.type==="match") {
     // Build flat list of all transform effects across all nodes and their stacks
     var allTfx=[]
-    function scanEfxForTfx(stack,nodeLabel,nodeId) {
-      (stack||[]).forEach(function(e){
-        if(e.type==="transform") allTfx.push({nodeId:nodeId,efxId:e.id,label:nodeLabel+(e.name?" · "+e.name:" · transform"),params:e.params})
+    function scanEfxForTfx(stack,nodeLabel,nodeId,stackKey) {
+      var tfxInStack=(stack||[]).filter(function(e){return e.type==="transform"&&e.enabled})
+      // Individual transform entries
+      tfxInStack.forEach(function(e){
+        allTfx.push({nodeId:nodeId,efxId:e.id,isStack:false,
+          label:nodeLabel+(e.name?" · "+e.name:" · transform"),params:e.params})
       })
+      // "All transforms" combined entry — only if >0 transforms
+      if(tfxInStack.length>0){
+        allTfx.push({nodeId:nodeId,efxId:"stack::"+stackKey,isStack:true,stackRef:stack,
+          label:nodeLabel+" · all transforms"})
+      }
     }
     ;(props.nodes||[]).forEach(function(n){
       var nl=n.name||n.id
-      scanEfxForTfx(n.outEfx,nl,n.id)
-      scanEfxForTfx(n.effectStack,nl,n.id)
-      if(n.inputA) scanEfxForTfx(n.inputA.effectStack,nl+" · A",n.id)
-      if(n.inputB) scanEfxForTfx(n.inputB.effectStack,nl+" · B",n.id)
-      ;(n.layers||[]).forEach(function(l,li){scanEfxForTfx(l.effectStack,nl+" · layer "+(li+1),n.id)})
+      scanEfxForTfx(n.outEfx,nl,n.id,"out::"+n.id)
+      scanEfxForTfx(n.effectStack,nl,n.id,"efx::"+n.id)
+      if(n.inputA) scanEfxForTfx(n.inputA.effectStack,nl+" · A",n.id,"inputA::"+n.id)
+      if(n.inputB) scanEfxForTfx(n.inputB.effectStack,nl+" · B",n.id,"inputB::"+n.id)
+      ;(n.layers||[]).forEach(function(l,li){scanEfxForTfx(l.effectStack,nl+" · layer "+(li+1),n.id,"layer"+li+"::"+n.id)})
     })
     var selTfx=allTfx.find(function(t){return t.efxId===p.efxId})
-    var sp2=selTfx&&selTfx.params
+    var sp2=selTfx&&!selTfx.isStack&&selTfx.params
+    var stackTfxs=selTfx&&selTfx.isStack?(selTfx.stackRef||[]).filter(function(e){return e.type==="transform"&&e.enabled}):null
     return (
     <div>
       <div style={{padding:"6px 0 4px",fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:".05em"}}>TRANSFORM SOURCE</div>
@@ -4409,6 +4444,13 @@ function EfxPrimary(props) {
         su:{(sp2.su!=null?sp2.su:1).toFixed(2)}{" "}
         sx:{(sp2.sx!=null?sp2.sx:1).toFixed(2)}{" "}
         sy:{(sp2.sy!=null?sp2.sy:1).toFixed(2)}
+      </div>}
+      {stackTfxs&&<div style={{padding:"6px 8px",marginTop:4,marginBottom:4,background:"var(--el)",borderRadius:4,
+          fontSize:9,fontFamily:"'IBM Plex Mono',monospace",color:"var(--mu)",lineHeight:1.5}}>
+        <span style={{color:"var(--ac)"}}>combined stack ({stackTfxs.length} transforms)</span>
+        {stackTfxs.map(function(e,i){var pp=e.params||{};return <div key={i}>
+          {e.name||"transform "+(i+1)}: tx:{((pp.tx||0)*100).toFixed(1)}% ty:{((pp.ty||0)*100).toFixed(1)}% rot:{(pp.rot||0).toFixed(1)}° [{pp.space||"local"}]
+        </div>})}
       </div>}
       {selTfx&&<div style={{marginTop:8}}>
         <div style={{opacity:selTfx?1:.35,pointerEvents:selTfx?"auto":"none"}}>
