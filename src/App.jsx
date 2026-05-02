@@ -1098,19 +1098,18 @@ function pxFn(d,w,h,t,p) {
 // Uses an oversized 3× buffer to prevent clipping on large transforms.
 function applyTransformStack(ctx, localOps, globalOps, w, h) {
   if(!localOps.length && !globalOps.length) return
-  var PAD = 1  // padding factor each side — total buffer = (1+2*PAD)× each dim
+  // Oversized buffer: 1× padding each side prevents clipping on large transforms
+  var PAD = 1
   var bw = w*(1+2*PAD), bh = h*(1+2*PAD)
   var buf = document.createElement("canvas"); buf.width=bw; buf.height=bh
   var bx = buf.getContext("2d")
-  // Draw source into centre of buffer
-  bx.drawImage(ctx.canvas, w*PAD, h*PAD)
-  // Shape centroid from _shapeProps if available, else canvas centre
   var sp = ctx.canvas._shapeProps
+  // Local pivot: shape centroid in buffer coords; fallback canvas centre
   var localCx = sp ? sp.x*w + w*PAD : bw/2
   var localCy = sp ? sp.y*h + h*PAD : bh/2
   var globalCx = bw/2, globalCy = bh/2
   bx.save()
-  // ── Local transforms (pivot = shape centroid) ──────────────────────────────
+  // ── Build composed matrix (local first, then global) ─────────────────────
   if(localOps.length){
     bx.translate(localCx, localCy)
     localOps.forEach(function(p){
@@ -1120,12 +1119,10 @@ function applyTransformStack(ctx, localOps, globalOps, w, h) {
       var skX=(p.skX||0)*Math.PI/180, skY=(p.skY||0)*Math.PI/180
       bx.translate(tx,ty)
       if(skX||skY) bx.transform(1,Math.tan(skY),Math.tan(skX),1,0,0)
-      bx.rotate(rot)
-      bx.scale(sx,sy)
+      bx.rotate(rot); bx.scale(sx,sy)
     })
     bx.translate(-localCx, -localCy)
   }
-  // ── Global transforms (pivot = canvas centre mapped to buffer centre) ──────
   if(globalOps.length){
     bx.translate(globalCx, globalCy)
     globalOps.forEach(function(p){
@@ -1135,15 +1132,15 @@ function applyTransformStack(ctx, localOps, globalOps, w, h) {
       var skX=(p.skX||0)*Math.PI/180, skY=(p.skY||0)*Math.PI/180
       bx.translate(tx,ty)
       if(skX||skY) bx.transform(1,Math.tan(skY),Math.tan(skX),1,0,0)
-      bx.rotate(rot)
-      bx.scale(sx,sy)
+      bx.rotate(rot); bx.scale(sx,sy)
     })
     bx.translate(-globalCx, -globalCy)
   }
-  // ── Draw transformed buffer back (cropped to original canvas size) ─────────
+  // ── Draw source THROUGH the composed matrix, then crop back ──────────────
+  bx.drawImage(ctx.canvas, w*PAD, h*PAD)
+  bx.restore()
   ctx.clearRect(0,0,w,h)
   ctx.drawImage(buf, w*PAD,h*PAD, w,h, 0,0, w,h)
-  bx.restore()
 }
 // Single-effect convenience wrapper used by match effect and pt-domain
 function applyTransform(ctx, p, w, h) {
