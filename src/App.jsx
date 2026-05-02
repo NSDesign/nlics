@@ -2250,6 +2250,28 @@ function applyEfxToPoints(pts,efx,w,h) {
   return out
 }
 
+function applyMatchEfx(ctx, mp, w, h) {
+  var tpFound=null
+  function findTfxM(stk){(stk||[]).forEach(function(e){if(e.id===mp.efxId)tpFound=e.params})}
+  if(mp.efxId){
+    _renderNodes.forEach(function(n){
+      findTfxM(n.outEfx); findTfxM(n.effectStack)
+      if(n.inputA) findTfxM(n.inputA.effectStack)
+      if(n.inputB) findTfxM(n.inputB.effectStack)
+      ;(n.layers||[]).forEach(function(l){findTfxM(l.effectStack)})
+    })
+  }
+  if(!tpFound) return
+  var tp=tpFound
+  var matchTx=(mp.matchPos==="off"||mp.matchPos===false||mp.matchPos==="y")?0:(tp.tx||0)
+  var matchTy=(mp.matchPos==="off"||mp.matchPos===false||mp.matchPos==="x")?0:(tp.ty||0)
+  matchTx+=(mp.offsetX||0); matchTy+=(mp.offsetY||0)
+  var matchRot=(mp.matchRot?(tp.rot||0):0)+(mp.offsetRot||0)
+  var baseScale=tp.su!=null?tp.su:1
+  var matchSx=(mp.matchScale==="off"||mp.matchScale===false||mp.matchScale==="y")?1:(tp.sx!=null?tp.sx:1)*baseScale*(mp.offsetScale==null?1:mp.offsetScale)
+  var matchSy=(mp.matchScale==="off"||mp.matchScale===false||mp.matchScale==="x")?1:(tp.sy!=null?tp.sy:1)*baseScale*(mp.offsetScale==null?1:mp.offsetScale)
+  applyTransform(ctx,{tx:matchTx,ty:matchTy,rot:matchRot,su:1,sx:matchSx,sy:matchSy,skX:0,skY:0,space:mp.space||"local"},w,h)
+}
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
   if(!stack||!stack.length)return
   var spDeferred=[]  // show-points deferred to end (always on top)
