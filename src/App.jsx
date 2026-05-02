@@ -4399,23 +4399,25 @@ function EfxPrimary(props) {
     var allTfx=[]
     function scanEfxForTfx(stack,nodeLabel,nodeId,stackKey) {
       var tfxInStack=(stack||[]).filter(function(e){return e.type==="transform"&&e.enabled})
-      // Individual transform entries
-      tfxInStack.forEach(function(e){
+      var tfxCount=tfxInStack.length
+      tfxInStack.forEach(function(e,ti){
+        // Index disambiguates unnamed transforms in the same stack
+        var suffix=e.name?(" · "+e.name):(tfxCount>1?" · transform "+(ti+1):" · transform")
         allTfx.push({nodeId:nodeId,efxId:e.id,isStack:false,
-          label:nodeLabel+(e.name?" · "+e.name:" · transform"),params:e.params})
+          label:nodeLabel+suffix,params:e.params})
       })
-      // "All transforms" combined entry — only if >0 transforms
-      if(tfxInStack.length>0){
+      if(tfxCount>1){
         allTfx.push({nodeId:nodeId,efxId:"stack::"+stackKey,isStack:true,stackRef:stack,
-          label:nodeLabel+" · all transforms"})
+          label:nodeLabel+" · all transforms ("+tfxCount+")"})
       }
     }
     ;(props.nodes||[]).forEach(function(n){
       var nl=n.name||n.id
-      scanEfxForTfx(n.outEfx,nl,n.id,"out::"+n.id)
+      // Output stack labelled explicitly
+      scanEfxForTfx(n.outEfx,nl+" · output",n.id,"out::"+n.id)
       scanEfxForTfx(n.effectStack,nl,n.id,"efx::"+n.id)
-      if(n.inputA) scanEfxForTfx(n.inputA.effectStack,nl+" · A",n.id,"inputA::"+n.id)
-      if(n.inputB) scanEfxForTfx(n.inputB.effectStack,nl+" · B",n.id,"inputB::"+n.id)
+      if(n.inputA) scanEfxForTfx(n.inputA.effectStack,nl+" · input A",n.id,"inputA::"+n.id)
+      if(n.inputB) scanEfxForTfx(n.inputB.effectStack,nl+" · input B",n.id,"inputB::"+n.id)
       ;(n.layers||[]).forEach(function(l,li){scanEfxForTfx(l.effectStack,nl+" · layer "+(li+1),n.id,"layer"+li+"::"+n.id)})
     })
     var selTfx=allTfx.find(function(t){return t.efxId===p.efxId})
