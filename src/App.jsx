@@ -2276,17 +2276,24 @@ function applyMatchEfx(ctx, mp, w, h) {
       ;(stk||[]).forEach(function(e){if(e.type==="transform"&&e.enabled)collectTfx(e.params||{})})
     })
   } else {
-    // Single transform effect
-    var tpFound=null
-    function findTfxM(stk){(stk||[]).forEach(function(e){if(e.id===mp.efxId)tpFound=e.params})}
+    // Cumulative: apply all transforms from the same stack up to and including the target
+    var targetStack=null
     _renderNodes.forEach(function(n){
-      findTfxM(n.outEfx); findTfxM(n.effectStack)
-      if(n.inputA) findTfxM(n.inputA.effectStack)
-      if(n.inputB) findTfxM(n.inputB.effectStack)
-      ;(n.layers||[]).forEach(function(l){findTfxM(l.effectStack)})
+      function checkStk(stk){
+        if(!stk) return
+        for(var si=0;si<stk.length;si++){if(stk[si].id===mp.efxId){targetStack=stk;return}}
+      }
+      checkStk(n.outEfx); checkStk(n.effectStack)
+      if(n.inputA) checkStk(n.inputA.effectStack)
+      if(n.inputB) checkStk(n.inputB.effectStack)
+      ;(n.layers||[]).forEach(function(l){checkStk(l.effectStack)})
     })
-    if(!tpFound) return
-    collectTfx(tpFound)
+    if(!targetStack) return
+    for(var tsi=0;tsi<targetStack.length;tsi++){
+      var te=targetStack[tsi]
+      if(te.type==="transform"&&te.enabled) collectTfx(te.params||{})
+      if(te.id===mp.efxId) break  // stop after target
+    }
   }
   if(!localOps.length&&!globalOps.length) return
   // Apply axis masking and offsets to final effective params
