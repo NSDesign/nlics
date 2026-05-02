@@ -2268,6 +2268,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
     var efx=stack[ei]; if(!efx.enabled) continue
     if(efx.type==="show-points"){spDeferred.push(efx);continue}
     if(efx.type==="transform"){continue}  // already applied above
+    if(efx.type==="match"){applyMatchEfx(ctx,efx.params||{},w,h);continue}
     // Points-domain effects: transform _points, skip canvas
     if(efx.domain==="points"&&efx.type!=="show-points"&&efx.type!=="source-at-points"){
       if(ctx.canvas&&ctx.canvas._points){
@@ -2606,8 +2607,8 @@ function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
   // Iterate bottom-to-top, stopping at afterIdx (inclusive)
   for(var ei=stack.length-1;ei>=(afterIdx>=0?afterIdx:0);ei--){
     var efx=stack[ei]; if(!efx.enabled)continue
-    if(efx.type==="match"){applyMatchEfx(ctx,efx.params||{},w,h)}
-    if(efx.type==="transform"){applyTransform(ctx,efx.params,w,h)}
+    if(efx.type==="match"){applyMatchEfx(ctx,efx.params||{},w,h);continue}
+    if(efx.type==="transform"){applyTransform(ctx,efx.params,w,h);continue}
     else {
       var pre=ctx.getImageData(0,0,w,h), post=new Uint8ClampedArray(pre.data)
       pxFn(post,w,h,efx.type,efx.params)
