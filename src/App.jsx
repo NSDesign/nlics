@@ -7302,6 +7302,10 @@ function App() {
             restoreUid(d._uid, d.nodes)
             setNodes(d.nodes)
             setProjName(defName)
+            iC.current=new Map()
+            var sd2=d.nodes.filter(function(n){return n.section===2&&n.enabled})
+            setDispId(sd2.length>0?sd2[sd2.length-1].id:null)
+            setDispMask(false);setDispSlot(null);setSelId(null)
           }
         }catch(de){console.warn("Default project parse failed",de)}
       }
@@ -7667,6 +7671,10 @@ function App() {
                       restoreUid(r.data._uid,r.data.nodes)
                       setNodes(r.data.nodes)
                       setProjName(r.name)
+                      iC.current=new Map()
+                      var rd2=r.data.nodes.filter(function(n){return n.section===2&&n.enabled})
+                      setDispId(rd2.length>0?rd2[rd2.length-1].id:null)
+                      setDispMask(false);setDispSlot(null);setSelId(null)
                       setLoadDialog(false)
                     } else {
                       fileInputRef.current&&fileInputRef.current.click()
