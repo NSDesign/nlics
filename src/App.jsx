@@ -2606,33 +2606,7 @@ function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
   // Iterate bottom-to-top, stopping at afterIdx (inclusive)
   for(var ei=stack.length-1;ei>=(afterIdx>=0?afterIdx:0);ei--){
     var efx=stack[ei]; if(!efx.enabled)continue
-    if(efx.type==="match"){
-      var mp=efx.params||{}
-      if(mp.efxId){
-        // Find transform effect params by efxId across all nodes
-        var tpFound=null
-        function findTfx2(stk){(stk||[]).forEach(function(e){if(e.id===mp.efxId)tpFound=e.params})}
-        _renderNodes.forEach(function(n){
-          findTfx2(n.outEfx); findTfx2(n.effectStack)
-          if(n.inputA) findTfx2(n.inputA.effectStack)
-          if(n.inputB) findTfx2(n.inputB.effectStack)
-          ;(n.layers||[]).forEach(function(l){findTfx2(l.effectStack)})
-        })
-        if(tpFound){
-          // Apply the found transform (plus offsets) to current canvas
-          // Use same coordinate system as applyTransform: tx/ty are fractions of w/h
-          var tp=tpFound
-          var matchTx=mp.matchPos==="off"||mp.matchPos===false?0:(mp.matchPos==="y"?0:(tp.tx||0))+(mp.offsetX||0)
-          var matchTy=mp.matchPos==="off"||mp.matchPos===false?0:(mp.matchPos==="x"?0:(tp.ty||0))+(mp.offsetY||0)
-          var matchRot=mp.matchRot?((tp.rot||0)+(mp.offsetRot||0)):0
-          var matchSu=(tp.su!=null?tp.su:1)*(mp.offsetScale==null?1:mp.offsetScale)
-          var matchSx=mp.matchScale==="off"||mp.matchScale===false?1:(mp.matchScale==="y"?1:(tp.sx!=null?tp.sx:1)*matchSu)
-          var matchSy=mp.matchScale==="off"||mp.matchScale===false?1:(mp.matchScale==="x"?1:(tp.sy!=null?tp.sy:1)*matchSu)
-          // Delegate to applyTransform with synthesised params
-          applyTransform(ctx,{tx:matchTx,ty:matchTy,rot:matchRot,su:1,sx:matchSx,sy:matchSy,skX:0,skY:0},w,h)
-        }
-      }
-    }
+    if(efx.type==="match"){applyMatchEfx(ctx,efx.params||{},w,h)}
     if(efx.type==="transform"){applyTransform(ctx,efx.params,w,h)}
     else {
       var pre=ctx.getImageData(0,0,w,h), post=new Uint8ClampedArray(pre.data)
