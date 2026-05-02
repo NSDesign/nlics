@@ -506,7 +506,7 @@ function mkEfx(t) {
   var cfg=ECFG[t]
   var params=cfg ? { [cfg[0]]:cfg[4] } : {}
   if(t==="curves")    params={inBlack:0,inWhite:255,outBlack:0,outWhite:255,sCurve:0}
-  if(t==="transform")    params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
+  if(t==="match","transform")    params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
   if(t==="wave")          params={amplitude:.05,freqX:3,freqY:3,phaseX:0,phaseY:0}
   if(t==="twirl")         params={angle:180,radius:.5,cx:.5,cy:.5}
   if(t==="bulge")         params={strength:.5,radius:.7,cx:.5,cy:.5}
@@ -517,7 +517,7 @@ function mkEfx(t) {
   if(t==="show-points")    params={style:"circle",color:"#00ccff",size:6,opacity:.8,showLabels:false,labelSize:9,labelColor:"#ffffff"}
   if(t==="point-map")      params={mappings:[]}
   if(t==="source-at-points")params={sources:[],distributionMode:"weighted",wrap:"clamp"}
-  if(t==="colour-map") params={
+  if(t==="colour","colour-map") params={
     stops:[{pos:0,color:"#000000",alpha:100},{pos:1,color:"#ffffff",alpha:100}],
     reverse:false
   }
@@ -1255,16 +1255,17 @@ function gShape(ctx,p,w,h) {
       for(var ri3=0;ri3<edgeSegs;ri3++) rpts.push(jv(rw2-ri3*2*rw2/edgeSegs,rh2))
       for(var ri4=0;ri4<edgeSegs;ri4++) rpts.push(jv(-rw2,rh2-ri4*2*rh2/edgeSegs))
       drawPts(rpts)
-    } else if(renderMode==="smooth") {
-      var rw3=r*rx, rh3=r*ry
-      var rjSegs=Math.max(1,Math.round(segs/4))
-      var rjpts=[]
-      for(var rj=0;rj<rjSegs;rj++) rjpts.push(jv(-rw3+rj*2*rw3/rjSegs,-rh3))
-      for(var rj2=0;rj2<rjSegs;rj2++) rjpts.push(jv(rw3,-rh3+rj2*2*rh3/rjSegs))
-      for(var rj3=0;rj3<rjSegs;rj3++) rjpts.push(jv(rw3-rj3*2*rw3/rjSegs,rh3))
-      for(var rj4=0;rj4<rjSegs;rj4++) rjpts.push(jv(-rw3,rh3-rj4*2*rh3/rjSegs))
-      drawSmooth(rjpts)
-    } else { tc2.rect(-r*rx,-r*ry,r*rx*2,r*ry*2) }
+    } else {
+      // Rectangle always uses straight lines — smooth mode = rect() (sharpest), faceted = segmented
+      if(jitter>0){
+        var rw3=r*rx, rh3=r*ry, rjSegs=Math.max(1,Math.round(segs/4)), rjpts=[]
+        for(var rj=0;rj<rjSegs;rj++) rjpts.push(jv(-rw3+rj*2*rw3/rjSegs,-rh3))
+        for(var rj2=0;rj2<rjSegs;rj2++) rjpts.push(jv(rw3,-rh3+rj2*2*rh3/rjSegs))
+        for(var rj3=0;rj3<rjSegs;rj3++) rjpts.push(jv(rw3-rj3*2*rw3/rjSegs,rh3))
+        for(var rj4=0;rj4<rjSegs;rj4++) rjpts.push(jv(-rw3,rh3-rj4*2*rh3/rjSegs))
+        drawPts(rjpts)
+      } else { tc2.rect(-r*rx,-r*ry,r*rx*2,r*ry*2) }
+    }
   }
   else if(s==="rounded-rect") {
     var rrW=r*rx, rrH=r*ry, cr=Math.min(rrW,rrH)*Math.max(0,Math.min(1,cornerR))
@@ -2569,6 +2570,36 @@ function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
   // Iterate bottom-to-top, stopping at afterIdx (inclusive)
   for(var ei=stack.length-1;ei>=(afterIdx>=0?afterIdx:0);ei--){
     var efx=stack[ei]; if(!efx.enabled)continue
+    if(efx.type==="match"){
+      var mp=efx.params||{}
+      if(mp.sourceId&&cmap){
+        var srcCv2=compAny(mp.sourceId,cmap,new Map(),iC,w,h,new Set(vis))
+        if(srcCv2&&srcCv2._shapeProps){
+          var sp2=srcCv2._shapeProps, cx2=w/2, cy2=h/2
+          var cur=ctx.getImageData(0,0,w,h)
+          var tc3=document.createElement("canvas");tc3.width=w;tc3.height=h
+          var tx3=tc3.getContext("2d")
+          tx3.save()
+          tx3.translate(cx2,cy2)
+          if(mp.matchRot&&sp2.rot){tx3.rotate((sp2.rot+(mp.offsetRot||0))*Math.PI/180)}
+          if(mp.matchScale&&sp2.sz){
+            var sc3=sp2.sz*(mp.offsetScale==null?1:mp.offsetScale)
+            var scx3=mp.matchScale==="x"||mp.matchScale==="xy"?sc3:1
+            var scy3=mp.matchScale==="y"||mp.matchScale==="xy"?sc3:1
+            tx3.scale(scx3,scy3)
+          }
+          if(mp.matchPos&&sp2.x!=null){
+            var dx3=mp.matchPos==="y"?0:((sp2.x||.5)-.5)*w+(mp.offsetX||0)*w
+            var dy3=mp.matchPos==="x"?0:((sp2.y||.5)-.5)*h+(mp.offsetY||0)*h
+            tx3.translate(dx3,dy3)
+          }
+          tx3.translate(-cx2,-cy2)
+          tx3.putImageData(cur,0,0)
+          tx3.restore()
+          ctx.clearRect(0,0,w,h);ctx.drawImage(tc3,0,0)
+        }
+      }
+    }
     if(efx.type==="transform"){applyTransform(ctx,efx.params,w,h)}
     else {
       var pre=ctx.getImageData(0,0,w,h), post=new Uint8ClampedArray(pre.data)
@@ -3489,8 +3520,8 @@ function ShapeP(props) {
       )}
       {(s==="rectangle") && (
         <div>
-          <Sl l="corner x" v={p.rx==null?1:p.rx} mn={0} mx={2} st={.01} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>
-          <Sl l="corner y" v={p.ry==null?1:p.ry} mn={0} mx={2} st={.01} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>
+          <Sl l="size x" v={p.rx==null?1:p.rx} mn={0.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>
+          <Sl l="size y" v={p.ry==null?1:p.ry} mn={0.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>
         </div>
       )}
       {!isPointGeo&&<Sl l="rotation" v={p.rot||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rot:v}))}}/>}
@@ -4306,6 +4337,34 @@ function EfxPrimary(props) {
       </PR>
     </div>
   )
+  if(efx.type==="match") return (
+    <div>
+      <NRef l="source" v={p.sourceId} nodes={props.nodes||[]} selfId={props.selfId} iC={props.iC}
+        mode="source" fn={function(v){up({sourceId:v})}}/>
+      <PR l="position">
+        {["off","x","y","xy"].map(function(opt){return <button key={opt}
+          className={(p.matchPos===false?"off":p.matchPos||"xy")===opt?"ac":"ghost"}
+          onClick={function(){up({matchPos:opt==="off"?false:opt})}}
+          style={{flex:1,fontSize:10,minHeight:32}}>{opt}</button>})}
+      </PR>
+      <PR l="scale">
+        {["off","x","y","xy"].map(function(opt){return <button key={opt}
+          className={(p.matchScale===false?"off":p.matchScale||"xy")===opt?"ac":"ghost"}
+          onClick={function(){up({matchScale:opt==="off"?false:opt})}}
+          style={{flex:1,fontSize:10,minHeight:32}}>{opt}</button>})}
+      </PR>
+      <PR l="rotation">
+        <button className={p.matchRot?"ac":"ghost"} style={{flex:1,fontSize:11,minHeight:32}}
+          onClick={function(){up({matchRot:!p.matchRot})}}>
+          {p.matchRot?"on":"off"}
+        </button>
+      </PR>
+      {(p.matchPos&&p.matchPos!==false)&&<Sl l="offset x" v={p.offsetX||0} mn={-1} mx={1} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({offsetX:v})}}/>}
+      {(p.matchPos&&p.matchPos!==false)&&<Sl l="offset y" v={p.offsetY||0} mn={-1} mx={1} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({offsetY:v})}}/>}
+      {(p.matchScale&&p.matchScale!==false)&&<Sl l="offset scale" v={p.offsetScale==null?1:p.offsetScale} mn={.1} mx={4} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up({offsetScale:v})}}/>}
+      {p.matchRot&&<Sl l="offset rot" v={p.offsetRot||0} mn={-180} mx={180} st={1} fmt={function(v){return Math.round(v)+"°"}} fn={function(v){up({offsetRot:v})}}/>}
+    </div>
+  )
   if(efx.type==="transform") return (
     <div>
       <Sl l="translate x" v={p.tx||0}  mn={-.5} mx={.5}   st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({tx:v})}}/>
@@ -4321,6 +4380,17 @@ function EfxPrimary(props) {
   if(efx.type==="solarise") return (
     <Sl l="threshold" v={p.threshold==null?.5:p.threshold} mn={0} mx={1} st={.01}
       fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({threshold:v})}}/>)
+  if(efx.type==="colour") return (
+    <div>
+      <Sl l="hue" v={p.hue||0} mn={-.5} mx={.5} st={.005} fmt={function(v){return Math.round(v*360)+"°"}} fn={function(v){up({hue:v})}}/>
+      <Sl l="saturation" v={p.saturation||0} mn={-1} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({saturation:v})}}/>
+      <Sl l="lightness" v={p.lightness||0} mn={-1} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({lightness:v})}}/>
+      <Sl l="contrast" v={p.contrast||0} mn={-1} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({contrast:v})}}/>
+      <Sl l="temperature" v={p.temperature||0} mn={-1} mx={1} st={.01} fmt={function(v){return (v>0?"+":"")+Math.round(v*100)}} fn={function(v){up({temperature:v})}}/>
+      <Sl l="tint" v={p.tint||0} mn={-1} mx={1} st={.01} fmt={function(v){return (v>0?"+":"")+Math.round(v*100)}} fn={function(v){up({tint:v})}}/>
+      <Sl l="vibrance" v={p.vibrance||0} mn={-1} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({vibrance:v})}}/>
+    </div>
+  )
   if(efx.type==="wave") return (
     <div>
       <RandRow enabled={p.rAmpEn} onToggle={function(){up({rAmpEn:!p.rAmpEn})}}
