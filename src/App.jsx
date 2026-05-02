@@ -517,10 +517,8 @@ function mkEfx(t) {
   if(t==="show-points")    params={style:"circle",color:"#00ccff",size:6,opacity:.8,showLabels:false,labelSize:9,labelColor:"#ffffff"}
   if(t==="point-map")      params={mappings:[]}
   if(t==="source-at-points")params={sources:[],distributionMode:"weighted",wrap:"clamp"}
-  if(t==="colour","colour-map") params={
-    stops:[{pos:0,color:"#000000",alpha:100},{pos:1,color:"#ffffff",alpha:100}],
-    reverse:false
-  }
+  if(t==="colour")      params={color:"#ff0000",opacity:1}
+  if(t==="colour-map")  params={stops:[{pos:0,color:"#000000",alpha:100},{pos:1,color:"#ffffff",alpha:100}],reverse:false}
   if(t==="dir-blur")     params={angle:0, distance:20, spread:"both"}
   if(t==="sharpen")      params={amount:100}
   if(t==="vignette")     params={strength:80, radius:.65, softness:.45, color:"#000000"}
@@ -776,6 +774,15 @@ function pxFn(d,w,h,t,p) {
       if(h2<60){r3=c3;g3=x3;b3=0}else if(h2<120){r3=x3;g3=c3;b3=0}else if(h2<180){r3=0;g3=c3;b3=x3}
       else if(h2<240){r3=0;g3=x3;b3=c3}else if(h2<300){r3=x3;g3=0;b3=c3}else{r3=c3;g3=0;b3=x3}
       d[i]=Math.round((r3+m3)*255);d[i+1]=Math.round((g3+m3)*255);d[i+2]=Math.round((b3+m3)*255)
+    }
+  } else if (t==="colour") {
+    var hx2=p.color||"#ff0000",cop2=p.opacity==null?1:p.opacity
+    var cr2=parseInt(hx2.slice(1,3),16)||0,cg2=parseInt(hx2.slice(3,5),16)||0,cb2=parseInt(hx2.slice(5,7),16)||0
+    for(i=0;i<d.length;i+=4){
+      var ia2=d[i+3]/255,fa2=cop2*ia2
+      d[i]  =Math.round(cr2*fa2+d[i]  *(1-fa2))
+      d[i+1]=Math.round(cg2*fa2+d[i+1]*(1-fa2))
+      d[i+2]=Math.round(cb2*fa2+d[i+2]*(1-fa2))
     }
   } else if (t==="exposure") {
     f=Math.pow(2,p.stops); for(i=0;i<d.length;i+=4){d[i]=Math.min(255,d[i]*f);d[i+1]=Math.min(255,d[i+1]*f);d[i+2]=Math.min(255,d[i+2]*f)}
@@ -4401,13 +4408,9 @@ function EfxPrimary(props) {
       fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({threshold:v})}}/>)
   if(efx.type==="colour") return (
     <div>
-      <Sl l="hue" v={p.hue||0} mn={-.5} mx={.5} st={.005} fmt={function(v){return Math.round(v*360)+"°"}} fn={function(v){up({hue:v})}}/>
-      <Sl l="saturation" v={p.saturation||0} mn={-1} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({saturation:v})}}/>
-      <Sl l="lightness" v={p.lightness||0} mn={-1} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({lightness:v})}}/>
-      <Sl l="contrast" v={p.contrast||0} mn={-1} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({contrast:v})}}/>
-      <Sl l="temperature" v={p.temperature||0} mn={-1} mx={1} st={.01} fmt={function(v){return (v>0?"+":"")+Math.round(v*100)}} fn={function(v){up({temperature:v})}}/>
-      <Sl l="tint" v={p.tint||0} mn={-1} mx={1} st={.01} fmt={function(v){return (v>0?"+":"")+Math.round(v*100)}} fn={function(v){up({tint:v})}}/>
-      <Sl l="vibrance" v={p.vibrance||0} mn={-1} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({vibrance:v})}}/>
+      <Co l="colour" v={p.color||"#ff0000"} fn={function(v){up({color:v})}}/>
+      <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({opacity:v})}}/>
     </div>
   )
   if(efx.type==="wave") return (
