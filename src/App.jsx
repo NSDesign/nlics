@@ -508,7 +508,7 @@ function mkEfx(t) {
   var params=cfg ? { [cfg[0]]:cfg[4] } : {}
   if(t==="curves")    params={inBlack:0,inWhite:255,outBlack:0,outWhite:255,sCurve:0}
   if(t==="match")      params={matchPos:"xy",matchScale:false,matchRot:false,sourceId:null,efxId:null,offsetX:0,offsetY:0,offsetScale:1,offsetRot:0}
-  if(t==="transform")  params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
+  if(t==="transform")  params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0,space:"local"}
   if(t==="wave")          params={amplitude:.05,freqX:3,freqY:3,phaseX:0,phaseY:0}
   if(t==="twirl")         params={angle:180,radius:.5,cx:.5,cy:.5}
   if(t==="bulge")         params={strength:.5,radius:.7,cx:.5,cy:.5}
@@ -1091,42 +1091,64 @@ function pxFn(d,w,h,t,p) {
 // Pixel-based affine transform — rasterises through a 2D canvas matrix.
 // Operates on the full canvas context, not ImageData, because it requires
 // a resampled draw-call rather than a pixel-by-pixel loop.
-// Matrix order: translate-to-centre → skew → rotate → scale → translate-back → user-offset
-function applyTransform(ctx, p, w, h) {
-  var tx   = (p.tx   || 0) * w         // translate x in pixels
-  var ty   = (p.ty   || 0) * h         // translate y in pixels
-  var rot  = (p.rot  || 0) * Math.PI / 180
-  var su   = p.su != null ? p.su : 1   // uniform scale
-  var sx   = (p.sx   != null ? p.sx : 1) * su
-  var sy   = (p.sy   != null ? p.sy : 1) * su
-  var skX  = (p.skX  || 0) * Math.PI / 180  // skew X radians
-  var skY  = (p.skY  || 0) * Math.PI / 180  // skew Y radians
-  var cx = w / 2, cy = h / 2
-
-  // Snap current pixels to a scratch canvas
-  var snap = document.createElement("canvas"); snap.width=w; snap.height=h
-  snap.getContext("2d").drawImage(ctx.canvas, 0, 0)
-
-  ctx.clearRect(0, 0, w, h)
-  ctx.save()
-
-  // Build composed matrix around image centre:
-  // 1) shift origin to centre of image
-  // 2) apply user translate offset
-  // 3) apply skew (shear)
-  // 4) rotate
-  // 5) scale
-  // 6) shift origin back
-  ctx.translate(cx + tx, cy + ty)
-  if (skX !== 0 || skY !== 0) {
-    ctx.transform(1, Math.tan(skY), Math.tan(skX), 1, 0, 0)
+// Apply a composed local+global transform stack to ctx canvas.
+// localOps/globalOps: arrays of {tx,ty,rot,su,sx,sy,skX,skY}
+// All locals applied first (pivot = shape centroid or canvas centre),
+// then all globals (pivot = canvas centre).
+// Uses an oversized 3× buffer to prevent clipping on large transforms.
+function applyTransformStack(ctx, localOps, globalOps, w, h) {
+  if(!localOps.length && !globalOps.length) return
+  var PAD = 1  // padding factor each side — total buffer = (1+2*PAD)× each dim
+  var bw = w*(1+2*PAD), bh = h*(1+2*PAD)
+  var buf = document.createElement("canvas"); buf.width=bw; buf.height=bh
+  var bx = buf.getContext("2d")
+  // Draw source into centre of buffer
+  bx.drawImage(ctx.canvas, w*PAD, h*PAD)
+  // Shape centroid from _shapeProps if available, else canvas centre
+  var sp = ctx.canvas._shapeProps
+  var localCx = sp ? sp.x*w + w*PAD : bw/2
+  var localCy = sp ? sp.y*h + h*PAD : bh/2
+  var globalCx = bw/2, globalCy = bh/2
+  bx.save()
+  // ── Local transforms (pivot = shape centroid) ──────────────────────────────
+  if(localOps.length){
+    bx.translate(localCx, localCy)
+    localOps.forEach(function(p){
+      var tx=(p.tx||0)*w, ty=(p.ty||0)*h
+      var rot=(p.rot||0)*Math.PI/180
+      var su=p.su!=null?p.su:1, sx=(p.sx!=null?p.sx:1)*su, sy=(p.sy!=null?p.sy:1)*su
+      var skX=(p.skX||0)*Math.PI/180, skY=(p.skY||0)*Math.PI/180
+      bx.translate(tx,ty)
+      if(skX||skY) bx.transform(1,Math.tan(skY),Math.tan(skX),1,0,0)
+      bx.rotate(rot)
+      bx.scale(sx,sy)
+    })
+    bx.translate(-localCx, -localCy)
   }
-  ctx.rotate(rot)
-  ctx.scale(sx, sy)
-  ctx.translate(-cx, -cy)
-
-  ctx.drawImage(snap, 0, 0)
-  ctx.restore()
+  // ── Global transforms (pivot = canvas centre mapped to buffer centre) ──────
+  if(globalOps.length){
+    bx.translate(globalCx, globalCy)
+    globalOps.forEach(function(p){
+      var tx=(p.tx||0)*w, ty=(p.ty||0)*h
+      var rot=(p.rot||0)*Math.PI/180
+      var su=p.su!=null?p.su:1, sx=(p.sx!=null?p.sx:1)*su, sy=(p.sy!=null?p.sy:1)*su
+      var skX=(p.skX||0)*Math.PI/180, skY=(p.skY||0)*Math.PI/180
+      bx.translate(tx,ty)
+      if(skX||skY) bx.transform(1,Math.tan(skY),Math.tan(skX),1,0,0)
+      bx.rotate(rot)
+      bx.scale(sx,sy)
+    })
+    bx.translate(-globalCx, -globalCy)
+  }
+  // ── Draw transformed buffer back (cropped to original canvas size) ─────────
+  ctx.clearRect(0,0,w,h)
+  ctx.drawImage(buf, w*PAD,h*PAD, w,h, 0,0, w,h)
+  bx.restore()
+}
+// Single-effect convenience wrapper used by match effect and pt-domain
+function applyTransform(ctx, p, w, h) {
+  var isLocal = !p.space || p.space==="local"
+  applyTransformStack(ctx, isLocal?[p]:[], isLocal?[]:[p], w, h)
 }
 
 /* ─── GENERATORS ─────────────────────────────────────────── */
@@ -2234,9 +2256,21 @@ function applyEfxToPoints(pts,efx,w,h) {
 function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
   if(!stack||!stack.length)return
   var spDeferred=[]  // show-points deferred to end (always on top)
+  // Collect transform ops — local first, then global, applied as a batch at end
+  var localTfxOps=[], globalTfxOps=[], hasTfx=false
+  stack.forEach(function(e){
+    if(e.enabled&&e.type==="transform"){
+      hasTfx=true
+      if(!e.params||!e.params.space||e.params.space==="local") localTfxOps.push(e.params||{})
+      else globalTfxOps.push(e.params||{})
+    }
+  })
+  // Apply batched transforms first so subsequent pixel effects operate on transformed canvas
+  if(hasTfx) applyTransformStack(ctx,localTfxOps,globalTfxOps,w,h)
   for(var ei=0;ei<stack.length;ei++){
     var efx=stack[ei]; if(!efx.enabled) continue
     if(efx.type==="show-points"){spDeferred.push(efx);continue}
+    if(efx.type==="transform"){continue}  // already applied above
     // Points-domain effects: transform _points, skip canvas
     if(efx.domain==="points"&&efx.type!=="show-points"&&efx.type!=="source-at-points"){
       if(ctx.canvas&&ctx.canvas._points){
@@ -2400,30 +2434,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
       ctx.putImageData(new ImageData(prePc,w,h),0,0)
       continue
     }
-    if (efx.type==="transform") {
-      // Transform is a full canvas operation — snap pre state, apply matrix, blend back via mask if present
-      if (efx.maskStack && efx.maskStack.length>0) {
-        // Masked transform: capture pre, apply transform, blend back using mask
-        var preSnap = ctx.getImageData(0,0,w,h)
-        applyTransform(ctx, efx.params, w, h)
-        var postData = ctx.getImageData(0,0,w,h)
-        var mv = compMasks(efx.maskStack, cmap, cache, iC, w, h, new Set(vis))
-        // applyBack writes the blend into preSnap.data — put preSnap (not postData)
-        applyBack(preSnap.data, postData.data, mv, efx.opacity, efx.blendMode||"normal", efx.blendChannels, efx.blendIf)
-        ctx.putImageData(preSnap, 0, 0)
-      } else {
-        // No mask — apply transform directly, respecting opacity
-        var preT = ctx.getImageData(0,0,w,h)
-        applyTransform(ctx, efx.params, w, h)
-        if (efx.opacity < 100) {
-          var postT = ctx.getImageData(0,0,w,h)
-          var blended = new Uint8ClampedArray(preT.data)
-          applyBack(blended, postT.data, null, efx.opacity, efx.blendMode||"normal", efx.blendChannels, efx.blendIf)
-          ctx.putImageData(new ImageData(blended,w,h), 0, 0)
-        }
-      }
-      continue
-    }
+    // transform effects already applied as batch above
 
     var pre=ctx.getImageData(0,0,w,h), post=new Uint8ClampedArray(pre.data)
     pxFn(post,w,h,efx.type,efx.params)
@@ -4422,6 +4433,12 @@ function EfxPrimary(props) {
   )}
   if(efx.type==="transform") return (
     <div>
+      <PR l="space">
+        {["local","global"].map(function(sp){return <button key={sp}
+          className={(p.space||"local")===sp?"ac":"ghost"}
+          onClick={function(){up(Object.assign({},p,{space:sp}))}}
+          style={{flex:1,fontSize:11,minHeight:32}}>{sp}</button>})}
+      </PR>
       <Sl l="translate x" v={p.tx||0}  mn={-.5} mx={.5}   st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({tx:v})}}/>
       <Sl l="translate y" v={p.ty||0}  mn={-.5} mx={.5}   st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({ty:v})}}/>
       <Sl l="rotation"    v={p.rot||0} mn={-180} mx={180}  st={1}    fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({rot:v})}}/>
