@@ -485,6 +485,7 @@ function hasCreatorDefault(type) {
 
 var _uid = 100
 function uid() { return "n" + (_uid++) }
+var _renderNodes = []  // set at start of each renderPipeline call
 // Restore _uid from saved project — avoids ID collisions on load
 // If _uid is stored, use it (fast). Otherwise scan all node IDs (legacy files).
 function restoreUid(savedUid, nodes) {
@@ -2599,51 +2600,28 @@ function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
     var efx=stack[ei]; if(!efx.enabled)continue
     if(efx.type==="match"){
       var mp=efx.params||{}
-      if(mp.efxId&&mp.sourceId){
-        // Find the specific transform effect across all stacks of the source node
-        var srcNode=cmap&&[...cmap.values?cmap.values():[]].find(function(n){return n&&n.id===mp.sourceId})
-        // Walk all nodes to find the efxId
+      if(mp.efxId){
+        // Find transform effect params by efxId across all nodes
         var tpFound=null
-        function findTfx(stack){(stack||[]).forEach(function(e){if(e.id===mp.efxId)tpFound=e.params})}
-        ;(stack||[]).forEach&&void 0  // noop
-        // Search all nodes
-        if(cmap) {
-          // cmap is node id→canvas, not node array — use vis context
-          // Rebuild from nodes array if available (passed via closure)
-        }
-        // Alternative: walk efx.params.efxId through the nodes closure
-        // nodes is available in the outer scope of renderPipeline
-        var allNodes2=cmap?null:null  // cmap doesn't hold node defs
-        // Use the nodes array from renderPipeline closure
-        ;(nodesList||[]).forEach(function(n){
-          if(n.id===mp.sourceId||true){  // search all nodes for efxId
-            findTfx(n.outEfx);findTfx(n.effectStack)
-            if(n.inputA)findTfx(n.inputA.effectStack)
-            if(n.inputB)findTfx(n.inputB.effectStack)
-            ;(n.layers||[]).forEach(function(l){findTfx(l.effectStack)})
-          }
+        function findTfx2(stk){(stk||[]).forEach(function(e){if(e.id===mp.efxId)tpFound=e.params})}
+        _renderNodes.forEach(function(n){
+          findTfx2(n.outEfx); findTfx2(n.effectStack)
+          if(n.inputA) findTfx2(n.inputA.effectStack)
+          if(n.inputB) findTfx2(n.inputB.effectStack)
+          ;(n.layers||[]).forEach(function(l){findTfx2(l.effectStack)})
         })
         if(tpFound){
-          var tp=tpFound, cx2=w/2, cy2=h/2
-          var cur=ctx.getImageData(0,0,w,h)
-          var tc3=document.createElement("canvas");tc3.width=w;tc3.height=h
-          var tx3=tc3.getContext("2d")
-          tx3.save(); tx3.translate(cx2,cy2)
-          if(mp.matchRot&&tp.rot){tx3.rotate((tp.rot+(mp.offsetRot||0))*Math.PI/180)}
-          if(mp.matchScale!==false&&mp.matchScale&&(tp.su||tp.sx||tp.sy)){
-            var su3=(tp.su||1)*(mp.offsetScale==null?1:mp.offsetScale)
-            var scx3=mp.matchScale==="x"||mp.matchScale==="xy"?(tp.sx||1)*su3:1
-            var scy3=mp.matchScale==="y"||mp.matchScale==="xy"?(tp.sy||1)*su3:1
-            tx3.scale(scx3,scy3)
-          }
-          if(mp.matchPos!==false&&mp.matchPos&&(tp.tx!=null||tp.ty!=null)){
-            var dx3=mp.matchPos==="y"?0:((tp.tx||0)/w)+(mp.offsetX||0)*w
-            var dy3=mp.matchPos==="x"?0:((tp.ty||0)/h)+(mp.offsetY||0)*h
-            tx3.translate(dx3*w,dy3*h)
-          }
-          tx3.translate(-cx2,-cy2)
-          tx3.putImageData(cur,0,0); tx3.restore()
-          ctx.clearRect(0,0,w,h); ctx.drawImage(tc3,0,0)
+          // Apply the found transform (plus offsets) to current canvas
+          // Use same coordinate system as applyTransform: tx/ty are fractions of w/h
+          var tp=tpFound
+          var matchTx=mp.matchPos==="off"||mp.matchPos===false?0:(mp.matchPos==="y"?0:(tp.tx||0))+(mp.offsetX||0)
+          var matchTy=mp.matchPos==="off"||mp.matchPos===false?0:(mp.matchPos==="x"?0:(tp.ty||0))+(mp.offsetY||0)
+          var matchRot=mp.matchRot?((tp.rot||0)+(mp.offsetRot||0)):0
+          var matchSu=(tp.su!=null?tp.su:1)*(mp.offsetScale==null?1:mp.offsetScale)
+          var matchSx=mp.matchScale==="off"||mp.matchScale===false?1:(mp.matchScale==="y"?1:(tp.sx!=null?tp.sx:1)*matchSu)
+          var matchSy=mp.matchScale==="off"||mp.matchScale===false?1:(mp.matchScale==="x"?1:(tp.sy!=null?tp.sy:1)*matchSu)
+          // Delegate to applyTransform with synthesised params
+          applyTransform(ctx,{tx:matchTx,ty:matchTy,rot:matchRot,su:1,sx:matchSx,sy:matchSy,skX:0,skY:0},w,h)
         }
       }
     }
@@ -3001,6 +2979,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   cache.set(id,cv2);vis.delete(id);return cv2
 }
 function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
+  _renderNodes=nodes||[]
   if(!canvas)return
   if(!dispId||!nodes||nodes.length===0){
     var clrCtx=canvas.getContext("2d")
