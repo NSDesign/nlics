@@ -758,6 +758,25 @@ function pxFn(d,w,h,t,p) {
       ns=Math.max(0,Math.min(1,ns))
       rgb=shr(hsl[0],ns,hsl[2]);d[i]=rgb[0];d[i+1]=rgb[1];d[i+2]=rgb[2]
     }
+  } else if (t==="colour") {
+    var hueShift=p.hue||0,sat=p.saturation||0,lit=p.lightness||0
+    var con=p.contrast||0,temp=p.temperature||0,tnt=p.tint||0,vib=p.vibrance||0
+    for(i=0;i<d.length;i+=4){
+      var rr=d[i]/255,gg=d[i+1]/255,bb=d[i+2]/255
+      rr=Math.max(0,Math.min(1,rr+temp*.15));bb=Math.max(0,Math.min(1,bb-temp*.15));gg=Math.max(0,Math.min(1,gg+tnt*.1))
+      var mx=Math.max(rr,gg,bb),mn2=Math.min(rr,gg,bb),d2=mx-mn2
+      var l2=(mx+mn2)/2,s2=d2===0?0:(d2/(1-Math.abs(2*l2-1)))
+      var h2=d2===0?0:mx===rr?(((gg-bb)/d2)%6)*60:mx===gg?((bb-rr)/d2+2)*60:((rr-gg)/d2+4)*60
+      if(h2<0)h2+=360
+      s2=Math.max(0,Math.min(1,s2+(1-s2)*vib*.5))
+      h2=(h2+hueShift*360+360)%360;s2=Math.max(0,Math.min(1,s2+sat));l2=Math.max(0,Math.min(1,l2+lit*.5))
+      l2=Math.max(0,Math.min(1,(l2-.5)*(1+con)+.5))
+      var c3=(1-Math.abs(2*l2-1))*s2,x3=c3*(1-Math.abs((h2/60)%2-1)),m3=l2-c3/2
+      var r3,g3,b3
+      if(h2<60){r3=c3;g3=x3;b3=0}else if(h2<120){r3=x3;g3=c3;b3=0}else if(h2<180){r3=0;g3=c3;b3=x3}
+      else if(h2<240){r3=0;g3=x3;b3=c3}else if(h2<300){r3=x3;g3=0;b3=c3}else{r3=c3;g3=0;b3=x3}
+      d[i]=Math.round((r3+m3)*255);d[i+1]=Math.round((g3+m3)*255);d[i+2]=Math.round((b3+m3)*255)
+    }
   } else if (t==="exposure") {
     f=Math.pow(2,p.stops); for(i=0;i<d.length;i+=4){d[i]=Math.min(255,d[i]*f);d[i+1]=Math.min(255,d[i+1]*f);d[i+2]=Math.min(255,d[i+2]*f)}
   } else if (t==="levels") {
