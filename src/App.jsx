@@ -2909,8 +2909,8 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     // Running matte — starts fully transparent (no layers = nothing visible)
     var runMatte=new Float32Array(w*h)
     var layers=n.layers||[]
-    // Iterate bottom-to-top (last in array = top layer)
-    for(var li=layers.length-1;li>=0;li--){
+    // Iterate bottom-first: index 0 = bottom layer, last = top layer
+    for(var li=0;li<layers.length;li++){
       var lyr=layers[li]
       if(lyr.enabled===false) continue
       if(!lyr.refId||vis.has(lyr.refId)) continue
