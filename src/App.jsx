@@ -506,7 +506,7 @@ function mkEfx(t) {
   var cfg=ECFG[t]
   var params=cfg ? { [cfg[0]]:cfg[4] } : {}
   if(t==="curves")    params={inBlack:0,inWhite:255,outBlack:0,outWhite:255,sCurve:0}
-  if(t==="match")      params={matchPos:"xy",matchScale:false,matchRot:false,sourceId:null,offsetX:0,offsetY:0,offsetScale:1,offsetRot:0}
+  if(t==="match")      params={matchPos:"xy",matchScale:false,matchRot:false,sourceId:null,efxId:null,offsetX:0,offsetY:0,offsetScale:1,offsetRot:0}
   if(t==="transform")  params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0}
   if(t==="wave")          params={amplitude:.05,freqX:3,freqY:3,phaseX:0,phaseY:0}
   if(t==="twirl")         params={angle:180,radius:.5,cx:.5,cy:.5}
@@ -2230,7 +2230,7 @@ function applyEfxToPoints(pts,efx,w,h) {
   return out
 }
 
-function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis) {
+function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
   if(!stack||!stack.length)return
   var spDeferred=[]  // show-points deferred to end (always on top)
   for(var ei=0;ei<stack.length;ei++){
@@ -2490,7 +2490,7 @@ function resolveSlot(slot,cmap,cache,iC,w,h,vis) {
   var cv=clCv(base,w,h),ctx=cv.getContext("2d")
   if(slot.effectStack&&slot.effectStack.length>0){
     var hadPtEfx=slot.effectStack.some(function(e){return e.enabled&&e.domain==="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
-    applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis))
+    applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis),nodes)
     if(hadPtEfx&&cv._shapeProps&&cv._points&&cv._points.length>0){
       ctx.clearRect(0,0,w,h); gShape(ctx,cv._shapeProps,w,h)
     }
@@ -2599,31 +2599,51 @@ function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
     var efx=stack[ei]; if(!efx.enabled)continue
     if(efx.type==="match"){
       var mp=efx.params||{}
-      if(mp.sourceId&&cmap){
-        var srcCv2=compAny(mp.sourceId,cmap,new Map(),iC,w,h,new Set(vis))
-        if(srcCv2&&srcCv2._shapeProps){
-          var sp2=srcCv2._shapeProps, cx2=w/2, cy2=h/2
+      if(mp.efxId&&mp.sourceId){
+        // Find the specific transform effect across all stacks of the source node
+        var srcNode=cmap&&[...cmap.values?cmap.values():[]].find(function(n){return n&&n.id===mp.sourceId})
+        // Walk all nodes to find the efxId
+        var tpFound=null
+        function findTfx(stack){(stack||[]).forEach(function(e){if(e.id===mp.efxId)tpFound=e.params})}
+        ;(stack||[]).forEach&&void 0  // noop
+        // Search all nodes
+        if(cmap) {
+          // cmap is node id→canvas, not node array — use vis context
+          // Rebuild from nodes array if available (passed via closure)
+        }
+        // Alternative: walk efx.params.efxId through the nodes closure
+        // nodes is available in the outer scope of renderPipeline
+        var allNodes2=cmap?null:null  // cmap doesn't hold node defs
+        // Use the nodes array from renderPipeline closure
+        ;(nodesList||[]).forEach(function(n){
+          if(n.id===mp.sourceId||true){  // search all nodes for efxId
+            findTfx(n.outEfx);findTfx(n.effectStack)
+            if(n.inputA)findTfx(n.inputA.effectStack)
+            if(n.inputB)findTfx(n.inputB.effectStack)
+            ;(n.layers||[]).forEach(function(l){findTfx(l.effectStack)})
+          }
+        })
+        if(tpFound){
+          var tp=tpFound, cx2=w/2, cy2=h/2
           var cur=ctx.getImageData(0,0,w,h)
           var tc3=document.createElement("canvas");tc3.width=w;tc3.height=h
           var tx3=tc3.getContext("2d")
-          tx3.save()
-          tx3.translate(cx2,cy2)
-          if(mp.matchRot&&sp2.rot){tx3.rotate((sp2.rot+(mp.offsetRot||0))*Math.PI/180)}
-          if(mp.matchScale&&sp2.sz){
-            var sc3=sp2.sz*(mp.offsetScale==null?1:mp.offsetScale)
-            var scx3=mp.matchScale==="x"||mp.matchScale==="xy"?sc3:1
-            var scy3=mp.matchScale==="y"||mp.matchScale==="xy"?sc3:1
+          tx3.save(); tx3.translate(cx2,cy2)
+          if(mp.matchRot&&tp.rot){tx3.rotate((tp.rot+(mp.offsetRot||0))*Math.PI/180)}
+          if(mp.matchScale!==false&&mp.matchScale&&(tp.su||tp.sx||tp.sy)){
+            var su3=(tp.su||1)*(mp.offsetScale==null?1:mp.offsetScale)
+            var scx3=mp.matchScale==="x"||mp.matchScale==="xy"?(tp.sx||1)*su3:1
+            var scy3=mp.matchScale==="y"||mp.matchScale==="xy"?(tp.sy||1)*su3:1
             tx3.scale(scx3,scy3)
           }
-          if(mp.matchPos&&sp2.x!=null){
-            var dx3=mp.matchPos==="y"?0:((sp2.x||.5)-.5)*w+(mp.offsetX||0)*w
-            var dy3=mp.matchPos==="x"?0:((sp2.y||.5)-.5)*h+(mp.offsetY||0)*h
-            tx3.translate(dx3,dy3)
+          if(mp.matchPos!==false&&mp.matchPos&&(tp.tx!=null||tp.ty!=null)){
+            var dx3=mp.matchPos==="y"?0:((tp.tx||0)/w)+(mp.offsetX||0)*w
+            var dy3=mp.matchPos==="x"?0:((tp.ty||0)/h)+(mp.offsetY||0)*h
+            tx3.translate(dx3*w,dy3*h)
           }
           tx3.translate(-cx2,-cy2)
-          tx3.putImageData(cur,0,0)
-          tx3.restore()
-          ctx.clearRect(0,0,w,h);ctx.drawImage(tc3,0,0)
+          tx3.putImageData(cur,0,0); tx3.restore()
+          ctx.clearRect(0,0,w,h); ctx.drawImage(tc3,0,0)
         }
       }
     }
@@ -2789,7 +2809,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       gShape(ctx,n.props,w,h)
       // Apply pixel-domain effects
       var pixEfxAll=shapeEfxAll.filter(function(e){return e.enabled&&e.domain!=="points"})
-      if(pixEfxAll.length>0) applyEfxStk(ctx,pixEfxAll,cmap,cache,iC,w,h,new Set(vis))
+      if(pixEfxAll.length>0) applyEfxStk(ctx,pixEfxAll,cmap,cache,iC,w,h,new Set(vis),nodes)
     }
     else if(n.type==="gradient")gGrad(ctx,n.props,w,h)
     else if(n.type==="noise")gNoise(ctx,n.props,w,h)
@@ -2816,9 +2836,9 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       ctx.clearRect(0,0,w,h); gShape(ctx,synProps,w,h)
       if(geoEfx.length>0){
         var gpx=geoEfx.filter(function(e){return e.enabled&&e.domain!=="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
-        if(gpx.length) applyEfxStk(ctx,gpx,cmap,cache,iC,w,h,new Set(vis))
+        if(gpx.length) applyEfxStk(ctx,gpx,cmap,cache,iC,w,h,new Set(vis),nodes)
         var gsat=geoEfx.filter(function(e){return e.enabled&&(e.type==="source-at-points"||e.type==="show-points")})
-        if(gsat.length) applyEfxStk(ctx,gsat,cmap,cache,iC,w,h,new Set(vis))
+        if(gsat.length) applyEfxStk(ctx,gsat,cmap,cache,iC,w,h,new Set(vis),nodes)
       }
     }
     else if(n.type==="image")gImg(ctx,n.props,iC,w,h)
@@ -4364,34 +4384,63 @@ function EfxPrimary(props) {
       </PR>
     </div>
   )
-  if(efx.type==="match") return (
+  if(efx.type==="match") {
+    // Build flat list of all transform effects across all nodes and their stacks
+    var allTfx=[]
+    function scanEfxForTfx(stack,nodeLabel,nodeId) {
+      (stack||[]).forEach(function(e){
+        if(e.type==="transform") allTfx.push({nodeId:nodeId,efxId:e.id,label:nodeLabel+(e.name?" · "+e.name:" · transform"),params:e.params})
+      })
+    }
+    ;(props.nodes||[]).forEach(function(n){
+      var nl=n.name||n.id
+      scanEfxForTfx(n.outEfx,nl,n.id)
+      scanEfxForTfx(n.effectStack,nl,n.id)
+      if(n.inputA) scanEfxForTfx(n.inputA.effectStack,nl+" · A",n.id)
+      if(n.inputB) scanEfxForTfx(n.inputB.effectStack,nl+" · B",n.id)
+      ;(n.layers||[]).forEach(function(l,li){scanEfxForTfx(l.effectStack,nl+" · layer "+(li+1),n.id)})
+    })
+    var selTfx=allTfx.find(function(t){return t.efxId===p.efxId})
+    return (
     <div>
-      <NRef l="source" v={p.sourceId} nodes={props.nodes||[]} selfId={props.selfId} iC={props.iC}
-        mode="source" fn={function(v){up({sourceId:v})}}/>
-      <PR l="position">
-        {["off","x","y","xy"].map(function(opt){return <button key={opt}
-          className={(p.matchPos===false?"off":p.matchPos||"xy")===opt?"ac":"ghost"}
-          onClick={function(){up({matchPos:opt==="off"?false:opt})}}
-          style={{flex:1,fontSize:10,minHeight:32}}>{opt}</button>})}
-      </PR>
-      <PR l="scale">
-        {["off","x","y","xy"].map(function(opt){return <button key={opt}
-          className={(p.matchScale===false?"off":p.matchScale||"xy")===opt?"ac":"ghost"}
-          onClick={function(){up({matchScale:opt==="off"?false:opt})}}
-          style={{flex:1,fontSize:10,minHeight:32}}>{opt}</button>})}
-      </PR>
-      <PR l="rotation">
-        <button className={p.matchRot?"ac":"ghost"} style={{flex:1,fontSize:11,minHeight:32}}
-          onClick={function(){up({matchRot:!p.matchRot})}}>
-          {p.matchRot?"on":"off"}
-        </button>
-      </PR>
-      {(p.matchPos&&p.matchPos!==false)&&<Sl l="offset x" v={p.offsetX||0} mn={-1} mx={1} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({offsetX:v})}}/>}
-      {(p.matchPos&&p.matchPos!==false)&&<Sl l="offset y" v={p.offsetY||0} mn={-1} mx={1} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({offsetY:v})}}/>}
-      {(p.matchScale&&p.matchScale!==false)&&<Sl l="offset scale" v={p.offsetScale==null?1:p.offsetScale} mn={.1} mx={4} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up({offsetScale:v})}}/>}
-      {p.matchRot&&<Sl l="offset rot" v={p.offsetRot||0} mn={-180} mx={180} st={1} fmt={function(v){return Math.round(v)+"°"}} fn={function(v){up({offsetRot:v})}}/>}
+      <div style={{padding:"6px 0 4px",fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:".05em"}}>TRANSFORM SOURCE</div>
+      {allTfx.length===0&&<div style={{fontSize:10,color:"var(--mu)",padding:"6px 0"}}>No transform effects found in project</div>}
+      {allTfx.map(function(t){
+        var sel=t.efxId===p.efxId
+        return <div key={t.efxId} onClick={function(){up({sourceId:t.nodeId,efxId:t.efxId})}}
+          style={{padding:"7px 10px",marginBottom:3,borderRadius:5,cursor:"pointer",fontSize:11,
+            background:sel?"rgba(36,204,168,.12)":"var(--el)",
+            border:"1px solid "+(sel?"var(--ac)":"var(--bd)"),
+            color:sel?"var(--ac)":"var(--tx)"}}>
+          {t.label}
+        </div>
+      })}
+      {selTfx&&<div style={{marginTop:8}}>
+        <PR l="position">
+          {["off","x","y","xy"].map(function(opt){return <button key={opt}
+            className={(p.matchPos===false?"off":p.matchPos||"xy")===opt?"ac":"ghost"}
+            onClick={function(){up({matchPos:opt==="off"?false:opt})}}
+            style={{flex:1,fontSize:10,minHeight:32}}>{opt}</button>})}
+        </PR>
+        <PR l="scale">
+          {["off","x","y","xy"].map(function(opt){return <button key={opt}
+            className={(p.matchScale===false?"off":p.matchScale||"xy")===opt?"ac":"ghost"}
+            onClick={function(){up({matchScale:opt==="off"?false:opt})}}
+            style={{flex:1,fontSize:10,minHeight:32}}>{opt}</button>})}
+        </PR>
+        <PR l="rotation">
+          <button className={p.matchRot?"ac":"ghost"} style={{flex:1,fontSize:11,minHeight:32}}
+            onClick={function(){up({matchRot:!p.matchRot})}}>
+            {p.matchRot?"on":"off"}
+          </button>
+        </PR>
+        {(p.matchPos&&p.matchPos!==false)&&<Sl l="offset x" v={p.offsetX||0} mn={-1} mx={1} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({offsetX:v})}}/>}
+        {(p.matchPos&&p.matchPos!==false)&&<Sl l="offset y" v={p.offsetY||0} mn={-1} mx={1} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({offsetY:v})}}/>}
+        {(p.matchScale&&p.matchScale!==false)&&<Sl l="offset scale" v={p.offsetScale==null?1:p.offsetScale} mn={.1} mx={4} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up({offsetScale:v})}}/>}
+        {p.matchRot&&<Sl l="offset rot" v={p.offsetRot||0} mn={-180} mx={180} st={1} fmt={function(v){return Math.round(v)+"°"}} fn={function(v){up({offsetRot:v})}}/>}
+      </div>}
     </div>
-  )
+  )}
   if(efx.type==="transform") return (
     <div>
       <Sl l="translate x" v={p.tx||0}  mn={-.5} mx={.5}   st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up({tx:v})}}/>
