@@ -6849,7 +6849,12 @@ function LayerCompProps(props) {
   function moveLayer(idx, dir){
     var ni=Math.max(0,Math.min(layers.length-1,idx+dir))
     if(ni===idx) return
-    var a=layers.slice(); var tmp=a[idx]; a[idx]=a[ni]; a[ni]=tmp
+    // Ensure both layers have stored names before swapping
+    // so the name travels with the layer rather than staying positional
+    var a=layers.map(function(l,i){
+      return (!l.name||!l.name.trim())?Object.assign({},l,{name:"layer "+(layers.length-i)}):l
+    })
+    var tmp=a[idx]; a[idx]=a[ni]; a[ni]=tmp
     onChange(Object.assign({},node,{layers:a}))
   }
   var outTabs=[
@@ -7847,9 +7852,12 @@ function App() {
       <div style={{width:"100%",background:"var(--pn)",borderRadius:"18px 18px 0 0",maxHeight:"70vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",padding:"14px 16px 8px",borderBottom:"1px solid var(--bd)"}}>
           <span style={{flex:1,fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13}}>Load Project</span>
-          <button className="icon-btn" onClick={function(){setLoadDialog(false)}} style={{fontSize:20,color:"var(--mu)"}}>×</button>
+          <button className="icon-btn" onClick={function(){setLoadDialog(false);setArmedDelIdx(null)}} style={{fontSize:20,color:"var(--mu)"}}>×</button>
         </div>
-        <div style={{overflowY:"auto",flex:1,padding:"8px 0"}}>
+        <div style={{overflowY:"auto",flex:1,padding:"8px 0"}} onClick={function(e){
+          // Reset armed delete when clicking anywhere in dialog that isn't a × button
+          if(e.target.textContent!=="confirm ×"&&e.target.textContent!=="×") setArmedDelIdx(null)
+        }}>
           {/* Blank project — always available as default option */}
           <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace"}}>Blank</div>
           {(function(){
