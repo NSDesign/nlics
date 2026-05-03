@@ -4290,6 +4290,10 @@ function ColourMapEditor(props) {
 
 function EfxPrimary(props) {
   var efx=props.efx, p=efx.params
+  // Resolve source geometry shape type for attribute filtering
+  var srcNode=(props.nodes||[]).find(function(n){return n.id===props.sourceId})
+  var srcShape=srcNode?(srcNode.type==="shape"?srcNode.props&&srcNode.props.shapeType:srcNode.type):null
+  var ptAttrs=getPointAttrs(srcShape||"")
   function up(np){props.onChange(Object.assign({},efx,{params:Object.assign({},p,np)}))}
   if(efx.type==="brightness") return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
   if(efx.type==="contrast")   return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
@@ -4673,15 +4677,7 @@ function EfxPrimary(props) {
         </button>
       </PR>
       {p.showLabels&&<div>
-        <Se l="attribute" v={p.labelAttr||"pointIndex"}
-          opts={[
-            "pointIndex","pointCount","x","y",
-            "rowNorm","colNorm","row","col",
-            "ringIndex","angleNorm","radiusNorm",
-            "spiralT","fibIndex","scatterIndex",
-            "scale","rotation","opacity","sourceIndex"
-          ]}
-          fn={function(v){up({labelAttr:v})}}/>
+        <Se l="attribute" v={p.labelAttr||"pointIndex"} opts={ptAttrs} fn={function(v){up({labelAttr:v})}}/>
         <Sl l="label size" v={p.labelSize||9} mn={6} mx={20} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>
         <Co l="label col" v={p.labelColor||"#ffffff"} fn={function(v){up({labelColor:v})}}/>
       </div>}
@@ -4704,13 +4700,7 @@ function EfxPrimary(props) {
                 <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>mapping {mi+1}</span>
                 <button onClick={function(){delMapping(mi)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
               </div>
-              <Se l="input" v={m.inputAttr||"pointIndex"} opts={[
-                "pointIndex","pointCount","x","y",
-                "rowNorm","colNorm","row","col","rowCount","colCount",
-                "ringIndex","ringCount","angleNorm","radiusNorm",
-                "spiralT","windingNumber",
-                "fibIndex","scatterIndex","perimeterT"
-              ]} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
+              <Se l="input" v={m.inputAttr||"pointIndex"} opts={ptAttrs.filter(function(a){return ["scale","rotation","opacity","sourceIndex"].indexOf(a)<0})} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
               <Se l="output" v={m.outputAttr||"scale"} opts={["scale","rotation","opacity","x","y","sourceIndex"]} fn={function(v){updMapping(mi,{outputAttr:v,min:null,max:null})}}/>
               <Se l="mode" v={m.mode||"linear"} opts={["linear","invert","log","exp","random"]} fn={function(v){updMapping(mi,{mode:v})}}/>
               {(function(){
@@ -5702,6 +5692,7 @@ function SlotPanel(props) {
         <div style={{padding:10}}>
           <EfxStack key={(slot.effectStack||[]).map(function(e){return e.id}).join(",")}
             stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
+            sourceId={slot.refId}
             basePath={{slotKey:(props.slotKey||"")+".effectStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
@@ -6671,6 +6662,7 @@ function LayerCard(props) {
             key={(lyr.effectStack||[]).map(function(e){return e.id}).join(",")}
             stack={lyr.effectStack||[]} nodes={props.nodes} selfId={props.selfId}
             navPush={props.navPush} iC={props.iC}
+            sourceId={lyr.refId}
             basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
