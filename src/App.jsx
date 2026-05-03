@@ -2228,22 +2228,50 @@ function applyEfxToPoints(pts,efx,w,h) {
     }
   } else if(t==="point-map"){
     var mappings=p.mappings||[]
-    out.forEach(function(pt){
-      mappings.forEach(function(m){
+    var n=out.length
+    // FUTURE: curve remap — after linear/log/exp/normalize mode produces 0-1,
+    // a bezier curve editor could remap that 0-1 range non-linearly before
+    // applying to output. Store as m.curve=[{x,y},{x,y}...] control points.
+    // applyBezierRemap(tV, m.curve) would sample the curve at tV.
+    // Per-mapping flags: m.curveEnabled, m.curve (array of {x,y} 0-1 points).
+    mappings.forEach(function(m){
+      // "normalize": min-max across all points for this attribute (two-pass)
+      var normRangeMin=0, normRangeMax=1
+      if(m.mode==="normalize"){
+        var allVals=out.map(function(pt){return pt[m.inputAttr]||0})
+        normRangeMin=Math.min.apply(null,allVals)
+        normRangeMax=Math.max.apply(null,allVals)
+      }
+      out.forEach(function(pt){
         var inV=pt[m.inputAttr]
-        if(inV==null||inV===undefined)return  // 0 is valid, only skip null/undefined
+        if(inV==null)return  // 0 is valid, only skip null/undefined
         var outMin=m.min==null?0:m.min, outMax=m.max==null?1:m.max
-        var normV=Math.max(0,Math.min(1,inV))  // clamp to 0-1 for mapping
+        // Normalise inV to 0-1 against its natural range
+        var normV
+        if(m.mode==="normalize"){
+          var rng=normRangeMax-normRangeMin
+          normV=rng>0?(inV-normRangeMin)/rng:0.5  // min-max across all points
+        } else {
+          // For index-type attrs, normalise against pointCount
+          var ptCount=pt.pointCount||n
+          if(m.inputAttr==="pointIndex")        normV=ptCount>1?inV/(ptCount-1):0
+          else if(m.inputAttr==="row")           normV=pt.rowCount>1?inV/(pt.rowCount-1):0
+          else if(m.inputAttr==="col")           normV=pt.colCount>1?inV/(pt.colCount-1):0
+          else if(m.inputAttr==="ringIndex")     normV=pt.ringCount>1?inV/(pt.ringCount-1):0
+          else if(m.inputAttr==="fibIndex"||m.inputAttr==="scatterIndex") normV=ptCount>1?inV/(ptCount-1):0
+          else normV=Math.max(0,Math.min(1,inV))  // already 0-1 (rowNorm, colNorm, x, y, spiralT etc.)
+        }
+        normV=Math.max(0,Math.min(1,normV))
         var tV
-        if(m.mode==="invert")  tV=1-normV
-        else if(m.mode==="log") tV=Math.log(1+normV*9)/Math.log(10)  // log10(1..10) → 0..1
-        else if(m.mode==="exp") tV=(Math.pow(10,normV)-1)/9            // inverse log
+        if(m.mode==="invert")    tV=1-normV
+        else if(m.mode==="log")  tV=normV>0?Math.log(1+normV*9)/Math.log(10):0
+        else if(m.mode==="exp")  tV=(Math.pow(10,normV)-1)/9
         else if(m.mode==="random") tV=seededRand(Math.round(normV*9999+pt.pointIndex*7))()
-        else tV=normV  // linear
+        else tV=normV  // linear + normalize both produce normV directly
         var mapped=tV*(outMax-outMin)+outMin
         var curV=pt[m.outputAttr]==null?1:pt[m.outputAttr]
         var cm=m.combine||"replace"
-        if(cm==="replace")      pt[m.outputAttr]=mapped
+        if(cm==="replace")       pt[m.outputAttr]=mapped
         else if(cm==="multiply") pt[m.outputAttr]=curV*mapped
         else if(cm==="add")      pt[m.outputAttr]=curV+mapped
         else if(cm==="subtract") pt[m.outputAttr]=curV-mapped
@@ -4695,9 +4723,9 @@ function EfxPrimary(props) {
         </button>
       </PR>
       {p.showLabels&&<div>
-        (ptAttrs.length?
-          <Se l="attribute" v={p.labelAttr||ptAttrs[0]} opts={ptAttrs} fn={function(v){up({labelAttr:v})}}/>
-          :<div style={{fontSize:10,color:"var(--mu)",padding:"4px 0"}}>Set a geometry source on the slot to use labels</div>)
+        {ptAttrs.length
+          ?<Se l="attribute" v={p.labelAttr||ptAttrs[0]} opts={ptAttrs} fn={function(v){up({labelAttr:v})}}/>
+          :<div style={{fontSize:10,color:"var(--mu)",padding:"4px 0"}}>Set a geometry source on the slot to use labels</div>}
         <Sl l="label size" v={p.labelSize||9} mn={6} mx={20} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>
         <Co l="label col" v={p.labelColor||"#ffffff"} fn={function(v){up({labelColor:v})}}/>
       </div>}
@@ -4722,7 +4750,7 @@ function EfxPrimary(props) {
               </div>
               <Se l="input" v={m.inputAttr||"pointIndex"} opts={ptAttrs.filter(function(a){return ["scale","rotation","opacity","sourceIndex"].indexOf(a)<0})} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
               <Se l="output" v={m.outputAttr||"scale"} opts={["scale","rotation","opacity","x","y","sourceIndex"]} fn={function(v){updMapping(mi,{outputAttr:v,min:null,max:null})}}/>
-              <Se l="mode" v={m.mode||"linear"} opts={["linear","invert","log","exp","random"]} fn={function(v){updMapping(mi,{mode:v})}}/>
+              <Se l="mode" v={m.mode||"linear"} opts={["linear","normalize","invert","log","exp","random"]} fn={function(v){updMapping(mi,{mode:v})}}/>
               {(function(){
                 var oa=m.outputAttr||"scale"
                 var defMin=oa==="opacity"?0:oa==="rotation"?-180:oa==="scale"?0:oa==="sourceIndex"?0:-1
