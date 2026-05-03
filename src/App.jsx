@@ -2229,11 +2229,6 @@ function applyEfxToPoints(pts,efx,w,h) {
   } else if(t==="point-map"){
     var mappings=p.mappings||[]
     var n=out.length
-    // FUTURE: curve remap — after linear/log/exp/normalize mode produces 0-1,
-    // a bezier curve editor could remap that 0-1 range non-linearly before
-    // applying to output. Store as m.curve=[{x,y},{x,y}...] control points.
-    // applyBezierRemap(tV, m.curve) would sample the curve at tV.
-    // Per-mapping flags: m.curveEnabled, m.curve (array of {x,y} 0-1 points).
     mappings.forEach(function(m){
       if(m.enabled===false) return  // skip disabled mappings
       // "normalize": min-max across all points for this attribute (two-pass)
@@ -2269,6 +2264,16 @@ function applyEfxToPoints(pts,efx,w,h) {
         else if(m.mode==="exp")  tV=(Math.pow(10,normV)-1)/9
         else if(m.mode==="random") tV=seededRand((pt.pointIndex*2654435761^0x9e3779b9)>>>0)()
         else tV=normV  // linear + normalize both produce normV directly
+        // Bezier curve remap: applied after mode produces tV (0-1), before outMin/outMax scaling
+        // m.curve={p1x,p1y,p2x,p2y} — cubic bezier from (0,0) to (1,1)
+        if(m.curveEnabled&&m.curve){
+          var cp=m.curve,p1x=cp.p1x||.33,p1y=cp.p1y||.33,p2x=cp.p2x||.67,p2y=cp.p2y||.67
+          var bx=function(t2){return 3*p1x*t2*(1-t2)*(1-t2)+3*p2x*t2*t2*(1-t2)+t2*t2*t2}
+          var by=function(t2){return 3*p1y*t2*(1-t2)*(1-t2)+3*p2y*t2*t2*(1-t2)+t2*t2*t2}
+          var lo=0,hi=1
+          for(var ni=0;ni<8;ni++){var mid=(lo+hi)/2;if(bx(mid)<tV)lo=mid;else hi=mid}
+          tV=Math.max(0,Math.min(1,by((lo+hi)/2)))
+        }
         var mapped=tV*(outMax-outMin)+outMin
         var curV=pt[m.outputAttr]==null?1:pt[m.outputAttr]
         var cm=m.combine||"replace"
@@ -4759,7 +4764,51 @@ function EfxPrimary(props) {
               </div>
               <Se l="input" v={m.inputAttr||"pointIndex"} opts={ptAttrs.filter(function(a){return ["scale","rotation","opacity","sourceIndex"].indexOf(a)<0})} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
               <Se l="output" v={m.outputAttr||"scale"} opts={["scale","rotation","opacity","x","y","sourceIndex"]} fn={function(v){updMapping(mi,{outputAttr:v,min:null,max:null})}}/>
-              <Se l="mode" v={m.mode||"linear"} opts={["linear","normalize","invert","log","exp","random"]} fn={function(v){updMapping(mi,{mode:v})}}/>
+              <Se l="mode" v={m.mode||"linear"} opts={["linear","normalise","invert","log","exp","random"]} fn={function(v){updMapping(mi,{mode:v})}}/>
+              <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 2px"}}>
+                <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>curve remap</span>
+                <button className={m.curveEnabled?"ac":"ghost"} style={{fontSize:10,padding:"2px 8px",minHeight:26}}
+                  onClick={function(){updMapping(mi,{curveEnabled:!m.curveEnabled,curve:m.curve||{p1x:.33,p1y:.33,p2x:.67,p2y:.67}})}}>
+                  {m.curveEnabled?"on":"off"}
+                </button>
+              </div>
+              {m.curveEnabled&&(function(){
+                var cv2=m.curve||{p1x:.33,p1y:.33,p2x:.67,p2y:.67}
+                var sz=120,pad=8
+                var toS=function(v){return pad+v*(sz-pad*2)}
+                return <div style={{position:"relative",width:sz,height:sz,background:"var(--el)",
+                    borderRadius:4,border:"1px solid var(--bd)",margin:"0 auto 8px",touchAction:"none"}}
+                  onPointerDown={function(e){
+                    var rect=e.currentTarget.getBoundingClientRect()
+                    var ex=e.clientX-rect.left,ey=e.clientY-rect.top
+                    var fromS=function(v){return Math.max(0,Math.min(1,(v-pad)/(sz-pad*2)))}
+                    var d1=Math.hypot(ex-toS(cv2.p1x),ey-toS(1-cv2.p1y))
+                    var d2=Math.hypot(ex-toS(cv2.p2x),ey-toS(1-cv2.p2y))
+                    var drag=d1<d2?"p1":"p2"
+                    e.currentTarget.setPointerCapture(e.pointerId)
+                    var mv=function(ev){
+                      var r2=e.currentTarget.getBoundingClientRect()
+                      var nx=fromS(ev.clientX-r2.left),ny=1-fromS(ev.clientY-r2.top)
+                      updMapping(mi,{curve:drag==="p1"?Object.assign({},cv2,{p1x:nx,p1y:ny}):Object.assign({},cv2,{p2x:nx,p2y:ny})})
+                    }
+                    e.currentTarget.addEventListener("pointermove",mv)
+                    e.currentTarget.addEventListener("pointerup",function(){e.currentTarget.removeEventListener("pointermove",mv)},{once:true})
+                  }}>
+                  <svg width={sz} height={sz} style={{display:"block"}}>
+                    {[.25,.5,.75].map(function(v,vi){return <g key={vi}>
+                      <line x1={toS(v)} y1={pad} x2={toS(v)} y2={sz-pad} stroke="var(--bd)" strokeWidth={.5}/>
+                      <line x1={pad} y1={toS(v)} x2={sz-pad} y2={toS(v)} stroke="var(--bd)" strokeWidth={.5}/>
+                    </g>})}
+                    <line x1={pad} y1={sz-pad} x2={sz-pad} y2={pad} stroke="var(--bd)" strokeWidth={1} strokeDasharray="3,3"/>
+                    <path d={"M "+pad+" "+(sz-pad)+" C "+toS(cv2.p1x)+" "+toS(1-cv2.p1y)+" "+toS(cv2.p2x)+" "+toS(1-cv2.p2y)+" "+(sz-pad)+" "+pad}
+                      fill="none" stroke="var(--ac)" strokeWidth={2}/>
+                    <line x1={pad} y1={sz-pad} x2={toS(cv2.p1x)} y2={toS(1-cv2.p1y)} stroke="var(--mu)" strokeWidth={1}/>
+                    <line x1={sz-pad} y1={pad} x2={toS(cv2.p2x)} y2={toS(1-cv2.p2y)} stroke="var(--mu)" strokeWidth={1}/>
+                    <circle cx={toS(cv2.p1x)} cy={toS(1-cv2.p1y)} r={6} fill="var(--ac)" style={{cursor:"grab"}}/>
+                    <circle cx={toS(cv2.p2x)} cy={toS(1-cv2.p2y)} r={6} fill="var(--lv)" style={{cursor:"grab"}}/>
+                  </svg>
+                </div>
+              })()}
               {(function(){
                 var oa=m.outputAttr||"scale"
                 var defMin=oa==="opacity"?0:oa==="rotation"?-180:oa==="scale"?0:oa==="sourceIndex"?0:-1
