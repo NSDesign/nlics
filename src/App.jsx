@@ -516,7 +516,7 @@ function mkEfx(t) {
   if(t==="uv-distort")    params={uvRefId:null,mode:"displacement",amtX:.1,amtY:.1,chX:"R",chY:"G"}
   if(t==="polar-to-cart") params={amount:1}
   if(t==="cart-to-polar") params={amount:1}
-  if(t==="show-points")    params={style:"circle",color:"#00ccff",size:6,opacity:.8,showLabels:false,labelSize:9,labelColor:"#ffffff"}
+  if(t==="show-points")    params={style:"circle",color:"#00ccff",size:6,opacity:.8,showLabels:false,labelAttr:"pointIndex",labelSize:9,labelColor:"#ffffff"}
   if(t==="point-map")      params={mappings:[]}
   if(t==="source-at-points")params={sources:[],distributionMode:"weighted",wrap:"clamp"}
   if(t==="colour")      params={color:"#ff0000",opacity:1}
@@ -2413,7 +2413,9 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
           else if(sp2.style==="crosshair"){ctx.fillRect(pt.x*w-spR,pt.y*h-1,spR*2,2);ctx.fillRect(pt.x*w-1,pt.y*h-spR,2,spR*2)}
           else {ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,spR,0,Math.PI*2);ctx.fill()}
         })
-        if(sp2.showLabels){
+        if(sp2.showLabels&&sp2.labelAttr){
+          var spLv=pt[sp2.labelAttr]
+          if(spLv!=null){
           ctx.font=(sp2.labelSize||9)+"px 'IBM Plex Mono',monospace"
           ctx.fillStyle=sp2.labelColor||"#ffffff"
           spts.forEach(function(pt){ctx.fillText(pt.pointIndex,pt.x*w+spR+1,pt.y*h-spR)})
@@ -4668,6 +4670,15 @@ function EfxPrimary(props) {
         </button>
       </PR>
       {p.showLabels&&<div>
+        <Se l="attribute" v={p.labelAttr||"pointIndex"}
+          opts={[
+            "pointIndex","pointCount","x","y",
+            "rowNorm","colNorm","row","col",
+            "ringIndex","angleNorm","radiusNorm",
+            "spiralT","fibIndex","scatterIndex",
+            "scale","rotation","opacity","sourceIndex"
+          ]}
+          fn={function(v){up({labelAttr:v})}}/>
         <Sl l="label size" v={p.labelSize||9} mn={6} mx={20} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>
         <Co l="label col" v={p.labelColor||"#ffffff"} fn={function(v){up({labelColor:v})}}/>
       </div>}
