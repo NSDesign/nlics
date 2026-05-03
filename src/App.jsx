@@ -7391,35 +7391,70 @@ function App() {
       }
     } catch(e) { console.error("Save failed",e) }
   }
-  function loadProject(file) {
-    if(!file) return
-    var reader = new FileReader()
-    reader.onload = function(ev) {
-      try {
-        var data = JSON.parse(ev.target.result)
-        if(data.nodes) {
-          pushHistory({nodes:nodes})
-          restoreUid(data._uid, data.nodes)
-          setNodes(data.nodes)
-          if(data.name) setProjName(data.name)
-          iC.current = new Map()
-          // Reset display state to last §2 compositor in loaded project
-          var s2 = data.nodes.filter(function(n){return n.section===2&&n.enabled!==false})
-          setDispId(s2.length>0 ? s2[s2.length-1].id : null)
-          setDispMask(false)
-          setDispSlot(null)
-          setSelId(null)
-          // Add to recent list
-          var entry={name:data.name||"Untitled",savedAt:data.savedAt||new Date().toISOString(),
-            nodeCount:data.nodes.length,_legacy:!data._uid,data:data}
-          var recent=recentProj.filter(function(r){return r.name!==(data.name||"Untitled")}).slice(0,9)
-          recent.unshift(entry)
-          setRecentProj(recent)
-          try{localStorage.setItem("nlics:recent",JSON.stringify(recent))}catch(e){}
-        }
-      } catch(e) { alert("Could not load project file — invalid format") }
+  function applyLoadedProject(data) {
+    if(!data||!Array.isArray(data.nodes)){
+      console.error("applyLoadedProject: invalid data",data)
+      alert("Could not load — file does not contain valid project data")
+      return
     }
-    reader.readAsText(file)
+    console.log("Loading project:",data.name,"nodes:",data.nodes.length)
+    pushHistory({nodes:nodes})
+    restoreUid(data._uid, data.nodes)
+    // Apply all state updates together
+    setNodes(data.nodes)
+    setProjName(data.name||"Untitled")
+    iC.current = new Map()
+    // Set display to last enabled §2 node
+    var s2=data.nodes.filter(function(n){return n.section===2&&n.enabled!==false})
+    var newDispId=s2.length>0?s2[s2.length-1].id:null
+    console.log("Setting dispId to:",newDispId,"from",s2.length,"§2 nodes")
+    setDispId(newDispId)
+    setDispMask(false)
+    setDispSlot(null)
+    setSelId(null)
+    showToast()
+    // Add to recent
+    var entry={name:data.name||"Untitled",savedAt:data.savedAt||new Date().toISOString(),
+      nodeCount:data.nodes.length,_legacy:!data._uid,data:data}
+    var recent=recentProj.filter(function(r){return r.name!==(data.name||"Untitled")}).slice(0,9)
+    recent.unshift(entry)
+    setRecentProj(recent)
+    try{localStorage.setItem("nlics:recent",JSON.stringify(recent))}catch(e){}
+  }
+  function loadProject(file) {
+    if(!file){console.warn("loadProject: no file");return}
+    console.log("loadProject: reading",file.name,file.size,"bytes")
+    // Use modern Promise API if available, fallback to FileReader
+    if(file.text){
+      file.text().then(function(text){
+        try{
+          var data=JSON.parse(text)
+          applyLoadedProject(data)
+        }catch(e){
+          console.error("loadProject parse error:",e)
+          alert("Could not load — file is not valid JSON: "+e.message)
+        }
+      }).catch(function(e){
+        console.error("loadProject read error:",e)
+        alert("Could not read file: "+e.message)
+      })
+    } else {
+      var reader=new FileReader()
+      reader.onload=function(ev){
+        try{
+          var data=JSON.parse(ev.target.result)
+          applyLoadedProject(data)
+        }catch(e){
+          console.error("loadProject parse error:",e)
+          alert("Could not load — file is not valid JSON: "+e.message)
+        }
+      }
+      reader.onerror=function(e){
+        console.error("FileReader error:",e)
+        alert("Could not read file")
+      }
+      reader.readAsText(file)
+    }
   }
   function autoSaveNow() {
     try {
