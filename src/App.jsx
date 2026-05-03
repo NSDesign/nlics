@@ -2446,7 +2446,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
             if(lv!=null){
               ctx.fillStyle=sp2.labelColor||"#fff"
               ctx.font=(sp2.labelSize||9)+"px 'IBM Plex Mono',monospace"
-              ctx.fillText(typeof lv==="number"?lv.toFixed(2):String(lv),sx+spR+2,sy-spR-2)
+              ctx.fillText(typeof lv==="number"?(Number.isInteger(lv)?String(lv):lv.toFixed(3)):String(lv),sx+spR+2,sy-spR-2)
               ctx.fillStyle=spC  // restore fill colour for next dot
             }
           }
@@ -2549,7 +2549,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
       if(spp.showLabels&&spp.labelAttr){
         var lv=pt[spp.labelAttr]
         if(lv!=null){ctx.fillStyle=spp.labelColor||"#fff";ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
-          ctx.fillText(typeof lv==="number"?lv.toFixed(2):String(lv),sx+sDr+2,sy-sDr-2)}
+          ctx.fillText(typeof lv==="number"?(Number.isInteger(lv)?String(lv):lv.toFixed(3)):String(lv),sx+sDr+2,sy-sDr-2)}
       }
     })
     ctx.restore()
