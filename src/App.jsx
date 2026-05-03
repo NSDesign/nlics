@@ -2407,19 +2407,22 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
       var spts=ctx.canvas&&ctx.canvas._points
       if(spts&&spts.length>0){
         var sp2=efx.params||{},spR=(sp2.size||6)/2,spC=sp2.color||"#00ccff",spO=sp2.opacity==null?.8:sp2.opacity
-        ctx.save();ctx.globalAlpha=spO;ctx.fillStyle=spC
+        ctx.save();ctx.globalAlpha=spO;ctx.fillStyle=spC;ctx.strokeStyle=spC;ctx.lineWidth=1
         spts.forEach(function(pt){
-          if(sp2.style==="square") ctx.fillRect(pt.x*w-spR,pt.y*h-spR,spR*2,spR*2)
-          else if(sp2.style==="crosshair"){ctx.fillRect(pt.x*w-spR,pt.y*h-1,spR*2,2);ctx.fillRect(pt.x*w-1,pt.y*h-spR,2,spR*2)}
-          else {ctx.beginPath();ctx.arc(pt.x*w,pt.y*h,spR,0,Math.PI*2);ctx.fill()}
+          var sx=pt.x*w,sy=pt.y*h
+          if(sp2.style==="square") ctx.fillRect(sx-spR,sy-spR,spR*2,spR*2)
+          else if(sp2.style==="crosshair"){ctx.beginPath();ctx.moveTo(sx-spR*1.5,sy);ctx.lineTo(sx+spR*1.5,sy);ctx.moveTo(sx,sy-spR*1.5);ctx.lineTo(sx,sy+spR*1.5);ctx.stroke()}
+          else {ctx.beginPath();ctx.arc(sx,sy,spR,0,Math.PI*2);ctx.fill()}
+          if(sp2.showLabels&&sp2.labelAttr){
+            var lv=pt[sp2.labelAttr]
+            if(lv!=null){
+              ctx.fillStyle=sp2.labelColor||"#fff"
+              ctx.font=(sp2.labelSize||9)+"px 'IBM Plex Mono',monospace"
+              ctx.fillText(typeof lv==="number"?lv.toFixed(2):String(lv),sx+spR+2,sy-spR-2)
+              ctx.fillStyle=spC  // restore fill colour for next dot
+            }
+          }
         })
-        if(sp2.showLabels&&sp2.labelAttr){
-          var spLv=pt[sp2.labelAttr]
-          if(spLv!=null){
-          ctx.font=(sp2.labelSize||9)+"px 'IBM Plex Mono',monospace"
-          ctx.fillStyle=sp2.labelColor||"#ffffff"
-          spts.forEach(function(pt){ctx.fillText(pt.pointIndex,pt.x*w+spR+1,pt.y*h-spR)})
-        }
         ctx.restore()
       }
       continue
