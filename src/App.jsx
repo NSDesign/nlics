@@ -6613,7 +6613,9 @@ function LayerCard(props) {
           style={{color:lyr.enabled===false?"var(--mu)":"#e06828",fontSize:18}}>
           {lyr.enabled===false?"○":"●"}
         </button>
-        <InlineRename value={lyr.name} fallback={"layer "+(props.totalLayers-li)}
+        <span style={{fontSize:10,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
+          marginRight:4,flexShrink:0}}>{"L"+(props.totalLayers-li)}</span>
+        <InlineRename value={lyr.name} fallback={""}
           onChange={function(nw){props.onChange({name:nw})}}
           labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
         <button
