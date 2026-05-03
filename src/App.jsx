@@ -7499,14 +7499,9 @@ function App() {
       } else if(def&&defName){
         try{
           var d=JSON.parse(def)
-          if(d&&d.nodes&&d.nodes.length>0){
-            restoreUid(d._uid, d.nodes)
-            setNodes(d.nodes)
-            setProjName(defName)
-            iC.current=new Map()
-            var sd2=d.nodes.filter(function(n){return n.section===2&&n.enabled})
-            setDispId(sd2.length>0?sd2[sd2.length-1].id:null)
-            setDispMask(false);setDispSlot(null);setSelId(null)
+          if(d&&d.nodes){
+            if(!d.name)d.name=defName
+            applyLoadedProject(d)
           }
         }catch(de){console.warn("Default project parse failed",de)}
       }
@@ -7867,15 +7862,8 @@ function App() {
               return (
                 <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
                   <div style={{flex:1,cursor:"pointer"}} onClick={function(){
-                    if(r.data&&r.data.nodes&&r.data.nodes.length>0){
-                      pushHistory({nodes:nodes})
-                      restoreUid(r.data._uid,r.data.nodes)
-                      setNodes(r.data.nodes)
-                      setProjName(r.name)
-                      iC.current=new Map()
-                      var rd2=r.data.nodes.filter(function(n){return n.section===2&&n.enabled})
-                      setDispId(rd2.length>0?rd2[rd2.length-1].id:null)
-                      setDispMask(false);setDispSlot(null);setSelId(null)
+                    if(r.data&&r.data.nodes){
+                      applyLoadedProject(r.data)
                       setLoadDialog(false)
                     } else {
                       fileInputRef.current&&fileInputRef.current.click()
