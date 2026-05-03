@@ -539,7 +539,11 @@ function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled
   effectStack:[], maskStack:[], blendMode:"normal", opacity:100, maskMode:"add", maskAmount:100,
   fillOpacity:100, blendChannels:{R:true,G:true,B:true,A:true},
   blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} } }
-function mkLayerComp() { return { id:uid(), name:"Layer Comp "+(_uid-100), type:"layers", section:2, enabled:true, layers:[mkLayer(),mkLayer()], outFillOpacity:100, outOpacity:100, outEfx:[], outMask:[] } }
+function mkLayerComp() {
+  var l1=mkLayer(); l1.name="layer 1"
+  var l2=mkLayer(); l2.name="layer 2"
+  return { id:uid(), name:"Layer Comp "+(_uid-100), type:"layers", section:2, enabled:true, layers:[l2,l1], outFillOpacity:100, outOpacity:100, outEfx:[], outMask:[] }
+}
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
 
 // Stack node — named reusable container for an effect or mask stack.
@@ -6834,7 +6838,9 @@ function LayerCompProps(props) {
     onChange(Object.assign({},node,{layers:nl,_ui:lcpUi}))
   }
   function addLayer(){
-    onChange(Object.assign({},node,{layers:[mkLayer()].concat(layers)}))
+    var newLyr=mkLayer()
+    newLyr.name="layer "+(layers.length+1)
+    onChange(Object.assign({},node,{layers:[newLyr].concat(layers)}))
   }
   function delLayer(idx){
     if(layers.length<=1) return
@@ -7834,9 +7840,10 @@ function App() {
 
 
   // ── Load project dialog ────────────────────────────────────────────────────
+  var armedDelIdxSt=useState(null); var armedDelIdx=armedDelIdxSt[0],setArmedDelIdx=armedDelIdxSt[1]
   var LoadDialog = loadDialog ? (
     <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(4,4,18,.88)",display:"flex",alignItems:"flex-end"}}
-      onClick={function(e){if(e.target===e.currentTarget)setLoadDialog(false)}}>
+      onClick={function(e){if(e.target===e.currentTarget){setLoadDialog(false);setArmedDelIdx(null)}}}>
       <div style={{width:"100%",background:"var(--pn)",borderRadius:"18px 18px 0 0",maxHeight:"70vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",padding:"14px 16px 8px",borderBottom:"1px solid var(--bd)"}}>
           <span style={{flex:1,fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13}}>Load Project</span>
@@ -7919,12 +7926,25 @@ function App() {
                         border:"2px solid var(--bd)",background:"none",
                         flexShrink:0,cursor:"pointer",padding:0}}/>
                   }
-                  <button onClick={function(){
-                    var newRecent=recentProj.filter(function(_,ri){return ri!==i})
-                    setRecentProj(newRecent)
-                    try{localStorage.setItem("nlics:recent",JSON.stringify(newRecent))}catch(e){}
-                  }} style={{fontSize:11,color:"var(--mu)",background:"none",border:"none",
-                    cursor:"pointer",padding:"2px 4px",flexShrink:0}}>×</button>
+                  {(function(){
+                    var armed=armedDelIdx===i
+                    return <button
+                      onClick={function(){
+                        if(armed){
+                          var newRecent=recentProj.filter(function(_,ri){return ri!==i})
+                          setRecentProj(newRecent)
+                          setArmedDelIdx(null)
+                          try{localStorage.setItem("nlics:recent",JSON.stringify(newRecent))}catch(e){}
+                        } else { setArmedDelIdx(i) }
+                      }}
+                      onBlur={function(){setArmedDelIdx(null)}}
+                      style={{fontSize:10,color:armed?"var(--dng)":"var(--mu)",background:"none",
+                        border:armed?"1px solid var(--dng)":"none",
+                        borderRadius:3,cursor:"pointer",padding:armed?"2px 6px":"2px 4px",
+                        flexShrink:0,fontFamily:"'IBM Plex Mono',monospace",transition:"all .15s"}}>
+                      {armed?"confirm ×":"×"}
+                    </button>
+                  })()}
                 </div>
               )
             })}
