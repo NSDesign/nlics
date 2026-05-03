@@ -7402,7 +7402,20 @@ function App() {
           restoreUid(data._uid, data.nodes)
           setNodes(data.nodes)
           if(data.name) setProjName(data.name)
-          iC.current = new Map()  // clear image cache
+          iC.current = new Map()
+          // Reset display state to last §2 compositor in loaded project
+          var s2 = data.nodes.filter(function(n){return n.section===2&&n.enabled!==false})
+          setDispId(s2.length>0 ? s2[s2.length-1].id : null)
+          setDispMask(false)
+          setDispSlot(null)
+          setSelId(null)
+          // Add to recent list
+          var entry={name:data.name||"Untitled",savedAt:data.savedAt||new Date().toISOString(),
+            nodeCount:data.nodes.length,_legacy:!data._uid,data:data}
+          var recent=recentProj.filter(function(r){return r.name!==(data.name||"Untitled")}).slice(0,9)
+          recent.unshift(entry)
+          setRecentProj(recent)
+          try{localStorage.setItem("nlics:recent",JSON.stringify(recent))}catch(e){}
         }
       } catch(e) { alert("Could not load project file — invalid format") }
     }
