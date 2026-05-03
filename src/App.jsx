@@ -2235,6 +2235,7 @@ function applyEfxToPoints(pts,efx,w,h) {
     // applyBezierRemap(tV, m.curve) would sample the curve at tV.
     // Per-mapping flags: m.curveEnabled, m.curve (array of {x,y} 0-1 points).
     mappings.forEach(function(m){
+      if(m.enabled===false) return  // skip disabled mappings
       // "normalize": min-max across all points for this attribute (two-pass)
       var normRangeMin=0, normRangeMax=1
       if(m.mode==="normalize"){
@@ -2266,7 +2267,7 @@ function applyEfxToPoints(pts,efx,w,h) {
         if(m.mode==="invert")    tV=1-normV
         else if(m.mode==="log")  tV=normV>0?Math.log(1+normV*9)/Math.log(10):0
         else if(m.mode==="exp")  tV=(Math.pow(10,normV)-1)/9
-        else if(m.mode==="random") tV=seededRand(Math.round(normV*9999+pt.pointIndex*7))()
+        else if(m.mode==="random") tV=seededRand((pt.pointIndex*2654435761^0x9e3779b9)>>>0)()
         else tV=normV  // linear + normalize both produce normV directly
         var mapped=tV*(outMax-outMin)+outMin
         var curV=pt[m.outputAttr]==null?1:pt[m.outputAttr]
@@ -2548,8 +2549,12 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
       if(sSty!=="crosshair") ctx.fill()
       if(spp.showLabels&&spp.labelAttr){
         var lv=pt[spp.labelAttr]
-        if(lv!=null){ctx.fillStyle=spp.labelColor||"#fff";ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
-          ctx.fillText(typeof lv==="number"?(Number.isInteger(lv)?String(lv):lv.toFixed(3)):String(lv),sx+sDr+2,sy-sDr-2)}
+        if(lv!=null){
+          ctx.fillStyle=spp.labelColor||"#fff"
+          ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
+          ctx.fillText(typeof lv==="number"?(Number.isInteger(lv)?String(lv):lv.toFixed(3)):String(lv),sx+sDr+2,sy-sDr-2)
+          ctx.fillStyle=sClr  // restore point fill colour for next iteration
+        }
       }
     })
     ctx.restore()
@@ -3611,10 +3616,10 @@ function getSourceGeomType(nodes, sourceId) {
 function getPointAttrs(geomType) {
   var base=["pointIndex","x","y"]
   var mapped=["scale","rotation","opacity","sourceIndex"]
-  if(geomType==="grid")        return base.concat(["row","col","rowNorm","colNorm"]).concat(mapped)
-  if(geomType==="polar-grid") return base.concat(["ringIndex","angleNorm","radiusNorm"]).concat(mapped)
-  if(geomType==="spiral")     return base.concat(["spiralT","angleNorm","radiusNorm"]).concat(mapped)
-  if(geomType==="phyllotaxis") return base.concat(["fibIndex","angleNorm","radiusNorm"]).concat(mapped)
+  if(geomType==="grid")        return base.concat(["row","col"]).concat(mapped)
+  if(geomType==="polar-grid") return base.concat(["ringIndex","sectorIndex"]).concat(mapped)
+  if(geomType==="spiral")     return base.concat(["spiralT"]).concat(mapped)
+  if(geomType==="phyllotaxis") return base.concat(["fibIndex"]).concat(mapped)
   if(geomType==="scatter")    return base.concat(["scatterIndex"]).concat(mapped)
   return []
 }
@@ -4745,7 +4750,11 @@ function EfxPrimary(props) {
           return (
             <div key={mi} style={{borderBottom:"1px solid var(--bd)",paddingBottom:8,marginBottom:8}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>mapping {mi+1}</span>
+                <button onClick={function(){updMapping(mi,{enabled:m.enabled===false?true:false})}}
+                  style={{width:18,height:18,borderRadius:"50%",border:"2px solid "+(m.enabled===false?"var(--bd)":"var(--ac)"),
+                    background:m.enabled===false?"none":"var(--ac)",flexShrink:0,cursor:"pointer",padding:0}}/>
+                <span style={{flex:1,fontSize:9,color:m.enabled===false?"var(--mu)":"var(--tx)",
+                  fontFamily:"'IBM Plex Mono',monospace",textDecoration:m.enabled===false?"line-through":"none"}}>mapping {mi+1}</span>
                 <button onClick={function(){delMapping(mi)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
               </div>
               <Se l="input" v={m.inputAttr||"pointIndex"} opts={ptAttrs.filter(function(a){return ["scale","rotation","opacity","sourceIndex"].indexOf(a)<0})} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
