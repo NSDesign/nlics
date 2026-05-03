@@ -4070,9 +4070,13 @@ function ImgP(props) {
   var fileRef=useRef(null)
   function loadBlob(file){
     if(!file)return
-    var b=URL.createObjectURL(file)
-    up(Object.assign({},p,{url:b}))
-    onLoad(b)
+    var reader=new FileReader()
+    reader.onload=function(ev){
+      var dataUrl=ev.target.result
+      up(Object.assign({},p,{url:dataUrl}))
+      onLoad(dataUrl)
+    }
+    reader.readAsDataURL(file)
   }
   return (
     <div>
@@ -6613,9 +6617,7 @@ function LayerCard(props) {
           style={{color:lyr.enabled===false?"var(--mu)":"#e06828",fontSize:18}}>
           {lyr.enabled===false?"○":"●"}
         </button>
-        <span style={{fontSize:10,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
-          marginRight:4,flexShrink:0}}>{"L"+(props.totalLayers-li)}</span>
-        <InlineRename value={lyr.name} fallback={""}
+        <InlineRename value={lyr.name} fallback={"layer "+(props.totalLayers-li)}
           onChange={function(nw){props.onChange({name:nw})}}
           labelStyle={{fontSize:12,color:"#e06828",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
         <button
@@ -7371,7 +7373,7 @@ function App() {
   function saveProject(setDefault) {
     try {
       var savedAt=new Date().toISOString()
-      var payload={version:"1.0",appName:"Selena",fileType:"nlics",name:projName,savedAt:savedAt,nodes:nodes,_uid:_uid}
+      var payload={version:"1.0",appName:"Selena",fileType:"nlics",name:projName,savedAt:savedAt,nodes:nodes,_uid:_uid,dispId:dispId}
       var data = JSON.stringify(payload, null, 2)
       var blob = new Blob([data], {type:"application/json"})
       var url = URL.createObjectURL(blob)
@@ -7398,6 +7400,13 @@ function App() {
       return
     }
     console.log("Loading project:",data.name,"nodes:",data.nodes.length)
+    // Pre-load any embedded image data URLs into iC
+    data.nodes.forEach(function(n){
+      if(n.type==="image"&&n.props&&n.props.url&&n.props.url.startsWith("data:")){
+        var img=new Image(); img.src=n.props.url
+        iC.current.set(n.props.url,img)
+      }
+    })
     pushHistory({nodes:nodes})
     restoreUid(data._uid, data.nodes)
     // Apply all state updates together
@@ -7406,8 +7415,10 @@ function App() {
     iC.current = new Map()
     // Set display to last enabled §2 node
     var s2=data.nodes.filter(function(n){return n.section===2&&n.enabled!==false})
-    var newDispId=s2.length>0?s2[s2.length-1].id:null
-    console.log("Setting dispId to:",newDispId,"from",s2.length,"§2 nodes")
+    // Use saved dispId if valid, else fall back to last §2 node
+    var savedDisp=data.dispId&&data.nodes.find(function(n){return n.id===data.dispId})
+    var newDispId=savedDisp?data.dispId:(s2.length>0?s2[s2.length-1].id:null)
+    console.log("Setting dispId to:",newDispId)
     setDispId(newDispId)
     setDispMask(false)
     setDispSlot(null)
@@ -7873,10 +7884,8 @@ function App() {
                     if(hasData){
                       applyLoadedProject(r.data)
                       setLoadDialog(false)
-                    } else {
-                      fileInputRef.current&&fileInputRef.current.click()
-                      setLoadDialog(false)
                     }
+                    // legacy: file input is rendered inline below
                   }}>
                     <div style={{fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
                       color:isDefault?"var(--lv)":r._legacy?"var(--mu)":"var(--tx)",
@@ -7884,16 +7893,18 @@ function App() {
                       {r.name}{r._legacy?" ⚠":""}
                     </div>
                     <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
-                      {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}{hasData?" · tap to load":" · tap to browse"}
+                      {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}
+                      {!hasData&&<span> · <label style={{color:"var(--ac)",cursor:"pointer",textDecoration:"underline"}}>
+                        browse to load
+                        <input type="file" accept=".nlics,.json,application/json,application/octet-stream"
+                          style={{display:"none"}} onChange={function(e){
+                            var f=e.target.files&&e.target.files[0]
+                            if(f){loadProject(f);setLoadDialog(false)}
+                            e.target.value=""
+                          }}/>
+                      </label></span>}
                     </div>
                   </div>
-                  <button onClick={function(){
-                    var newRecent=recentProj.filter(function(_,ri){return ri!==i})
-                    setRecentProj(newRecent)
-                    try{localStorage.setItem("nlics:recent",JSON.stringify(newRecent))}catch(e){}
-                  }} style={{fontSize:10,color:"var(--mu)",background:"none",border:"1px solid var(--bd)",
-                    borderRadius:3,cursor:"pointer",padding:"2px 6px",flexShrink:0,
-                    fontFamily:"'IBM Plex Mono',monospace"}}>×</button>
                   {isDefault
                     ? <span style={{fontSize:8,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",
                         border:"1px solid var(--lv)",borderRadius:3,padding:"1px 5px",
@@ -7908,6 +7919,12 @@ function App() {
                         border:"2px solid var(--bd)",background:"none",
                         flexShrink:0,cursor:"pointer",padding:0}}/>
                   }
+                  <button onClick={function(){
+                    var newRecent=recentProj.filter(function(_,ri){return ri!==i})
+                    setRecentProj(newRecent)
+                    try{localStorage.setItem("nlics:recent",JSON.stringify(newRecent))}catch(e){}
+                  }} style={{fontSize:11,color:"var(--mu)",background:"none",border:"none",
+                    cursor:"pointer",padding:"2px 4px",flexShrink:0}}>×</button>
                 </div>
               )
             })}
