@@ -7855,14 +7855,22 @@ function App() {
             )
           })()}
           {recentProj.length>0&&<div>
-            <div style={{padding:"6px 16px 3px",fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace"}}>Recent</div>
+            <div style={{display:"flex",alignItems:"center",padding:"6px 16px 3px"}}>
+              <span style={{flex:1,fontSize:8,color:"var(--mu)",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace"}}>Recent</span>
+              <button onClick={function(){
+                var confirmed=window.confirm("Clear all recent projects?")
+                if(confirmed){setRecentProj([]);try{localStorage.removeItem("nlics:recent")}catch(e){}}
+              }} style={{fontSize:9,color:"var(--mu)",background:"none",border:"none",cursor:"pointer",
+                fontFamily:"'IBM Plex Mono',monospace",padding:"0 0 0 8px"}}>clear all</button>
+            </div>
             {recentProj.map(function(r,i){
               var defName=localStorage.getItem("nlics:default-project-name")||""
               var isDefault=r.name===defName
+              var hasData=r.data&&Array.isArray(r.data.nodes)
               return (
-                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
-                  <div style={{flex:1,cursor:"pointer"}} onClick={function(){
-                    if(r.data&&r.data.nodes){
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",borderBottom:"1px solid var(--bd)"}}>
+                  <div style={{flex:1,cursor:"pointer",minWidth:0}} onClick={function(){
+                    if(hasData){
                       applyLoadedProject(r.data)
                       setLoadDialog(false)
                     } else {
@@ -7870,25 +7878,32 @@ function App() {
                       setLoadDialog(false)
                     }
                   }}>
-                    <div style={{fontSize:12,
+                    <div style={{fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
                       color:isDefault?"var(--lv)":r._legacy?"var(--mu)":"var(--tx)",
                       fontStyle:r._legacy?"italic":"normal"}}>
-                      {r.name}{r._legacy?" ⚠":""}  
+                      {r.name}{r._legacy?" ⚠":""}
                     </div>
                     <div style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>
-                      {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}{r.data?" · tap to load":" · tap to browse"}
+                      {r.nodeCount} nodes · {new Date(r.savedAt).toLocaleDateString()}{hasData?" · tap to load":" · tap to browse"}
                     </div>
                   </div>
+                  <button onClick={function(){
+                    var newRecent=recentProj.filter(function(_,ri){return ri!==i})
+                    setRecentProj(newRecent)
+                    try{localStorage.setItem("nlics:recent",JSON.stringify(newRecent))}catch(e){}
+                  }} style={{fontSize:10,color:"var(--mu)",background:"none",border:"1px solid var(--bd)",
+                    borderRadius:3,cursor:"pointer",padding:"2px 6px",flexShrink:0,
+                    fontFamily:"'IBM Plex Mono',monospace"}}>×</button>
                   {isDefault
                     ? <span style={{fontSize:8,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",
                         border:"1px solid var(--lv)",borderRadius:3,padding:"1px 5px",
                         flexShrink:0,letterSpacing:".06em",textTransform:"uppercase"}}>default</span>
                     : <button onClick={function(){
                         try{
-                      localStorage.setItem("nlics:default-project-name",r.name)
-                      if(r.data) localStorage.setItem("nlics:default-project",JSON.stringify(r.data))
-                    }catch(e){}
-                    setLoadDialog(false); setTimeout(function(){setLoadDialog(true)},0)
+                          localStorage.setItem("nlics:default-project-name",r.name)
+                          if(hasData) localStorage.setItem("nlics:default-project",JSON.stringify(r.data))
+                        }catch(e){}
+                        setLoadDialog(false); setTimeout(function(){setLoadDialog(true)},0)
                       }} style={{width:20,height:20,minWidth:20,minHeight:20,borderRadius:"50%",
                         border:"2px solid var(--bd)",background:"none",
                         flexShrink:0,cursor:"pointer",padding:0}}/>
