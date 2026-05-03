@@ -3572,6 +3572,24 @@ function SolidP(props) {
 }
 // Geometry types that are point-based (use point render controls)
 var GEO_POINT_TYPES = ["grid","spiral","polar-grid","phyllotaxis","scatter"]
+function getSourceGeomType(nodes, sourceId) {
+  if(!sourceId||!nodes) return null
+  var n=(nodes||[]).find(function(x){return x.id===sourceId})
+  if(!n) return null
+  if(GEO_POINT_TYPES.includes(n.type)) return n.type
+  if(n.type==="shape"&&n.props&&GEO_POINT_TYPES.includes(n.props.shapeType)) return n.props.shapeType
+  return null
+}
+function getPointAttrs(geomType) {
+  var base=["pointIndex","x","y"]
+  var mapped=["scale","rotation","opacity","sourceIndex"]
+  if(geomType==="grid")        return base.concat(["row","col","rowNorm","colNorm"]).concat(mapped)
+  if(geomType==="polar-grid") return base.concat(["ringIndex","angleNorm","radiusNorm"]).concat(mapped)
+  if(geomType==="spiral")     return base.concat(["spiralT","angleNorm","radiusNorm"]).concat(mapped)
+  if(geomType==="phyllotaxis") return base.concat(["fibIndex","angleNorm","radiusNorm"]).concat(mapped)
+  if(geomType==="scatter")    return base.concat(["scatterIndex"]).concat(mapped)
+  return []
+}
 
 function ShapeP(props) {
   var p=props.p, up=props.up, s=p.shapeType
@@ -4677,7 +4695,9 @@ function EfxPrimary(props) {
         </button>
       </PR>
       {p.showLabels&&<div>
-        <Se l="attribute" v={p.labelAttr||"pointIndex"} opts={ptAttrs} fn={function(v){up({labelAttr:v})}}/>
+        (ptAttrs.length?
+          <Se l="attribute" v={p.labelAttr||ptAttrs[0]} opts={ptAttrs} fn={function(v){up({labelAttr:v})}}/>
+          :<div style={{fontSize:10,color:"var(--mu)",padding:"4px 0"}}>Set a geometry source on the slot to use labels</div>)
         <Sl l="label size" v={p.labelSize||9} mn={6} mx={20} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>
         <Co l="label col" v={p.labelColor||"#ffffff"} fn={function(v){up({labelColor:v})}}/>
       </div>}
@@ -5317,7 +5337,7 @@ function EfxCard(props) {
       <TabBar tabs={tabs} active={tab} onChange={setTab}/>
       {tab==="primary" && (
         <div className="card-body">
-          <EfxPrimary efx={efx} onChange={props.onChange} nodes={props.nodes} selfId={props.selfId} iC={props.iC}/>
+          <EfxPrimary efx={efx} onChange={props.onChange} nodes={props.nodes} selfId={props.selfId} iC={props.iC} sourceId={props.sourceId}/>
         </div>
       )}
       {tab==="layer" && (
@@ -5518,6 +5538,7 @@ function EfxStack(props) {
         )
         return (
           <EfxCard key={efx.id} efx={efx} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+            sourceId={props.sourceId}
             onNavigate={props.onNavigate}
             siblingEffects={props.stack.filter(function(s){return s.id!==efx.id&&s.maskStack&&s.maskStack.length>0})}
             ownerNodeId={props.selfId}
