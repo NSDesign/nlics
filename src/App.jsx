@@ -4427,21 +4427,69 @@ function EfxPrimary(props) {
       if(n.inputB) scanEfxForTfx(n.inputB.effectStack,nl+" · input B",n.id,"inputB::"+n.id)
       ;(n.layers||[]).forEach(function(l,li){scanEfxForTfx(l.effectStack,nl+" · layer "+(li+1),n.id,"layer"+li+"::"+n.id)})
     })
+    // Build filter options from collected transforms
+    var nodeIds=[]; var nodeNames={}
+    allTfx.forEach(function(t){
+      if(!nodeIds.includes(t.nodeId)){nodeIds.push(t.nodeId);nodeNames[t.nodeId]=t.label.split(" · ")[0]}
+    })
+    var filterNode=p._filterNode||"all"
+    var filterCtx=p._filterCtx||"all"
+    // Contexts available for selected node
+    var ctxSet=[]
+    allTfx.filter(function(t){return filterNode==="all"||t.nodeId===filterNode}).forEach(function(t){
+      var parts=t.label.split(" · "); var ctx2=parts.length>2?parts.slice(1,-1).join(" · "):parts.length===2?"output":"output"
+      if(!ctxSet.includes(ctx2)) ctxSet.push(ctx2)
+    })
+    // Filtered list
+    var filtered=allTfx.filter(function(t){
+      if(filterNode!=="all"&&t.nodeId!==filterNode) return false
+      if(filterCtx!=="all"){
+        var parts=t.label.split(" · "); var ctx2=parts.length>2?parts.slice(1,-1).join(" · "):"output"
+        if(ctx2!==filterCtx) return false
+      }
+      return true
+    })
     var selTfx=allTfx.find(function(t){return t.efxId===p.efxId})
     var sp2=selTfx&&!selTfx.isStack&&selTfx.params
     var stackTfxs=selTfx&&selTfx.isStack?(selTfx.stackRef||[]).filter(function(e){return e.type==="transform"&&e.enabled}):null
     return (
     <div>
-      <div style={{padding:"6px 0 4px",fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:".05em"}}>TRANSFORM SOURCE</div>
-      {allTfx.length===0&&<div style={{fontSize:10,color:"var(--mu)",padding:"6px 0"}}>No transform effects found in project</div>}
-      {allTfx.map(function(t){
+      {allTfx.length===0
+        ? <div style={{fontSize:10,color:"var(--mu)",padding:"6px 0"}}>No transform effects found in project</div>
+        : <div style={{display:"flex",gap:6,marginBottom:8}}>
+            <div style={{flex:1,minWidth:0}}>
+              <select value={filterNode} onChange={function(e){up({_filterNode:e.target.value,_filterCtx:"all"})}}
+                style={{width:"100%",background:"var(--el)",color:"var(--tx)",border:"1px solid var(--bd)",
+                  borderRadius:4,padding:"5px 6px",fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                  overflow:"hidden",textOverflow:"ellipsis"}}>
+                <option value="all">All compositors</option>
+                {nodeIds.map(function(nid){return <option key={nid} value={nid}>{nodeNames[nid]}</option>})}
+              </select>
+            </div>
+            {filterNode!=="all"&&<div style={{flex:1,minWidth:0}}>
+              <select value={filterCtx} onChange={function(e){up({_filterCtx:e.target.value})}}
+                style={{width:"100%",background:"var(--el)",color:"var(--tx)",border:"1px solid var(--bd)",
+                  borderRadius:4,padding:"5px 6px",fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+                  overflow:"hidden",textOverflow:"ellipsis"}}>
+                <option value="all">All contexts</option>
+                {ctxSet.map(function(c){return <option key={c} value={c}>{c}</option>})}
+              </select>
+            </div>}
+          </div>
+      }
+      {filtered.map(function(t){
         var sel=t.efxId===p.efxId
+        // Strip prefix already shown by filters — show only leaf label
+        var parts=t.label.split(" · ")
+        var shortLabel=filterNode!=="all"&&filterCtx!=="all"?parts[parts.length-1]:
+                       filterNode!=="all"?parts.slice(1).join(" · "):t.label
         return <div key={t.efxId} onClick={function(){up({sourceId:t.nodeId,efxId:t.efxId})}}
           style={{padding:"7px 10px",marginBottom:3,borderRadius:5,cursor:"pointer",fontSize:11,
             background:sel?"rgba(36,204,168,.12)":"var(--el)",
             border:"1px solid "+(sel?"var(--ac)":"var(--bd)"),
-            color:sel?"var(--ac)":"var(--tx)"}}>
-          {t.label}
+            color:sel?"var(--ac)":"var(--tx)",
+            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+          {shortLabel}
         </div>
       })}
       {sp2&&<div style={{padding:"6px 8px",marginTop:4,marginBottom:4,background:"var(--el)",borderRadius:4,
