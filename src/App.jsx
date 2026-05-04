@@ -4282,8 +4282,9 @@ function ColourMapEditor(props) {
     return "rgba("+r+","+g+","+b+","+a.toFixed(3)+")"
   }
   // CSS gradient — includes alpha, rendered on a checkered pattern for visibility
-  var grad=(p.reverse?stops.slice().reverse().map(function(s){return Object.assign({},s,{pos:1-s.pos})}):stops)
-    .map(function(s){return rgbaStr(s.color,s.alpha)+" "+(s.pos*100).toFixed(1)+"%"}).join(",")
+  var gradStops=(p.reverse?stops.slice().reverse().map(function(s){return Object.assign({},s,{pos:1-s.pos})}):stops)
+    .slice().sort(function(a,b){return a.pos-b.pos})
+  var grad=gradStops.map(function(s){return rgbaStr(s.color,s.alpha)+" "+(s.pos*100).toFixed(1)+"%"}).join(",")
   // Checkerboard background so transparency is visible
   var checker="repeating-conic-gradient(#242440 0deg 90deg, #181830 90deg 180deg) 0 0 / 12px 12px"
   return (
@@ -7582,7 +7583,7 @@ function App() {
       document.body.appendChild(a); a.click()
       document.body.removeChild(a); URL.revokeObjectURL(url)
       // Store in recent projects list
-      var entry={name:projName,savedAt:savedAt,nodeCount:nodes.length,_legacy:false}
+      var entry={name:projName,savedAt:savedAt,nodeCount:nodes.length,_legacy:false,data:payload}
       var recent=recentProj.filter(function(r){return r.name!==projName}).slice(0,9)
       recent.unshift(entry)
       setRecentProj(recent)
