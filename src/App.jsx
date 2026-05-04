@@ -2555,10 +2555,15 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
       if(spp.showLabels&&spp.labelAttr){
         var lv=pt[spp.labelAttr]
         if(lv!=null){
-          ctx.fillStyle=spp.labelColor||"#fff"
-          ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
-          ctx.fillText(typeof lv==="number"?(Number.isInteger(lv)?String(lv):lv.toFixed(3)):String(lv),sx+sDr+2,sy-sDr-2)
-          ctx.fillStyle=sClr  // restore point fill colour for next iteration
+          if(typeof lv==="string"&&lv.startsWith("#")){
+            ctx.fillStyle=lv;ctx.fillRect(sx+sDr+2,sy-sDr-8,10,8)
+            ctx.strokeStyle="rgba(0,0,0,.4)";ctx.lineWidth=.5;ctx.strokeRect(sx+sDr+2,sy-sDr-8,10,8)
+          } else {
+            ctx.fillStyle=spp.labelColor||"#fff"
+            ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
+            ctx.fillText(typeof lv==="number"?(Number.isInteger(lv)?String(lv):lv.toFixed(3)):String(lv),sx+sDr+2,sy-sDr-2)
+          }
+          ctx.fillStyle=pt.color||sClr;ctx.strokeStyle=pt.color||sClr
         }
       }
     })
