@@ -4872,8 +4872,11 @@ function EfxPrimary(props) {
             <div key={mi} style={{borderBottom:"1px solid var(--bd)",paddingBottom:8,marginBottom:8}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                 <button onClick={function(){updMapping(mi,{enabled:m.enabled===false?true:false})}}
-                  style={{width:18,height:18,borderRadius:"50%",border:"2px solid "+(m.enabled===false?"var(--bd)":"var(--ac)"),
-                    background:m.enabled===false?"none":"var(--ac)",flexShrink:0,cursor:"pointer",padding:0}}/>
+                  style={{width:18,height:18,minWidth:18,minHeight:18,borderRadius:"50%",
+                    border:"2px solid "+(m.enabled===false?"var(--bd)":"var(--ac)"),
+                    background:m.enabled===false?"none":"var(--ac)",
+                    flexShrink:0,flexGrow:0,alignSelf:"center",cursor:"pointer",
+                    padding:0,boxSizing:"content-box"}}/>
                 <span style={{flex:1,fontSize:9,color:m.enabled===false?"var(--mu)":"var(--tx)",
                   fontFamily:"'IBM Plex Mono',monospace",textDecoration:m.enabled===false?"line-through":"none"}}>mapping {mi+1}</span>
                 <button onClick={function(){delMapping(mi)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
