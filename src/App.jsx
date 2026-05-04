@@ -4344,10 +4344,13 @@ function ColourMapEditor(props) {
       {/* Controls */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         <button className="ac" style={{flex:"1 1 0",minWidth:90}} onClick={addStop}>+ stop</button>
-        <button onClick={function(){up({reverse:!p.reverse})}}
+        <button onClick={function(){
+            var rev=stops.slice().reverse().map(function(s){return Object.assign({},s,{pos:parseFloat((1-s.pos).toFixed(4))})})
+            setStops(rev)
+          }}
           className={p.reverse?"ac":"ghost"}
           style={{flex:"1 1 0",minWidth:90}}>
-          {p.reverse?"reversed":"reverse"}
+          reverse
         </button>
       </div>
       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
