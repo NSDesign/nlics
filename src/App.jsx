@@ -2367,7 +2367,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
   if(hasTfx) applyTransformStack(ctx,localTfxOps,globalTfxOps,w,h)
   for(var ei=0;ei<stack.length;ei++){
     var efx=stack[ei]; if(!efx.enabled) continue
-    if(efx.type==="show-points"){spDeferred.push(efx);continue}
+    if(efx.type==="show-points"||(efx.type==="point-map"&&efx.params&&efx.params.showLabels)){spDeferred.push(efx);continue}
     if(efx.type==="transform"){continue}  // already applied above
     if(efx.type==="match"){applyMatchEfx(ctx,efx.params||{},w,h);continue}
     // Points-domain effects: transform _points, skip canvas
