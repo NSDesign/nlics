@@ -4349,6 +4349,96 @@ function ColourMapEditor(props) {
   )
 }
 
+// ── BezierCurveEditor ─────────────────────────────────────────────────────────
+// Reusable cubic bezier curve editor: (0,0)→P1→P2→(1,1)
+// Props: curve={p1x,p1y,p2x,p2y}, onChange(curve), label (optional)
+// Shared by: point-map curve remap, curves effect, gradient map (future)
+function BezierCurveEditor(props) {
+  var cv=props.curve||{p1x:.33,p1y:.33,p2x:.67,p2y:.67}
+  var viewSt=useState("curve"); var view=viewSt[0],setView=viewSt[1]
+  var containerRef=useRef(null)
+  var szSt=useState(200); var sz=szSt[0],setSz=szSt[1]
+  useEffect(function(){
+    if(!containerRef.current)return
+    var ro=new ResizeObserver(function(entries){
+      setSz(Math.floor(entries[0].contentRect.width))
+    })
+    ro.observe(containerRef.current)
+    return function(){ro.disconnect()}
+  },[])
+  var pad=10
+  var inner=Math.max(80,sz-pad*2)
+  var toS=function(v){return pad+v*inner}
+  var fromS=function(px){return Math.max(0,Math.min(1,(px-pad)/inner))}
+  function startDrag(e){
+    var rect=e.currentTarget.getBoundingClientRect()  // stored at pointerdown
+    var ex=e.clientX-rect.left,ey=e.clientY-rect.top
+    var d1=Math.hypot(ex-toS(cv.p1x),ey-toS(1-cv.p1y))
+    var d2=Math.hypot(ex-toS(cv.p2x),ey-toS(1-cv.p2y))
+    var drag=d1<d2?"p1":"p2"
+    e.currentTarget.setPointerCapture(e.pointerId)
+    function onMove(ev){
+      var nx=fromS(ev.clientX-rect.left)
+      var ny=1-fromS(ev.clientY-rect.top)
+      props.onChange(drag==="p1"
+        ?Object.assign({},cv,{p1x:nx,p1y:ny})
+        :Object.assign({},cv,{p2x:nx,p2y:ny}))
+    }
+    e.currentTarget.addEventListener("pointermove",onMove)
+    e.currentTarget.addEventListener("pointerup",function(){
+      e.currentTarget.removeEventListener("pointermove",onMove)
+    },{once:true})
+  }
+  var slFmt=function(v){return v.toFixed(2)}
+  if(view==="sliders") return (
+    <div>
+      <div style={{display:"flex",gap:6,marginBottom:6}}>
+        <span style={{flex:1,fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",alignSelf:"center"}}>{props.label||"curve"}</span>
+        <button className={view==="curve"?"ac":"ghost"} style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){setView("curve")}}>curve</button>
+        <button className={view==="sliders"?"ac":"ghost"} style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){setView("sliders")}}>sliders</button>
+      </div>
+      <Sl l="P1 x" v={cv.p1x} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p1x:v}))}}/>
+      <Sl l="P1 y" v={cv.p1y} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p1y:v}))}}/>
+      <Sl l="P2 x" v={cv.p2x} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p2x:v}))}}/>
+      <Sl l="P2 y" v={cv.p2y} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p2y:v}))}}/>
+    </div>
+  )
+  var tsz=pad*2+inner
+  return (
+    <div>
+      <div style={{display:"flex",gap:6,marginBottom:4}}>
+        <span style={{flex:1,fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",alignSelf:"center"}}>{props.label||"curve"}</span>
+        <button className="ghost" style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){props.onChange({p1x:.33,p1y:.33,p2x:.67,p2y:.67})}}>reset</button>
+        <button className={view==="curve"?"ac":"ghost"} style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){setView("curve")}}>curve</button>
+        <button className={view==="sliders"?"ac":"ghost"} style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){setView("sliders")}}>sliders</button>
+      </div>
+      <div ref={containerRef} style={{width:"100%"}}>
+        <div style={{width:tsz,height:tsz,background:"var(--el)",borderRadius:6,
+            border:"1px solid var(--bd)",touchAction:"none",userSelect:"none"}}
+          onPointerDown={startDrag}>
+          <svg width={tsz} height={tsz} style={{display:"block"}}>
+            {[.25,.5,.75].map(function(v,vi){return <g key={vi}>
+              <line x1={toS(v)} y1={pad} x2={toS(v)} y2={pad+inner} stroke="var(--bd)" strokeWidth={.5}/>
+              <line x1={pad} y1={toS(v)} x2={pad+inner} y2={toS(v)} stroke="var(--bd)" strokeWidth={.5}/>
+            </g>})}
+            <line x1={pad} y1={pad+inner} x2={pad+inner} y2={pad} stroke="var(--bd)" strokeWidth={1} strokeDasharray="3,3"/>
+            <path d={"M "+pad+" "+(pad+inner)+" C "+toS(cv.p1x)+" "+toS(1-cv.p1y)+" "+toS(cv.p2x)+" "+toS(1-cv.p2y)+" "+(pad+inner)+" "+pad}
+              fill="none" stroke="var(--ac)" strokeWidth={2}/>
+            <line x1={pad} y1={pad+inner} x2={toS(cv.p1x)} y2={toS(1-cv.p1y)} stroke="var(--mu)" strokeWidth={1}/>
+            <line x1={pad+inner} y1={pad} x2={toS(cv.p2x)} y2={toS(1-cv.p2y)} stroke="var(--mu)" strokeWidth={1}/>
+            <circle cx={toS(cv.p1x)} cy={toS(1-cv.p1y)} r={8} fill="var(--ac)" style={{cursor:"grab"}}/>
+            <circle cx={toS(cv.p2x)} cy={toS(1-cv.p2y)} r={8} fill="var(--lv)" style={{cursor:"grab"}}/>
+          </svg>
+        </div>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"var(--mu)",
+          fontFamily:"'IBM Plex Mono',monospace",padding:"2px 0 4px"}}>
+        <span>P1 ({cv.p1x.toFixed(2)},{cv.p1y.toFixed(2)})</span>
+        <span>P2 ({cv.p2x.toFixed(2)},{cv.p2y.toFixed(2)})</span>
+      </div>
+    </div>
+  )
+}
 function EfxPrimary(props) {
   var efx=props.efx, p=efx.params
   // Resolve source geometry shape type for attribute filtering
@@ -4367,15 +4457,21 @@ function EfxPrimary(props) {
   if(efx.type==="posterize")  return <Sl l="levels" v={p.levels} mn={2} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({levels:v})}}/>
   if(efx.type==="exposure")   return <Sl l="stops" v={p.stops} mn={-3} mx={3} st={.1} fmt={function(v){return v.toFixed(1)+"EV"}} fn={function(v){up({stops:v})}}/>
   if(efx.type==="levels")     return <Sl l="gamma" v={p.gamma!=null?p.gamma:1} mn={.1} mx={4} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up({gamma:v})}}/>
-  if(efx.type==="curves") return (
+  if(efx.type==="curves") {
+    // Convert bezier curve params to/from legacy in/out black/white if needed
+    var curveParms=p.curve||{p1x:.33,p1y:.33,p2x:.67,p2y:.67}
+    return (
     <div>
-      <Sl l="in black"  v={p.inBlack||0}                    mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inBlack:v})}}/>
-      <Sl l="in white"  v={p.inWhite==null?255:p.inWhite}   mn={1}   mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inWhite:v})}}/>
-      <Sl l="out black" v={p.outBlack||0}                   mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outBlack:v})}}/>
-      <Sl l="out white" v={p.outWhite==null?255:p.outWhite} mn={1}   mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outWhite:v})}}/>
-      <Sl l="S-curve"   v={p.sCurve||0}                     mn={-100} mx={100} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({sCurve:v})}}/>
+      <BezierCurveEditor curve={curveParms} label="tone curve"
+        onChange={function(c){up({curve:c})}}/>
+      <div style={{borderTop:"1px solid var(--bd)",marginTop:6,paddingTop:6}}>
+        <Sl l="in black"  v={p.inBlack||0}                    mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inBlack:v})}}/>
+        <Sl l="in white"  v={p.inWhite==null?255:p.inWhite}   mn={1}   mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inWhite:v})}}/>
+        <Sl l="out black" v={p.outBlack||0}                   mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outBlack:v})}}/>
+        <Sl l="out white" v={p.outWhite==null?255:p.outWhite} mn={1}   mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outWhite:v})}}/>
+      </div>
     </div>
-  )
+  )}
   if(efx.type==="colour-map") return <ColourMapEditor efx={efx} p={p} up={up}/>
   if(efx.type==="sharpen") return (
     <Sl l="amount" v={p.amount==null?100:p.amount} mn={0} mx={500} st={1}
@@ -4777,43 +4873,10 @@ function EfxPrimary(props) {
                   {m.curveEnabled?"on":"off"}
                 </button>
               </div>
-              {m.curveEnabled&&(function(){
-                var cv2=m.curve||{p1x:.33,p1y:.33,p2x:.67,p2y:.67}
-                var sz=120,pad=8
-                var toS=function(v){return pad+v*(sz-pad*2)}
-                return <div style={{position:"relative",width:sz,height:sz,background:"var(--el)",
-                    borderRadius:4,border:"1px solid var(--bd)",margin:"0 auto 8px",touchAction:"none"}}
-                  onPointerDown={function(e){
-                    var rect=e.currentTarget.getBoundingClientRect()
-                    var ex=e.clientX-rect.left,ey=e.clientY-rect.top
-                    var fromS=function(v){return Math.max(0,Math.min(1,(v-pad)/(sz-pad*2)))}
-                    var d1=Math.hypot(ex-toS(cv2.p1x),ey-toS(1-cv2.p1y))
-                    var d2=Math.hypot(ex-toS(cv2.p2x),ey-toS(1-cv2.p2y))
-                    var drag=d1<d2?"p1":"p2"
-                    e.currentTarget.setPointerCapture(e.pointerId)
-                    var mv=function(ev){
-                      var r2=e.currentTarget.getBoundingClientRect()
-                      var nx=fromS(ev.clientX-r2.left),ny=1-fromS(ev.clientY-r2.top)
-                      updMapping(mi,{curve:drag==="p1"?Object.assign({},cv2,{p1x:nx,p1y:ny}):Object.assign({},cv2,{p2x:nx,p2y:ny})})
-                    }
-                    e.currentTarget.addEventListener("pointermove",mv)
-                    e.currentTarget.addEventListener("pointerup",function(){e.currentTarget.removeEventListener("pointermove",mv)},{once:true})
-                  }}>
-                  <svg width={sz} height={sz} style={{display:"block"}}>
-                    {[.25,.5,.75].map(function(v,vi){return <g key={vi}>
-                      <line x1={toS(v)} y1={pad} x2={toS(v)} y2={sz-pad} stroke="var(--bd)" strokeWidth={.5}/>
-                      <line x1={pad} y1={toS(v)} x2={sz-pad} y2={toS(v)} stroke="var(--bd)" strokeWidth={.5}/>
-                    </g>})}
-                    <line x1={pad} y1={sz-pad} x2={sz-pad} y2={pad} stroke="var(--bd)" strokeWidth={1} strokeDasharray="3,3"/>
-                    <path d={"M "+pad+" "+(sz-pad)+" C "+toS(cv2.p1x)+" "+toS(1-cv2.p1y)+" "+toS(cv2.p2x)+" "+toS(1-cv2.p2y)+" "+(sz-pad)+" "+pad}
-                      fill="none" stroke="var(--ac)" strokeWidth={2}/>
-                    <line x1={pad} y1={sz-pad} x2={toS(cv2.p1x)} y2={toS(1-cv2.p1y)} stroke="var(--mu)" strokeWidth={1}/>
-                    <line x1={sz-pad} y1={pad} x2={toS(cv2.p2x)} y2={toS(1-cv2.p2y)} stroke="var(--mu)" strokeWidth={1}/>
-                    <circle cx={toS(cv2.p1x)} cy={toS(1-cv2.p1y)} r={6} fill="var(--ac)" style={{cursor:"grab"}}/>
-                    <circle cx={toS(cv2.p2x)} cy={toS(1-cv2.p2y)} r={6} fill="var(--lv)" style={{cursor:"grab"}}/>
-                  </svg>
-                </div>
-              })()}
+              {m.curveEnabled&&<BezierCurveEditor
+                curve={m.curve||{p1x:.33,p1y:.33,p2x:.67,p2y:.67}}
+                label="curve remap"
+                onChange={function(c){updMapping(mi,{curve:c})}}/>}
               {(function(){
                 var oa=m.outputAttr||"scale"
                 var defMin=oa==="opacity"?0:oa==="rotation"?-180:oa==="scale"?0:oa==="sourceIndex"?0:-1
