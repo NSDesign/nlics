@@ -4245,7 +4245,7 @@ function CreatorProps(props) {
 /* ─── COLOUR MAP EDITOR ──────────────────────────────── */
 function ColourMapEditor(props) {
   var p=props.p, up=props.up
-  var stops=(p.stops||[]).slice().sort(function(a,b){return a.pos-b.pos})
+  var stops=(p.stops||[]).slice()  // display in array order — sort only for CSS/engine
   function setStops(ns){up({stops:ns})}
   function updStop(i,nw){var ns=stops.map(function(s,si){return si===i?Object.assign({},s,nw):s});setStops(ns)}
   function addStop(){
@@ -4290,9 +4290,8 @@ function ColourMapEditor(props) {
     return "rgba("+r+","+g+","+b+","+a.toFixed(3)+")"
   }
   // CSS gradient — includes alpha, rendered on a checkered pattern for visibility
-  var gradStops=(p.reverse?stops.slice().reverse().map(function(s){return Object.assign({},s,{pos:1-s.pos})}):stops)
-    .slice().sort(function(a,b){return a.pos-b.pos})
-  var grad=gradStops.map(function(s){return rgbaStr(s.color,s.alpha)+" "+(s.pos*100).toFixed(1)+"%"}).join(",")
+  var grad=stops.slice().sort(function(a,b){return a.pos-b.pos})
+    .map(function(s){return rgbaStr(s.color,s.alpha)+" "+(s.pos*100).toFixed(1)+"%"}).join(",")
   // Checkerboard background so transparency is visible
   var checker="repeating-conic-gradient(#242440 0deg 90deg, #181830 90deg 180deg) 0 0 / 12px 12px"
   return (
