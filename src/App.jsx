@@ -534,6 +534,14 @@ function mkEfx(t) {
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, fillOpacity:100, opacity:100, blendMode:"multiply", effectStack:[], enabled:true, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[], fillOpacity:100 } }
+function mkRasterise() {
+  return { id:uid(), name:"Rasterise "+(_uid-100), type:"rasterise", section:2, enabled:true,
+    sourceId:null, width:512, height:512, antialias:true, outEfx:[], outMask:[] }
+}
+function mkIsolate() {
+  return { id:uid(), name:"Isolate "+(_uid-100), type:"isolate", section:2, enabled:true,
+    sourceId:null, threshold:.5, invert:false, outEfx:[], outMask:[] }
+}
 function mkBlender() { return { id:uid(), name:"Blender "+(_uid-100), type:"blender", section:2, enabled:true, inputA:mkSlot(), inputB:mkSlot(), mode:"normal", amount:100, switched:false, maskMode:"add", maskAmount:100, blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}}, outFillOpacity:100, outOpacity:100, outEfx:[], outMask:[] } }
 function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled:true,
   effectStack:[], maskStack:[], blendMode:"normal", opacity:100, maskMode:"add", maskAmount:100,
@@ -6184,9 +6192,9 @@ function BlenderProps(props) {
     var body = (
       <>
         <div className="card-body" style={{paddingBottom:0}}>
-          <Sl l="fill" v={node.outFillOpacity==null?100:node.outFillOpacity} mn={0} mx={100} st={1}
+{!isPoint&&          <Sl l="fill" v={node.outFillOpacity==null?100:node.outFillOpacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
-            fn={function(v){onChange(Object.assign({},node,{outFillOpacity:v}))}}/>
+            fn={function(v){onChange(Object.assign({},node,{outFillOpacity:v}))}}/>}
           <Sl l="opacity" v={node.outOpacity==null?100:node.outOpacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
             fn={function(v){onChange(Object.assign({},node,{outOpacity:v}))}}/>
@@ -6564,7 +6572,7 @@ function AddMenu(props) {
   },[open])
   var s1standard=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Geometry"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
   var s1advanced=[{t:"tile",l:"Tile"}]
-  var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
+  var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"},{t:"rasterise",l:"Rasterise ⟶px"},{t:"isolate",l:"Isolate ⟶pt"}]
   return (
     <div ref={anchorRef} style={{position:"relative"}}>
       <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
@@ -6813,10 +6821,9 @@ function LayerCard(props) {
   var nEfx=(lyr.effectStack||[]).length, nMask=(lyr.maskStack||[]).length
   var lyrTabs=[
     {id:"source",  label:"Source"},
-    {id:"effects", label:"Fx"+(nEfx>0?" ("+nEfx+")":""), color:"ac"},
-    {id:"masks",   label:"Mask"+(nMask>0?" ("+nMask+")":""), color:"lv"},
-    {id:"layer",   label:"Layer"},
-  ]
+    {id:"effects", label:(isPoint?"Modifiers":"Fx")+(nEfx>0?" ("+nEfx+")":""), color:"ac"},
+    {id:"masks",   label:(isPoint?"Isolate":"Mask")+(nMask>0?" ("+nMask+")":""), color:"lv"},
+  ].concat(isPoint?[]:[{id:"layer", label:"Layer"}])
   var isCollapsed = props.collapsed || false
   var delArmedSt=useState(false); var delArmed=delArmedSt[0], setDelArmed=delArmedSt[1]
   return (
@@ -6872,6 +6879,7 @@ function LayerCard(props) {
             stack={lyr.effectStack||[]} nodes={props.nodes} selfId={props.selfId}
             navPush={props.navPush} iC={props.iC}
             sourceId={lyr.refId}
+            context={props.context}
             basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
@@ -7828,7 +7836,7 @@ function App() {
     iC.current.set(url,img)
     img.src=url
   }
-  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
+  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="rasterise"?mkRasterise():type==="isolate"?mkIsolate():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
   function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id){setDispId(null);setDispMask(false);setDispSlot(null)}}
   function upd(u){
     setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})
