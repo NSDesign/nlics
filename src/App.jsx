@@ -4366,85 +4366,87 @@ function BezierCurveEditor(props) {
   var cv=props.curve||{p1x:.33,p1y:.33,p2x:.67,p2y:.67}
   var viewSt=useState("curve"); var view=viewSt[0],setView=viewSt[1]
   var containerRef=useRef(null)
-  var szSt=useState(200); var sz=szSt[0],setSz=szSt[1]
+  var szSt=useState(0); var sz=szSt[0],setSz=szSt[1]
+  // Always observe container width regardless of view mode
   useEffect(function(){
-    if(!containerRef.current)return
+    var el=containerRef.current; if(!el) return
     var ro=new ResizeObserver(function(entries){
-      setSz(Math.floor(entries[0].contentRect.width))
+      var w=Math.floor(entries[0].contentRect.width)
+      if(w>0) setSz(w)
     })
-    ro.observe(containerRef.current)
+    ro.observe(el)
+    // Initial measure
+    var iw=Math.floor(el.getBoundingClientRect().width)
+    if(iw>0) setSz(iw)
     return function(){ro.disconnect()}
   },[])
   var pad=10
-  var inner=Math.max(80,sz-pad*2)
+  var inner=Math.max(80,(sz||200)-pad*2)
   var toS=function(v){return pad+v*inner}
   var fromS=function(px){return Math.max(0,Math.min(1,(px-pad)/inner))}
+  var tsz=pad*2+inner
+  var slFmt=function(v){return v.toFixed(2)}
+  function reset(){props.onChange({p1x:.33,p1y:.33,p2x:.67,p2y:.67})}
   function startDrag(e){
-    var rect=e.currentTarget.getBoundingClientRect()  // stored at pointerdown
+    var rect=e.currentTarget.getBoundingClientRect()
     var ex=e.clientX-rect.left,ey=e.clientY-rect.top
     var d1=Math.hypot(ex-toS(cv.p1x),ey-toS(1-cv.p1y))
     var d2=Math.hypot(ex-toS(cv.p2x),ey-toS(1-cv.p2y))
     var drag=d1<d2?"p1":"p2"
     e.currentTarget.setPointerCapture(e.pointerId)
     function onMove(ev){
-      var nx=fromS(ev.clientX-rect.left)
-      var ny=1-fromS(ev.clientY-rect.top)
-      props.onChange(drag==="p1"
-        ?Object.assign({},cv,{p1x:nx,p1y:ny})
-        :Object.assign({},cv,{p2x:nx,p2y:ny}))
+      var nx=fromS(ev.clientX-rect.left),ny=1-fromS(ev.clientY-rect.top)
+      props.onChange(drag==="p1"?Object.assign({},cv,{p1x:nx,p1y:ny}):Object.assign({},cv,{p2x:nx,p2y:ny}))
     }
     e.currentTarget.addEventListener("pointermove",onMove)
-    e.currentTarget.addEventListener("pointerup",function(){
-      e.currentTarget.removeEventListener("pointermove",onMove)
-    },{once:true})
+    e.currentTarget.addEventListener("pointerup",function(){e.currentTarget.removeEventListener("pointermove",onMove)},{once:true})
   }
-  var slFmt=function(v){return v.toFixed(2)}
-  if(view==="sliders") return (
-    <div>
-      <div style={{display:"flex",gap:6,marginBottom:6}}>
-        <span style={{flex:1,fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",alignSelf:"center"}}>{props.label||"curve"}</span>
-        <button className={view==="curve"?"ac":"ghost"} style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){setView("curve")}}>curve</button>
-        <button className={view==="sliders"?"ac":"ghost"} style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){setView("sliders")}}>sliders</button>
-      </div>
-      <Sl l="P1 x" v={cv.p1x} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p1x:v}))}}/>
-      <Sl l="P1 y" v={cv.p1y} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p1y:v}))}}/>
-      <Sl l="P2 x" v={cv.p2x} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p2x:v}))}}/>
-      <Sl l="P2 y" v={cv.p2y} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p2y:v}))}}/>
+  // Toolbar shared by both modes
+  var toolbar=(
+    <div style={{display:"flex",gap:6,marginBottom:4,alignItems:"center"}}>
+      <span style={{flex:1,fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>{props.label||"curve"}</span>
+      <button className="ghost" style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={reset}>reset</button>
+      <button className={view==="curve"?"ac":"ghost"} style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){setView("curve")}}>curve</button>
+      <button className={view==="sliders"?"ac":"ghost"} style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){setView("sliders")}}>sliders</button>
     </div>
   )
-  var tsz=pad*2+inner
   return (
-    <div>
-      <div style={{display:"flex",gap:6,marginBottom:4}}>
-        <span style={{flex:1,fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",alignSelf:"center"}}>{props.label||"curve"}</span>
-        <button className="ghost" style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){props.onChange({p1x:.33,p1y:.33,p2x:.67,p2y:.67})}}>reset</button>
-        <button className={view==="curve"?"ac":"ghost"} style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){setView("curve")}}>curve</button>
-        <button className={view==="sliders"?"ac":"ghost"} style={{fontSize:9,padding:"2px 6px",minHeight:24}} onClick={function(){setView("sliders")}}>sliders</button>
-      </div>
-      <div ref={containerRef} style={{width:"100%"}}>
-        <div style={{width:tsz,height:tsz,background:"var(--el)",borderRadius:6,
-            border:"1px solid var(--bd)",touchAction:"none",userSelect:"none"}}
-          onPointerDown={startDrag}>
-          <svg width={tsz} height={tsz} style={{display:"block"}}>
-            {[.25,.5,.75].map(function(v,vi){return <g key={vi}>
-              <line x1={toS(v)} y1={pad} x2={toS(v)} y2={pad+inner} stroke="var(--bd)" strokeWidth={.5}/>
-              <line x1={pad} y1={toS(v)} x2={pad+inner} y2={toS(v)} stroke="var(--bd)" strokeWidth={.5}/>
-            </g>})}
-            <line x1={pad} y1={pad+inner} x2={pad+inner} y2={pad} stroke="var(--bd)" strokeWidth={1} strokeDasharray="3,3"/>
-            <path d={"M "+pad+" "+(pad+inner)+" C "+toS(cv.p1x)+" "+toS(1-cv.p1y)+" "+toS(cv.p2x)+" "+toS(1-cv.p2y)+" "+(pad+inner)+" "+pad}
-              fill="none" stroke="var(--ac)" strokeWidth={2}/>
-            <line x1={pad} y1={pad+inner} x2={toS(cv.p1x)} y2={toS(1-cv.p1y)} stroke="var(--mu)" strokeWidth={1}/>
-            <line x1={pad+inner} y1={pad} x2={toS(cv.p2x)} y2={toS(1-cv.p2y)} stroke="var(--mu)" strokeWidth={1}/>
-            <circle cx={toS(cv.p1x)} cy={toS(1-cv.p1y)} r={8} fill="var(--ac)" style={{cursor:"grab"}}/>
-            <circle cx={toS(cv.p2x)} cy={toS(1-cv.p2y)} r={8} fill="var(--lv)" style={{cursor:"grab"}}/>
-          </svg>
+    <div ref={containerRef} style={{width:"100%"}}>
+      {toolbar}
+      {view==="curve"&&sz>0&&(
+        <div>
+          <div style={{width:tsz,height:tsz,background:"var(--el)",borderRadius:6,
+              border:"1px solid var(--bd)",touchAction:"none",userSelect:"none"}}
+            onPointerDown={startDrag}>
+            <svg width={tsz} height={tsz} style={{display:"block"}}>
+              {[.25,.5,.75].map(function(v,vi){return <g key={vi}>
+                <line x1={toS(v)} y1={pad} x2={toS(v)} y2={pad+inner} stroke="var(--bd)" strokeWidth={.5}/>
+                <line x1={pad} y1={toS(v)} x2={pad+inner} y2={toS(v)} stroke="var(--bd)" strokeWidth={.5}/>
+              </g>})}
+              <line x1={pad} y1={pad+inner} x2={pad+inner} y2={pad} stroke="var(--bd)" strokeWidth={1} strokeDasharray="3,3"/>
+              <path d={"M "+pad+" "+(pad+inner)+" C "+toS(cv.p1x)+" "+toS(1-cv.p1y)+" "+toS(cv.p2x)+" "+toS(1-cv.p2y)+" "+(pad+inner)+" "+pad}
+                fill="none" stroke="var(--ac)" strokeWidth={2}/>
+              <line x1={pad} y1={pad+inner} x2={toS(cv.p1x)} y2={toS(1-cv.p1y)} stroke="var(--mu)" strokeWidth={1}/>
+              <line x1={pad+inner} y1={pad} x2={toS(cv.p2x)} y2={toS(1-cv.p2y)} stroke="var(--mu)" strokeWidth={1}/>
+              <circle cx={toS(cv.p1x)} cy={toS(1-cv.p1y)} r={8} fill="var(--ac)" style={{cursor:"grab"}}/>
+              <circle cx={toS(cv.p2x)} cy={toS(1-cv.p2y)} r={8} fill="var(--lv)" style={{cursor:"grab"}}/>
+            </svg>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"var(--mu)",
+              fontFamily:"'IBM Plex Mono',monospace",padding:"2px 0 4px"}}>
+            <span style={{color:"var(--ac)"}}>● P1 ({cv.p1x.toFixed(2)},{cv.p1y.toFixed(2)})</span>
+            <span style={{color:"var(--lv)"}}>● P2 ({cv.p2x.toFixed(2)},{cv.p2y.toFixed(2)})</span>
+          </div>
         </div>
-      </div>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"var(--mu)",
-          fontFamily:"'IBM Plex Mono',monospace",padding:"2px 0 4px"}}>
-        <span>P1 ({cv.p1x.toFixed(2)},{cv.p1y.toFixed(2)})</span>
-        <span>P2 ({cv.p2x.toFixed(2)},{cv.p2y.toFixed(2)})</span>
-      </div>
+      )}
+      {view==="sliders"&&(
+        <div>
+          <Sl l="P1 x" v={cv.p1x} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p1x:v}))}}/>
+          <Sl l="P1 y" v={cv.p1y} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p1y:v}))}}/>
+          <Sl l="P2 x" v={cv.p2x} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p2x:v}))}}/>
+          <Sl l="P2 y" v={cv.p2y} mn={0} mx={1} st={.01} fmt={slFmt} fn={function(v){props.onChange(Object.assign({},cv,{p2y:v}))}}/>
+        </div>
+      )}
     </div>
   )
 }
