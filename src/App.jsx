@@ -542,7 +542,9 @@ function mkLayer(refId) { return { id:uid(), refId:refId||null, name:"", enabled
 function mkLayerComp() {
   var l1=mkLayer(); l1.name="layer 1"
   var l2=mkLayer(); l2.name="layer 2"
-  return { id:uid(), name:"Layer Comp "+(_uid-100), type:"layers", section:2, enabled:true, layers:[l2,l1], outFillOpacity:100, outOpacity:100, outEfx:[], outMask:[] }
+  return { id:uid(), name:"Layer Comp "+(_uid-100), type:"layers", section:2, enabled:true,
+    context:"pixel",  // "pixel" | "point"
+    layers:[l2,l1], outFillOpacity:100, outOpacity:100, outEfx:[], outMask:[] }
 }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
 
@@ -3631,6 +3633,8 @@ function SolidP(props) {
 }
 // Geometry types that are point-based (use point render controls)
 var GEO_POINT_TYPES = ["grid","spiral","polar-grid","phyllotaxis","scatter"]
+// Effects available in point context (transform + point-specific only)
+var POINT_CONTEXT_EFFECTS = ["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","uv-distort","match","point-map","source-at-points","show-points"]
 function getSourceGeomType(nodes, sourceId) {
   if(!sourceId||!nodes) return null
   var n=(nodes||[]).find(function(x){return x.id===sourceId})
@@ -5408,16 +5412,7 @@ function EfxCard(props) {
         <button className="icon-btn sm" onClick={function(){props.onChange(Object.assign({},efx,{enabled:!efx.enabled}))}} style={{color:efx.enabled?"var(--ac)":"var(--mu)",fontSize:18}}>
           {efx.enabled?"●":"○"}
         </button>
-        {["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","uv-distort"].includes(efx.type)&&(
-          <button onClick={function(){props.onChange(Object.assign({},efx,{domain:efx.domain==="points"?"pixels":"points"}))}}
-            style={{fontSize:8,padding:"2px 6px",borderRadius:3,cursor:"pointer",
-              fontFamily:"'IBM Plex Mono',monospace",
-              border:"1px solid "+(efx.domain==="points"?"var(--lv)":"var(--bd)"),
-              background:efx.domain==="points"?"rgba(176,96,240,.15)":"none",
-              color:efx.domain==="points"?"var(--lv)":"var(--mu)"}}>
-            {efx.domain==="points"?"pt":"px"}
-          </button>
-        )}
+
         {/* Type button — tap to open effect-swap picker */}
         <button ref={swapAnchorRef} onClick={function(){setSwap(swap==="picking"?null:"picking")}}
           title="Tap to swap effect type"
@@ -5696,9 +5691,9 @@ function EfxStack(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[lkOpen])
 
-  function addEfx(type){props.onChange([mkEfx(type)].concat(props.stack))}
+  function addEfx(type){props.onChange(props.stack.concat([mkEfx(type)]))}
   function linkStack(stackId){
-    props.onChange([mkEfxStackRef(stackId)].concat(props.stack))
+    props.onChange(props.stack.concat([mkEfxStackRef(stackId)]))
     setLkOpen(false)
   }
   function upd(id,nw){props.onChange(props.stack.map(function(e){return e.id===id?nw:e}))}
@@ -5805,7 +5800,7 @@ function MaskStackPanel(props) {
 
   function addMask(){props.onChange([mkMask()].concat(props.stack))}
   function linkStack(stackId){
-    props.onChange([mkMaskStackRef(stackId)].concat(props.stack))
+    props.onChange(props.stack.concat([mkMaskStackRef(stackId)]))
     setLkOpen(false)
   }
   function upd(id,nw){props.onChange(props.stack.map(function(m){return m.id===id?nw:m}))}
@@ -5888,8 +5883,8 @@ function SlotPanel(props) {
   var nEfx=(slot.effectStack||[]).length, nMask=(slot.maskStack||[]).length
   var tabs=[
     {id:"source", label:"Source"},
-    {id:"effects",label:"Effects"+(nEfx>0?" ("+nEfx+")":""),color:"ac"},
-    {id:"masks",  label:"Masks"+(nMask>0?" ("+nMask+")":""),color:"lv"},
+    {id:"effects",label:((props.context||props.node&&props.node.context)==="point"?"Modifiers":"Effects")+(nEfx>0?" ("+nEfx+")":""),color:"ac"},
+    {id:"masks",  label:((props.context||props.node&&props.node.context)==="point"?"Isolate":"Masks")+(nMask>0?" ("+nMask+")":""),color:"lv"},
   ]
   var inner = (
     <>
@@ -6062,8 +6057,8 @@ function BlenderProps(props) {
 
   var nOutEfx=(node.outEfx||[]).length, nOutMask=(node.outMask||[]).length
   var outTabs=[
-    {id:"effects",label:"Effects"+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
-    {id:"masks",  label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
+    {id:"effects",label:(isPoint?"Modifiers":"Effects")+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
+    {id:"masks",  label:(isPoint?"Isolate":"Masks")+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
   ]
   // Per-blender collapse state (accordion) / active-tab set (tabs) — lives on node._ui
   var ui = node._ui || {}
