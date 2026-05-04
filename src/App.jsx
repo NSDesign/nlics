@@ -2283,13 +2283,21 @@ function applyEfxToPoints(pts,efx,w,h) {
           tV=Math.max(0,Math.min(1,by((lo+hi)/2)))
         }
         var mapped=tV*(outMax-outMin)+outMin
-        var curV=pt[m.outputAttr]==null?1:pt[m.outputAttr]
-        var cm=m.combine||"replace"
-        if(cm==="replace")       pt[m.outputAttr]=mapped
-        else if(cm==="multiply") pt[m.outputAttr]=curV*mapped
-        else if(cm==="add")      pt[m.outputAttr]=curV+mapped
-        else if(cm==="subtract") pt[m.outputAttr]=curV-mapped
-        else pt[m.outputAttr]=mapped
+        if(m.outputAttr==="color"){
+          var cA=m.colorA||"#000000",cB=m.colorB||"#ffffff"
+          var rA=parseInt(cA.slice(1,3),16),gA=parseInt(cA.slice(3,5),16),bA=parseInt(cA.slice(5,7),16)
+          var rB=parseInt(cB.slice(1,3),16),gB=parseInt(cB.slice(3,5),16),bB=parseInt(cB.slice(5,7),16)
+          var rC=Math.round(rA+(rB-rA)*tV),gC=Math.round(gA+(gB-gA)*tV),bC=Math.round(bA+(bB-bA)*tV)
+          pt.color="#"+("0"+rC.toString(16)).slice(-2)+("0"+gC.toString(16)).slice(-2)+("0"+bC.toString(16)).slice(-2)
+        } else {
+          var curV=pt[m.outputAttr]==null?1:pt[m.outputAttr]
+          var cm=m.combine||"replace"
+          if(cm==="replace")       pt[m.outputAttr]=mapped
+          else if(cm==="multiply") pt[m.outputAttr]=curV*mapped
+          else if(cm==="add")      pt[m.outputAttr]=curV+mapped
+          else if(cm==="subtract") pt[m.outputAttr]=curV-mapped
+          else pt[m.outputAttr]=mapped
+        }
       })
     })
   }
@@ -3633,7 +3641,7 @@ function getSourceGeomType(nodes, sourceId) {
 }
 function getPointAttrs(geomType) {
   var base=["pointIndex","x","y"]
-  var mapped=["scale","rotation","opacity","sourceIndex"]
+  var mapped=["scale","rotation","opacity","color","sourceIndex"]
   if(geomType==="grid")        return base.concat(["row","col"]).concat(mapped)
   if(geomType==="polar-grid") return base.concat(["ringIndex","sectorIndex"]).concat(mapped)
   if(geomType==="spiral")     return base.concat(["spiralT"]).concat(mapped)
@@ -4882,7 +4890,7 @@ function EfxPrimary(props) {
                 <button onClick={function(){delMapping(mi)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
               </div>
               <Se l="input" v={m.inputAttr||"pointIndex"} opts={ptAttrs.filter(function(a){return ["scale","rotation","opacity","sourceIndex"].indexOf(a)<0})} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
-              <Se l="output" v={m.outputAttr||"scale"} opts={["scale","rotation","opacity","x","y","sourceIndex"]} fn={function(v){updMapping(mi,{outputAttr:v,min:null,max:null})}}/>
+              <Se l="output" v={m.outputAttr||"scale"} opts={["scale","rotation","opacity","x","y","sourceIndex","color"]} fn={function(v){updMapping(mi,{outputAttr:v,min:null,max:null})}}/>
               <Se l="mode" v={m.mode||"linear"} opts={["linear","normalise","invert","log","exp","random"]} fn={function(v){updMapping(mi,{mode:v})}}/>
               <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 2px"}}>
                 <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>curve remap</span>
@@ -4906,8 +4914,13 @@ function EfxPrimary(props) {
                   <Sl l="max out" v={m.max==null?defMax:m.max} mn={mn} mx={mx} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){updMapping(mi,{max:v})}}/>
                 </div>)
               })()}
-              <Se l="combine" v={m.combine||"replace"} opts={["replace","add","subtract","multiply"]}
-                fn={function(v){updMapping(mi,{combine:v})}}/>
+              {m.outputAttr==="color"
+                ? <div>
+                    <Co l="colour A" v={m.colorA||"#000000"} fn={function(v){updMapping(mi,{colorA:v})}}/>
+                    <Co l="colour B" v={m.colorB||"#ffffff"} fn={function(v){updMapping(mi,{colorB:v})}}/>
+                  </div>
+                : <Se l="combine" v={m.combine||"replace"} opts={["replace","add","subtract","multiply"]}
+                    fn={function(v){updMapping(mi,{combine:v})}}/>}
             </div>
           )
         })}
