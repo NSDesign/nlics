@@ -803,12 +803,20 @@ function pxFn(d,w,h,t,p) {
   } else if (t==="curves") {
     var inB=p.inBlack||0, inW=p.inWhite==null?255:p.inWhite
     var outB=p.outBlack||0, outW=p.outWhite==null?255:p.outWhite
+    // Pre-bake LUT incorporating bezier curve if defined
+    var bzCv=p.curve
     var clut=new Uint8Array(256)
     for(var li=0;li<256;li++){
       var norm=(li-inB)/Math.max(1,inW-inB)
       norm=Math.max(0,Math.min(1,norm))
-      var sc=p.sCurve||0
-      if(sc!==0){var sv=norm*norm*(3-2*norm);norm=norm*(1-Math.abs(sc)/100)+sv*(Math.abs(sc)/100);if(sc<0)norm=1-norm}
+      if(bzCv){
+        var bpx=bzCv.p1x||.33,bpy=bzCv.p1y||.33,bqx=bzCv.p2x||.67,bqy=bzCv.p2y||.67
+        var lo2=0,hi2=1
+        var bzXf=function(t2){return 3*bpx*t2*(1-t2)*(1-t2)+3*bqx*t2*t2*(1-t2)+t2*t2*t2}
+        var bzYf=function(t2){return 3*bpy*t2*(1-t2)*(1-t2)+3*bqy*t2*t2*(1-t2)+t2*t2*t2}
+        for(var ni2=0;ni2<10;ni2++){var mid2=(lo2+hi2)/2;if(bzXf(mid2)<norm)lo2=mid2;else hi2=mid2}
+        norm=Math.max(0,Math.min(1,bzYf((lo2+hi2)/2)))
+      }
       clut[li]=Math.round(outB+(outW-outB)*Math.max(0,Math.min(1,norm)))
     }
     for(i=0;i<d.length;i+=4){d[i]=clut[d[i]];d[i+1]=clut[d[i+1]];d[i+2]=clut[d[i+2]]}
