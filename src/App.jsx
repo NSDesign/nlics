@@ -4852,7 +4852,7 @@ function EfxPrimary(props) {
         {ptAttrs.length
           ?<Se l="attribute" v={p.labelAttr||ptAttrs[0]} opts={ptAttrs} fn={function(v){up({labelAttr:v})}}/>
           :<div style={{fontSize:10,color:"var(--mu)",padding:"4px 0"}}>Set a geometry source on the slot to use labels</div>}
-        <Sl l="label size" v={p.labelSize||9} mn={6} mx={20} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>
+        <Sl l="label size" v={p.labelSize||9} mn={5} mx={72} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>
         <Co l="label col" v={p.labelColor||"#ffffff"} fn={function(v){up({labelColor:v})}}/>
       </div>}
     </div>)
