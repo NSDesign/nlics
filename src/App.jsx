@@ -7087,7 +7087,7 @@ function LayerCompProps(props) {
         </div>
         {layers.map(function(lyr,li){
           return (
-            <LayerCard key={lyr.id} lyr={lyr} li={li}
+            <LayerCard key={lyr.id} lyr={lyr} li={li} context={ctx}
               isFirst={li===0} isLast={li===layers.length-1}
               totalLayers={layers.length}
               collapsed={!!layerCollapsed[lyr.id]}
