@@ -4305,6 +4305,10 @@ function ColourMapEditor(props) {
                 <input type="color" value={s.color}
                   onChange={function(e){updStop(i,{color:e.target.value})}}
                   style={{width:32,height:28,padding:0,border:"1px solid var(--bd)",borderRadius:4,background:"none",cursor:"pointer"}}/>
+                <div style={{display:"flex",flexDirection:"column",gap:1}}>
+                  <button onClick={function(){if(i>0){var ns=stops.slice();var t2=ns[i];ns[i]=ns[i-1];ns[i-1]=t2;setStops(ns)}}} disabled={i===0} style={{fontSize:8,padding:"1px 4px",background:"none",border:"1px solid var(--bd)",borderRadius:2,color:"var(--mu)",cursor:"pointer"}}>▲</button>
+                  <button onClick={function(){if(i<stops.length-1){var ns=stops.slice();var t2=ns[i];ns[i]=ns[i+1];ns[i+1]=t2;setStops(ns)}}} disabled={i===stops.length-1} style={{fontSize:8,padding:"1px 4px",background:"none",border:"1px solid var(--bd)",borderRadius:2,color:"var(--mu)",cursor:"pointer"}}>▼</button>
+                </div>
                 <span style={{fontSize:9,color:"var(--mu)",minWidth:22}}>pos</span>
                 <input type="range" min={0} max={1} step={0.001} value={s.pos}
                   onChange={function(e){updStop(i,{pos:parseFloat(e.target.value)})}}
@@ -5096,7 +5100,7 @@ function MaskCard(props) {
           {armed?"confirm ×":"×"}
         </button>
       </div>
-      <TabBar tabs={tabs} active={tab} onChange={setTab}/>
+      {!collapsed&&<TabBar tabs={tabs} active={tab} onChange={setTab}/>}
       {tab==="source" && (
         <div className="card-body">
           {!mk.refId && (
@@ -5127,7 +5131,7 @@ function MaskCard(props) {
           </PR>
         </div>
       )}
-      {tab==="layer" && (
+      {!collapsed&&tab==="layer" && (
         <div className="card-body">
           <Se l="blend" v={mk.blendMode} opts={MBMS}
             fn={function(v){props.onChange(Object.assign({},mk,{blendMode:v}))}}/>
@@ -5500,7 +5504,7 @@ function EfxCard(props) {
         </button>
       </div>
       <TabBar tabs={tabs} active={tab} onChange={setTab}/>
-      {tab==="primary" && (
+      {!collapsed&&tab==="primary" && (
         <div className="card-body">
           <EfxPrimary efx={efx} onChange={props.onChange} nodes={props.nodes} selfId={props.selfId} iC={props.iC} sourceId={props.sourceId}/>
         </div>
@@ -5535,7 +5539,7 @@ function EfxCard(props) {
           </BlendIfAccordion>
         </div>
       )}
-      {tab==="mask" && (
+      {!collapsed&&tab==="mask" && (
         <div className="card-body" style={{paddingTop:8}}>
           {nMasks===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no masks on this effect</div>}
           {(efx.maskStack||[]).map(function(mk,mi){
