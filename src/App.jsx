@@ -5100,7 +5100,7 @@ function MaskCard(props) {
           {armed?"confirm ×":"×"}
         </button>
       </div>
-      {!collapsed&&<TabBar tabs={tabs} active={tab} onChange={setTab}/>}
+      {!cardCollapsed&&<TabBar tabs={tabs} active={tab} onChange={setTab}/>}
       {tab==="source" && (
         <div className="card-body">
           {!mk.refId && (
@@ -5131,7 +5131,7 @@ function MaskCard(props) {
           </PR>
         </div>
       )}
-      {!collapsed&&tab==="layer" && (
+      {!cardCollapsed&&tab==="layer" && (
         <div className="card-body">
           <Se l="blend" v={mk.blendMode} opts={MBMS}
             fn={function(v){props.onChange(Object.assign({},mk,{blendMode:v}))}}/>
@@ -5253,6 +5253,7 @@ function StackRefCard(props) {
 function EfxCard(props) {
   var efx=props.efx
   var tabSt=useState("primary"); var tab=tabSt[0], setTab=tabSt[1]
+  var collSt=useState(false); var cardCollapsed=collSt[0], setColl=collSt[1]
   var armedSt=useState(false); var armed=armedSt[0], setArmed=armedSt[1]
   var timerRef=useRef(null)
   // Swap state machine: null | "picking" | {type, keepMask, keepLayer}
@@ -5377,6 +5378,11 @@ function EfxCard(props) {
   return (
     <div className="card" style={{marginBottom:10}}>
       <div className="card-hdr">
+        <button onClick={function(){setColl(!cardCollapsed)}}
+          style={{fontSize:11,color:"var(--mu)",background:"none",border:"none",
+            cursor:"pointer",padding:"0 2px",alignSelf:"stretch",display:"flex",alignItems:"center"}}>
+          {cardCollapsed?"▸":"▾"}
+        </button>
         <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
           <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
           <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
@@ -5504,7 +5510,7 @@ function EfxCard(props) {
         </button>
       </div>
       <TabBar tabs={tabs} active={tab} onChange={setTab}/>
-      {!collapsed&&tab==="primary" && (
+      {!cardCollapsed&&tab==="primary" && (
         <div className="card-body">
           <EfxPrimary efx={efx} onChange={props.onChange} nodes={props.nodes} selfId={props.selfId} iC={props.iC} sourceId={props.sourceId}/>
         </div>
@@ -5539,7 +5545,7 @@ function EfxCard(props) {
           </BlendIfAccordion>
         </div>
       )}
-      {!collapsed&&tab==="mask" && (
+      {!cardCollapsed&&tab==="mask" && (
         <div className="card-body" style={{paddingTop:8}}>
           {nMasks===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no masks on this effect</div>}
           {(efx.maskStack||[]).map(function(mk,mi){
