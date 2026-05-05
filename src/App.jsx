@@ -7019,6 +7019,9 @@ function LayerCompProps(props) {
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
   // ALL hooks must be above any early return — Rules of Hooks
   var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  var layerCtxSt=useState(node.context||"pixel"); var layerCtx=layerCtxSt[0]
+  function setCtx(c){layerCtxSt[1](c);props.onChange(Object.assign({},node,{context:c}))}
+  var isPoint=layerCtx==="point"
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
   function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
 
@@ -7150,7 +7153,7 @@ function LayerCompProps(props) {
         </div>
         {layers.map(function(lyr,li){
           return (
-            <LayerCard key={lyr.id} lyr={lyr} li={li} context={ctx}
+            <LayerCard key={lyr.id} lyr={lyr} li={li} context={layerCtx}
               isFirst={li===0} isLast={li===layers.length-1}
               totalLayers={layers.length}
               collapsed={!!layerCollapsed[lyr.id]}
