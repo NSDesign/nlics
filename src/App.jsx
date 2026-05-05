@@ -5664,7 +5664,7 @@ var EFX_GROUPS=[
   {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
   {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise"]},
   {label:"Distort",  items:["wave","twirl","bulge","uv-distort","polar-to-cart","cart-to-polar"]},
-  {label:"Transform",items:["match","transform","attributes"]},
+  {label:"Transform",items:["match","transform","attributes","combine","separate","filter","delete"]},
   {label:"Points",   items:["show-points","point-map","source-at-points"]},
 ]
 // Hook: compute a fixed-position rect for a popover relative to an anchor ref.
