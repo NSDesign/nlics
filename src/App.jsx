@@ -4612,6 +4612,61 @@ function EfxPrimary(props) {
       </PR>
     </div>
   )
+  if(efx.type==="attributes") {
+    var ops=p.ops||[]
+    function updOp(i,patch){up({ops:ops.map(function(o,j){return j===i?Object.assign({},o,patch):o})})}
+    function addOp(){up({ops:ops.concat([{action:"add",name:"",value:0}])})}
+    function delOp(i){up({ops:ops.filter(function(_,j){return j!==i})})}
+    var IMMUTABLE=["pointIndex"]
+    return (
+      <div>
+        {ops.length===0&&<div style={{fontSize:10,color:"var(--mu)",padding:"6px 0"}}>no operations — tap + to add</div>}
+        {ops.map(function(op,oi){return (
+          <div key={oi} style={{borderBottom:"1px solid var(--bd)",paddingBottom:8,marginBottom:8}}>
+            <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:4}}>
+              <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",flex:1}}>op {oi+1}</span>
+              <button onClick={function(){delOp(oi)}} className="ghost" style={{fontSize:11,padding:"2px 6px"}}>×</button>
+            </div>
+            <Se l="action" v={op.action||"add"} opts={["add","set","remove","rename"]} fn={function(v){updOp(oi,{action:v})}}/>
+            {op.action==="rename"
+              ? <div>
+                  <div style={{display:"flex",gap:6,alignItems:"center",margin:"4px 0"}}>
+                    <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",width:80,flexShrink:0}}>from</span>
+                    <input value={op.from||""} onChange={function(e){updOp(oi,{from:e.target.value})}}
+                      style={{flex:1,background:"var(--el)",border:"1px solid var(--bd)",borderRadius:4,color:"var(--tx)",padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}/>
+                  </div>
+                  <div style={{display:"flex",gap:6,alignItems:"center",margin:"4px 0"}}>
+                    <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",width:80,flexShrink:0}}>to</span>
+                    <input value={op.name||""} onChange={function(e){updOp(oi,{name:e.target.value})}}
+                      style={{flex:1,background:"var(--el)",border:"1px solid var(--bd)",borderRadius:4,color:"var(--tx)",padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}/>
+                  </div>
+                </div>
+              : <div>
+                  <div style={{display:"flex",gap:6,alignItems:"center",margin:"4px 0"}}> 
+                    <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",width:80,flexShrink:0}}>
+                      {op.action==="remove"?"attr":"name"}
+                    </span>
+                    <input value={op.name||""} onChange={function(e){updOp(oi,{name:e.target.value})}}
+                      placeholder={op.action==="add"?"e.g. myAttr":op.action==="remove"?"attr to remove":"attr name"}
+                      style={{flex:1,background:"var(--el)",border:"1px solid "+(IMMUTABLE.includes(op.name)?"var(--dng)":"var(--bd)"),
+                        borderRadius:4,color:IMMUTABLE.includes(op.name)?"var(--dng)":"var(--tx)",
+                        padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}/>
+                    {IMMUTABLE.includes(op.name)&&<span style={{fontSize:8,color:"var(--dng)",flexShrink:0}}>read-only</span>}
+                  </div>
+                  {(op.action==="add"||op.action==="set")&&(
+                    <Sl l="value" v={op.value||0} mn={-1000} mx={1000} st={.01}
+                      fmt={function(v){return typeof v==="number"?v.toFixed(3):String(v)}}
+                      fn={function(v){updOp(oi,{value:v})}}/>
+                  )}
+                </div>
+            }
+          </div>
+        )})}
+        <button onClick={addOp} className="ac" style={{width:"100%",minHeight:36,fontSize:10,
+          letterSpacing:".05em",fontFamily:"'IBM Plex Mono',monospace"}}>+ add operation</button>
+      </div>
+    )
+  }
   if(efx.type==="match") {
     // Build flat list of all transform effects across all nodes and their stacks
     var allTfx=[]
@@ -5609,7 +5664,7 @@ var EFX_GROUPS=[
   {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
   {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise"]},
   {label:"Distort",  items:["wave","twirl","bulge","uv-distort","polar-to-cart","cart-to-polar"]},
-  {label:"Transform",items:["match","transform"]},
+  {label:"Transform",items:["match","transform","attributes"]},
   {label:"Points",   items:["show-points","point-map","source-at-points"]},
 ]
 // Hook: compute a fixed-position rect for a popover relative to an anchor ref.
