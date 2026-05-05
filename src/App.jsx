@@ -6247,7 +6247,7 @@ function BlenderProps(props) {
     var body = (
       <>
         <div className="card-body" style={{paddingBottom:0}}>
-{!isPoint&&          <Sl l="fill" v={node.outFillOpacity==null?100:node.outFillOpacity} mn={0} mx={100} st={1}
+{!(props.context==="point")&&          <Sl l="fill" v={node.outFillOpacity==null?100:node.outFillOpacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
             fn={function(v){onChange(Object.assign({},node,{outFillOpacity:v}))}}/>}
           <Sl l="opacity" v={node.outOpacity==null?100:node.outOpacity} mn={0} mx={100} st={1}
@@ -6876,9 +6876,9 @@ function LayerCard(props) {
   var nEfx=(lyr.effectStack||[]).length, nMask=(lyr.maskStack||[]).length
   var lyrTabs=[
     {id:"source",  label:"Source"},
-    {id:"effects", label:(isPoint?"Modifiers":"Fx")+(nEfx>0?" ("+nEfx+")":""), color:"ac"},
-    {id:"masks",   label:(isPoint?"Isolate":"Mask")+(nMask>0?" ("+nMask+")":""), color:"lv"},
-  ].concat(isPoint?[]:[{id:"layer", label:"Layer"}])
+    {id:"effects", label:(props.context==="point"?"Modifiers":"Fx")+(nEfx>0?" ("+nEfx+")":""), color:"ac"},
+    {id:"masks",   label:(props.context==="point"?"Isolate":"Mask")+(nMask>0?" ("+nMask+")":""), color:"lv"},
+  ].concat(props.context==="point"?[]:[{id:"layer", label:"Layer"}])
   var isCollapsed = props.collapsed || false
   var delArmedSt=useState(false); var delArmed=delArmedSt[0], setDelArmed=delArmedSt[1]
   return (
@@ -7022,6 +7022,7 @@ function LayerCompProps(props) {
   var layerCtxSt=useState(node.context||"pixel"); var layerCtx=layerCtxSt[0]
   function setCtx(c){layerCtxSt[1](c);props.onChange(Object.assign({},node,{context:c}))}
   var isPoint=layerCtx==="point"
+  var layerCtxSt=useState(node.context||"pixel"); var layerCtx=layerCtxSt[0]
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
   function navPop(){setNavStack(function(s){return s.slice(0,-1)})}
 
