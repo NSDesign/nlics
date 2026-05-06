@@ -3778,7 +3778,7 @@ function SolidP(props) {
 // Geometry types that are point-based (use point render controls)
 var GEO_POINT_TYPES = ["grid","spiral","polar-grid","phyllotaxis","scatter"]
 // Effects available in point context (transform + point-specific only)
-var POINT_CONTEXT_EFFECTS = ["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","uv-distort","match","point-map","source-at-points","show-points"]
+var POINT_CONTEXT_EFFECTS = ["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","uv-distort","match","point-map","source-at-points","show-points","attributes","combine","separate","filter","delete"]
 function getSourceGeomType(nodes, sourceId) {
   if(!sourceId||!nodes) return null
   var n=(nodes||[]).find(function(x){return x.id===sourceId})
@@ -5873,11 +5873,11 @@ function EfxCard(props) {
 /* ─── ADD EFFECT MENU ─────────────────────────────────── */
 var EFX_GROUPS=[
   {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
-  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
-  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise"]},
+  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map","colour"]},
+  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise","duotone"]},
   {label:"Distort",  items:["wave","twirl","bulge","uv-distort","polar-to-cart","cart-to-polar"]},
-  {label:"Transform",items:["match","transform","attributes","combine","separate","filter","delete"]},
-  {label:"Points",   items:["show-points","point-map","source-at-points"]},
+  {label:"Transform",items:["match","transform"]},
+  {label:"Points",   items:["show-points","point-map","source-at-points","attributes","combine","separate","filter","delete"]},
 ]
 // Hook: compute a fixed-position rect for a popover relative to an anchor ref.
 // placement: "above" or "below" — menu opens above or below the anchor, whichever fits.
@@ -5925,9 +5925,10 @@ function AddEfxMenu(props) {
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
-  var displayGroups=props.filterTypes
+  var displayGroups=(props.filterTypes
     ?EFX_GROUPS.map(function(g){var fi=g.items.filter(function(t){return props.filterTypes.includes(t)});return fi.length?{label:g.label,items:fi}:null}).filter(Boolean)
     :EFX_GROUPS
+  ).filter(function(g){return !(props.excludeGroups||[]).includes(g.label)})
   return (
     <div ref={anchorRef} style={{position:"relative",flex:2,minWidth:0}}>
       <button className="ac" style={{width:"100%",height:"100%"}} onClick={function(){setOpen(!open)}}>+ effect</button>
@@ -6028,7 +6029,7 @@ function EfxStack(props) {
       })}
       <div style={{display:"flex",gap:4,marginTop:6,alignItems:"stretch",minHeight:36}}>
         {/* + effect — 2 parts */}
-        <AddEfxMenu onAdd={addEfx} filterTypes={props.filterTypes}/>
+        <AddEfxMenu onAdd={addEfx} filterTypes={props.filterTypes} excludeGroups={props.excludeGroups}/>
         {/* + stack — 2 parts */}
         <div ref={lkRef} style={{position:"relative",flex:2,minWidth:0}}>
           <button className="ac" style={{width:"100%",height:"100%",fontSize:11}}
@@ -6180,6 +6181,7 @@ function SlotPanel(props) {
           <EfxStack key={(slot.effectStack||[]).map(function(e){return e.id}).join(",")}
             stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             sourceId={slot.refId}
+            excludeGroups={["Points"]}
             basePath={{slotKey:(props.slotKey||"")+".effectStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
@@ -6473,6 +6475,7 @@ function BlenderProps(props) {
         {outTab==="effects" && (
           <div style={{padding:10}}>
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              excludeGroups={["Points"]}
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
@@ -6842,7 +6845,7 @@ function AddMenu(props) {
   },[open])
   var s1standard=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Geometry"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
   var s1advanced=[{t:"tile",l:"Tile"}]
-  var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"},{t:"point-comp",l:"Point Comp ◉"}]
+  var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"},{t:"__div__",l:"Point Context"},{t:"point-comp",l:"Point Comp ◉"}]
   return (
     <div ref={anchorRef} style={{position:"relative"}}>
       <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
@@ -6856,7 +6859,10 @@ function AddMenu(props) {
               Advanced
             </div>,
             s1advanced.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})
-          ]:s2items.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
+          ]:s2items.map(function(item){
+  if(item.t==="__div__") return <div key={item.t} className="drop-grp" style={{borderTop:"1px solid var(--bd)",marginTop:4}}>{item.l}</div>
+  return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>
+})}
         </div>,
         document.body
       )}
@@ -7150,6 +7156,7 @@ function LayerCard(props) {
             navPush={props.navPush} iC={props.iC}
             sourceId={lyr.refId}
             context={props.context}
+            excludeGroups={["Points"]}
             basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
@@ -7402,6 +7409,7 @@ function LayerCompProps(props) {
         {outTab==="effects" && (
           <div style={{padding:10}}>
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              excludeGroups={["Points"]}
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
