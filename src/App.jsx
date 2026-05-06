@@ -558,11 +558,12 @@ function mkLayerComp() {
     context:"pixel",  // "pixel" | "point"
     layers:[l2,l1], outFillOpacity:100, outOpacity:100, outEfx:[], outMask:[] }
 }
-// Point chain item — source or modifier. Each is a single operation.
-// Source items bring geometry in; modifier items apply to the working set.
-// isolate[] is the spatial filter for this item (analogous to maskStack on an effect).
-function mkPointSourceItem() {
-  return { id:uid(), type:"_source", name:"", enabled:true, refId:null, isolate:[] }
+// Point Comp data model:
+// sources[] — input section (like Output at bottom). Each entry: {id, name, refId, isolate[]}.
+//             Multiple geometry sources, each with its own isolate mask.
+// chain[]   — ordered modifier chain. Each item: single modifier with isolate[].
+function mkPointSourceEntry() {
+  return { id:uid(), name:"", enabled:true, refId:null, isolate:[] }
 }
 function mkPointChainItem(t) {
   var efx=mkEfx(t)
@@ -570,9 +571,9 @@ function mkPointChainItem(t) {
     params:efx.params, isolate:[] }
 }
 function mkPointComp() {
-  var src=mkPointSourceItem(); src.name="source"
+  var src=mkPointSourceEntry(); src.name="source 1"
   return { id:uid(), name:"Point Comp "+(_uid-100), type:"point-comp", section:2, enabled:true,
-    chain:[src], outEfx:[], outMask:[] }
+    sources:[src], chain:[], outModifiers:[] }
 }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
 
@@ -1940,20 +1941,22 @@ function drawPH(ctx,w,h,msg) {
 function getRootArr(node, slotKey) {
   if (!node || !slotKey) return []
   if (slotKey === "outEfx") return node.outEfx || []
+  if (slotKey === "outModifiers") return node.outModifiers || []
   if (slotKey === "outMask") return node.outMask || []
   if (slotKey === "effectStack") return node.effectStack || []
   if (slotKey === "maskStack") return node.maskStack || []
   // Handle layers[N].effectStack / layers[N].maskStack
   var lm = slotKey.match(/^layers\[(\d+)\]\.(\w+)$/)
   if (lm) { var li=parseInt(lm[1]); return ((node.layers||[])[li]||{})[lm[2]] || [] }
-  var cm = slotKey.match(/^chain\[(\d+)\]\.isolate$/)
-  if (cm) { var ci2=parseInt(cm[1]); return ((node.chain||[])[ci2]||{}).isolate || [] }
+  var cm = slotKey.match(/^(chain|sources)\[(\d+)\]\.isolate$/)
+  if (cm) { var ci2=parseInt(cm[2]); return ((node[cm[1]]||[])[ci2]||{}).isolate || [] }
   var parts = slotKey.split(".")
   var slot = node[parts[0]] || {}
   return slot[parts[1]] || []
 }
 function setRootArr(node, slotKey, newArr) {
   if (slotKey === "outEfx") return Object.assign({}, node, {outEfx: newArr})
+  if (slotKey === "outModifiers") return Object.assign({}, node, {outModifiers: newArr})
   if (slotKey === "outMask") return Object.assign({}, node, {outMask: newArr})
   if (slotKey === "effectStack") return Object.assign({}, node, {effectStack: newArr})
   if (slotKey === "maskStack") return Object.assign({}, node, {maskStack: newArr})
@@ -1967,14 +1970,15 @@ function setRootArr(node, slotKey, newArr) {
     })
     return Object.assign({},node,{layers:nl})
   }
-  var cm = slotKey.match(/^chain\[(\d+)\]\.isolate$/)
+  var cm = slotKey.match(/^(chain|sources)\[(\d+)\]\.isolate$/)
   if (cm) {
-    var ci2=parseInt(cm[1])
-    var nc2=(node.chain||[]).map(function(item,i){
+    var ci2=parseInt(cm[2]), ckey=cm[1]
+    var nc2=(node[ckey]||[]).map(function(item,i){
       if(i!==ci2) return item
       return Object.assign({},item,{isolate:newArr})
     })
-    return Object.assign({},node,{chain:nc2})
+    var upd={}; upd[ckey]=nc2
+    return Object.assign({},node,upd)
   }
   var parts = slotKey.split(".")
   var slotObj = Object.assign({}, node[parts[0]])
@@ -2931,35 +2935,32 @@ function compPromoted(n,cmap,cache,iC,w,h,vis){
 
 function compPointComp(n,cmap,cache,iC,w,h,vis) {
   var cv=mkCv(w,h), ctx=cv.getContext("2d")
-  // Working point set — modified in-place as we walk the chain top→bottom
+  // ── 1. Load points from all sources, merge into working set ──────────────
   var pts=[]
+  var sources=n.sources||[]
+  for(var si2=0;si2<sources.length;si2++){
+    var src2=sources[si2]
+    if(src2.enabled===false||!src2.refId||vis.has(src2.refId)) continue
+    var srcCv=compAny(src2.refId,cmap,cache,iC,w,h,new Set(vis))
+    if(!srcCv||!srcCv._points||!srcCv._points.length) continue
+    var incoming=srcCv._points.map(function(p){return Object.assign({},p,{_srcIdx:si2})})
+    if(src2.isolate&&src2.isolate.length>0){
+      var iv0=new Set(vis); iv0.add(n.id)
+      var mv0=compMasks(src2.isolate,cmap,cache,iC,w,h,iv0)
+      if(mv0) incoming=incoming.filter(function(pt){
+        var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
+        var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
+        return mv0[py*w+px]>0.01
+      })
+    }
+    pts=pts.concat(incoming)
+  }
+  // ── 2. Walk modifier chain top→bottom ────────────────────────────────────
   var chain=n.chain||[]
   for(var ci=0;ci<chain.length;ci++){
     var item=chain[ci]
-    if(item.enabled===false) continue
-    // ── Source item: load points from referenced geometry node ──────────────
-    if(item.type==="_source"){
-      if(!item.refId||vis.has(item.refId)) continue
-      var srcCv=compAny(item.refId,cmap,cache,iC,w,h,new Set(vis))
-      if(!srcCv||!srcCv._points||!srcCv._points.length) continue
-      // Merge into working set (sourceIndex = position in chain)
-      var incoming=srcCv._points.map(function(p){return Object.assign({},p,{_chainIdx:ci})})
-      // Apply isolate to restrict which source points enter the working set
-      if(item.isolate&&item.isolate.length>0){
-        var iv0=new Set(vis); iv0.add(n.id)
-        var mv0=compMasks(item.isolate,cmap,cache,iC,w,h,iv0)
-        if(mv0) incoming=incoming.filter(function(pt){
-          var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
-          var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
-          return mv0[py*w+px]>0.01
-        })
-      }
-      pts=pts.concat(incoming)
-      continue
-    }
-    // ── Modifier item: apply to working set ─────────────────────────────────
-    if(!pts.length) continue
-    // Determine target subset via isolate (rest of pts left unchanged)
+    if(item.enabled===false||!pts.length) continue
+    // Split by isolate into targets (modifier applies) + unchanged (passes through)
     var targets=pts, unchanged=[]
     if(item.isolate&&item.isolate.length>0){
       var iv1=new Set(vis); iv1.add(n.id)
@@ -2974,23 +2975,16 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
           var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
           var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
           return mv1[py*w+px]>0.01
-        }).map(function(pt){
-          var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
-          var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
-          var mval=mv1[py*w+px]
-          return Object.assign({},pt,{opacity:(pt.opacity==null?1:pt.opacity)*mval})
         })
       }
     }
-    // Apply the modifier to targets
-    if(item.type==="uv-distort"&&item.params&&item.params.uvRefId&&cmap){
+    if(item.type==="uv-distort"&&item.params&&item.params.uvRefId)
       item._uvCanvas=compAny(item.params.uvRefId,cmap,new Map(),iC,w,h,new Set(vis))||null
-    }
     targets=applyEfxToPoints(targets,item,w,h)
     pts=unchanged.concat(targets)
   }
   cv._points=pts
-  // Default render: dots at point positions
+  // ── 3. Default render (overridable via outModifiers show-points/source-at-points) ─
   if(pts.length>0){
     pts.forEach(function(pt){
       ctx.globalAlpha=Math.max(0,Math.min(1,pt.opacity==null?1:pt.opacity))
@@ -3000,7 +2994,8 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
     })
     ctx.globalAlpha=1
   }
-  if(n.outEfx&&n.outEfx.length>0) applyEfxStk(ctx,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
+  // outModifiers (point-context: show-points, source-at-points, etc.)
+  if(n.outModifiers&&n.outModifiers.length>0) applyEfxStk(ctx,n.outModifiers,cmap,cache,iC,w,h,new Set(vis))
   if(n.outMask&&n.outMask.length>0) maskToAlpha(ctx,n.outMask,cmap,cache,iC,w,h,new Set(vis))
   if(n.outOpacity!=null&&n.outOpacity<100){
     var oid=ctx.getImageData(0,0,w,h),of=n.outOpacity/100
@@ -3009,6 +3004,7 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
   }
   return cv
 }
+
 
 function compAny(id,cmap,cache,iC,w,h,vis) {
   if(!vis)vis=new Set()
@@ -5413,7 +5409,7 @@ function MaskCard(props) {
           {armed?"confirm ×":"×"}
         </button>
       </div>
-      {!cardCollapsed&&<TabBar tabs={tabs} active={tab} onChange={setTab}/>}
+      <TabBar tabs={tabs} active={tab} onChange={setTab}/>
       {tab==="source" && (
         <div className="card-body">
           {!mk.refId && (
@@ -5444,7 +5440,7 @@ function MaskCard(props) {
           </PR>
         </div>
       )}
-      {!cardCollapsed&&tab==="layer" && (
+      {tab==="layer" && (
         <div className="card-body">
           <Se l="blend" v={mk.blendMode} opts={MBMS}
             fn={function(v){props.onChange(Object.assign({},mk,{blendMode:v}))}}/>
@@ -7445,10 +7441,78 @@ function LayerCompProps(props) {
   )
 }
 
+/* ─── POINT SOURCE ENTRY CARD ────────────────────────── */
+// One entry in the Sources input section.
+// Each entry has a geometry source reference and its own isolate mask.
+function PointSourceEntryCard(props) {
+  var entry=props.entry, ei=props.index
+  var armedSt=useState(false); var armed=armedSt[0], setArmed=armedSt[1]
+  var isoOpenSt=useState(false); var isoOpen=isoOpenSt[0], setIsoOpen=isoOpenSt[1]
+  var timerRef=useRef(null)
+  useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
+  function handleDel(){
+    if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
+    else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
+  }
+  var nIso=(entry.isolate||[]).length
+  return (
+    <div style={{background:"var(--bg)",border:"1px solid rgba(176,96,240,.22)",borderRadius:8,
+      marginBottom:8,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",gap:4,padding:"0 8px 0 10px",
+        minHeight:"var(--tap)",background:"var(--sf)",borderBottom:"1px solid var(--bd)"}}>
+        <button className="icon-btn sm"
+          onClick={function(){props.onChange(Object.assign({},entry,{enabled:entry.enabled===false}))}}
+          style={{color:entry.enabled===false?"var(--mu)":"var(--lv)",fontSize:18}}>
+          {entry.enabled===false?"○":"●"}
+        </button>
+        <InlineRename value={entry.name} fallback={"source "+(ei+1)}
+          onChange={function(nw){props.onChange(Object.assign({},entry,{name:nw}))}}
+          labelStyle={{fontSize:12,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
+        {nIso>0&&<span style={{fontSize:9,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",
+          background:"rgba(176,96,240,.1)",border:"1px solid rgba(176,96,240,.25)",
+          borderRadius:3,padding:"1px 5px",flexShrink:0}}>◈{nIso}</span>}
+        <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,
+          background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",
+          color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
+          {armed?"confirm ×":"×"}
+        </button>
+      </div>
+      <div style={{padding:"8px 12px"}}>
+        <NRef l="source" v={entry.refId||null} nodes={props.nodes} selfId={props.selfId}
+          iC={props.iC} mode="source"
+          fn={function(v){props.onChange(Object.assign({},entry,{refId:v}))}}/>
+      </div>
+      {/* Isolate accordion */}
+      <div style={{borderTop:"1px solid var(--bd)"}}>
+        <button onClick={function(){setIsoOpen(!isoOpen)}}
+          style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"8px 12px",
+            background:"none",border:"none",cursor:"pointer"}}>
+          <span className={"bp-chevron"+(isoOpen?" open":"")} style={{fontSize:14,color:"var(--lv)"}}>›</span>
+          <span style={{fontSize:9,textTransform:"uppercase",letterSpacing:".1em",
+            fontFamily:"'IBM Plex Mono',monospace",color:"var(--di)"}}>
+            Isolate{nIso>0?" ("+nIso+")":""}
+          </span>
+          {nIso===0&&<span style={{fontSize:9,color:"var(--mu)",marginLeft:4}}>— filter which points enter</span>}
+        </button>
+        {isoOpen&&(
+          <div style={{padding:"0 10px 10px"}}>
+            <MaskStackPanel
+              key={(entry.isolate||[]).map(function(m){return m.id}).join(",")}
+              stack={entry.isolate||[]} nodes={props.nodes} selfId={props.selfId}
+              navPush={props.navPush} iC={props.iC}
+              basePath={{slotKey:"sources["+ei+"].isolate", steps:[]}}
+              onNavigate={props.onNavigate}
+              onChange={function(ms){props.onChange(Object.assign({},entry,{isolate:ms}))}}/>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ─── POINT CHAIN ITEM CARD ──────────────────────────── */
-// A single item in a Point Comp chain. Either a source (type="_source")
-// or a modifier (any POINT_CONTEXT_EFFECTS type).
-// Isolate stack is the spatial filter — analogous to maskStack on a pixel effect.
+// A single modifier in the chain. Each item is one point-context operation.
+// Isolate restricts which points this modifier affects.
 function PointChainItemCard(props) {
   var item=props.item, ci=props.index
   var collSt=useState(false); var coll=collSt[0], setColl=collSt[1]
@@ -7460,14 +7524,10 @@ function PointChainItemCard(props) {
     if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
     else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
   }
-  var isSource=item.type==="_source"
   var nIso=(item.isolate||[]).length
-  var accentColor=isSource?"var(--lv)":"var(--ac)"
-  var accentBg=isSource?"rgba(176,96,240,.06)":"rgba(36,204,168,.06)"
   return (
     <div className="card" style={{marginBottom:8}}>
-      {/* Header */}
-      <div className="card-hdr" style={{background:accentBg}}>
+      <div className="card-hdr" style={{background:"rgba(36,204,168,.06)"}}>
         <button onClick={function(){setColl(!coll)}}
           style={{fontSize:11,color:"var(--mu)",background:"none",border:"none",
             cursor:"pointer",padding:"0 2px",alignSelf:"stretch",display:"flex",alignItems:"center"}}>
@@ -7479,16 +7539,14 @@ function PointChainItemCard(props) {
         </div>
         <button className="icon-btn sm"
           onClick={function(){props.onChange(Object.assign({},item,{enabled:item.enabled===false}))}}
-          style={{color:item.enabled===false?"var(--mu)":accentColor,fontSize:18}}>
+          style={{color:item.enabled===false?"var(--mu)":"var(--ac)",fontSize:18}}>
           {item.enabled===false?"○":"●"}
         </button>
-        {/* Type tag */}
         <span style={{fontSize:10,padding:"1px 7px",borderRadius:4,flexShrink:0,
           fontFamily:"'IBM Plex Mono',monospace",
-          background:isSource?"rgba(176,96,240,.14)":"rgba(36,204,168,.12)",
-          color:accentColor,
-          border:"1px solid "+(isSource?"rgba(176,96,240,.3)":"rgba(36,204,168,.25)")}}>
-          {isSource?"source":item.type}
+          background:"rgba(36,204,168,.12)",color:"var(--ac)",
+          border:"1px solid rgba(36,204,168,.25)"}}>
+          {item.type}
         </span>
         <InlineRename value={item.name} fallback=""
           onChange={function(nw){props.onChange(Object.assign({},item,{name:nw}))}}
@@ -7496,44 +7554,32 @@ function PointChainItemCard(props) {
             fontStyle:"italic",padding:"2px 0"}}/>
         {nIso>0&&<span style={{fontSize:9,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",
           background:"rgba(176,96,240,.1)",border:"1px solid rgba(176,96,240,.25)",
-          borderRadius:3,padding:"1px 5px",flexShrink:0}}>
-          ◈{nIso}
-        </span>}
-        <button onClick={handleDel}
-          style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,
-            background:armed?"rgba(224,48,96,.2)":"none",
-            border:armed?"1px solid var(--dng)":"none",
-            color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
+          borderRadius:3,padding:"1px 5px",flexShrink:0}}>◈{nIso}</span>}
+        <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,
+          background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",
+          color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
           {armed?"confirm ×":"×"}
         </button>
       </div>
-      {/* Body: params */}
       {!coll&&(
         <div className="card-body">
-          {isSource
-            ? <NRef l="source" v={item.refId||null} nodes={props.nodes} selfId={props.selfId}
-                iC={props.iC} mode="source"
-                fn={function(v){props.onChange(Object.assign({},item,{refId:v}))}}/>
-            : <EfxPrimary efx={item} onChange={props.onChange}
-                nodes={props.nodes} selfId={props.selfId} iC={props.iC}
-                sourceId={props.sourceId}/>
-          }
+          <EfxPrimary efx={item} onChange={props.onChange}
+            nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+            sourceId={props.sourceId}/>
         </div>
       )}
-      {/* Isolate accordion — analogous to mask stack on a pixel effect */}
       {!coll&&(
         <div style={{borderTop:"1px solid var(--bd)"}}>
           <button onClick={function(){setIsoOpen(!isoOpen)}}
-            style={{width:"100%",display:"flex",alignItems:"center",gap:6,
-              padding:"8px 12px",background:"none",border:"none",cursor:"pointer"}}>
-            <span className={"bp-chevron"+(isoOpen?" open":"")}
-              style={{fontSize:14,color:"var(--lv)"}}>›</span>
+            style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"8px 12px",
+              background:"none",border:"none",cursor:"pointer"}}>
+            <span className={"bp-chevron"+(isoOpen?" open":"")} style={{fontSize:14,color:"var(--lv)"}}>›</span>
             <span style={{fontSize:9,textTransform:"uppercase",letterSpacing:".1em",
               fontFamily:"'IBM Plex Mono',monospace",color:"var(--di)"}}>
               Isolate{nIso>0?" ("+nIso+")":""}
             </span>
             {nIso===0&&<span style={{fontSize:9,color:"var(--mu)",marginLeft:4}}>
-              — spatial filter for this item
+              — restrict which points this modifier affects
             </span>}
           </button>
           {isoOpen&&(
@@ -7557,8 +7603,7 @@ function PointChainItemCard(props) {
 function PointCompProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
-  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
-  // Add-modifier menu
+  var outTabSt=useState("modifiers"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
   var addModOpenSt=useState(false); var addModOpen=addModOpenSt[0], setAddModOpen=addModOpenSt[1]
   var addModAnchorRef=useRef(null), addModMenuRef=useRef(null)
   var addModPos=usePopoverPosition(addModAnchorRef, addModOpen, "above")
@@ -7574,17 +7619,16 @@ function PointCompProps(props) {
   },[addModOpen])
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
 
-  // Drill-down: isolate mask → effect editing
+  // Drill-down for isolate → effect masks chain
   if(navStack.length>0){
     var top=navStack[navStack.length-1]
     var topSteps=(top.parentSteps||[]).concat(top.kind?[{kind:top.kind,id:top.id}]:top.steps||[])
     var drillTarget=resolvePath(node,top.slotKey,topSteps)
-    if(!drillTarget){ setTimeout(function(){setNavStack([])},0)
-      return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target gone — returning…</div> }
+    if(!drillTarget){setTimeout(function(){setNavStack([])},0)
+      return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target gone — returning…</div>}
     function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx)})}
-    var childBasePath={slotKey:top.slotKey,steps:topSteps}
-    var isEffectDrill=top.kind==="effect"
-    var stackToShow=isEffectDrill?(drillTarget.maskStack||[]):(drillTarget.effectStack||[])
+    var isEffDrill=top.kind==="effect"
+    var drillStack=isEffDrill?(drillTarget.maskStack||[]):(drillTarget.effectStack||[])
     return (
       <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
         <div className="breadcrumb">
@@ -7594,93 +7638,96 @@ function PointCompProps(props) {
             return (
               <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                 <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
-                <span className={"bc-item"+(isCur?" cur":"")}
-                  onClick={function(){jumpTo(i)}}>{n.label}</span>
+                <span className={"bc-item"+(isCur?" cur":"")} onClick={function(){jumpTo(i)}}>{n.label}</span>
               </span>
             )
           })}
         </div>
         <div style={{flex:1,overflowY:"auto",padding:10}}>
-          {isEffectDrill
-            ? <MaskStackPanel key={stackToShow.map(function(m){return m.id}).join(",")}
-                stack={stackToShow} nodes={nodes} selfId={node.id}
-                navPush={navPush} iC={props.iC} basePath={childBasePath}
+          {isEffDrill
+            ? <MaskStackPanel key={drillStack.map(function(m){return m.id}).join(",")}
+                stack={drillStack} nodes={nodes} selfId={node.id}
+                navPush={navPush} iC={props.iC}
+                basePath={{slotKey:top.slotKey,steps:topSteps}}
                 onNavigate={props.onNavigate}
-                onChange={function(ms){
-                  var nn=updatePath(node,top.slotKey,topSteps,function(efx){return Object.assign({},efx,{maskStack:ms})})
-                  onChange(nn)}}/>
-            : <EfxStack key={stackToShow.map(function(e){return e.id}).join(",")}
-                stack={stackToShow} nodes={nodes} selfId={node.id}
+                onChange={function(ms){onChange(updatePath(node,top.slotKey,topSteps,function(e){return Object.assign({},e,{maskStack:ms})}))}}/>
+            : <EfxStack key={drillStack.map(function(e){return e.id}).join(",")}
+                stack={drillStack} nodes={nodes} selfId={node.id}
                 navPush={navPush} filterTypes={POINT_CONTEXT_EFFECTS}
-                basePath={childBasePath} onNavigate={props.onNavigate}
-                onChange={function(es){
-                  var nn=updatePath(node,top.slotKey,topSteps,function(mask){return Object.assign({},mask,{effectStack:es})})
-                  onChange(nn)}}/>
+                basePath={{slotKey:top.slotKey,steps:topSteps}}
+                onNavigate={props.onNavigate}
+                onChange={function(es){onChange(updatePath(node,top.slotKey,topSteps,function(m){return Object.assign({},m,{effectStack:es})}))}}/>
           }
         </div>
       </div>
     )
   }
 
-  var chain=node.chain||[]
-  function updItem(idx,patch){
+  var sources=node.sources||[], chain=node.chain||[]
+  var nOutMod=(node.outModifiers||[]).length, nOutMask=(node.outMask||[]).length
+
+  function updSource(idx,patch){
+    var ns=sources.map(function(s,i){return i===idx?Object.assign({},s,patch):s})
+    onChange(Object.assign({},node,{sources:ns}))
+  }
+  function addSource(){onChange(Object.assign({},node,{sources:sources.concat([mkPointSourceEntry()])}))}
+  function delSource(idx){if(sources.length<=1)return;onChange(Object.assign({},node,{sources:sources.filter(function(_,i){return i!==idx})}))}
+
+  function updChain(idx,patch){
     var nc=chain.map(function(it,i){return i===idx?Object.assign({},it,patch):it})
     onChange(Object.assign({},node,{chain:nc}))
   }
-  function delItem(idx){onChange(Object.assign({},node,{chain:chain.filter(function(_,i){return i!==idx})}))}
-  function moveItem(idx,dir){
+  function delChain(idx){onChange(Object.assign({},node,{chain:chain.filter(function(_,i){return i!==idx})}))}
+  function moveChain(idx,dir){
     var ni=Math.max(0,Math.min(chain.length-1,idx+dir)); if(ni===idx)return
     var a=chain.slice(); var tmp=a[idx]; a[idx]=a[ni]; a[ni]=tmp
     onChange(Object.assign({},node,{chain:a}))
   }
-  function addSource(){onChange(Object.assign({},node,{chain:chain.concat([mkPointSourceItem()])}))}
   function addModifier(t){onChange(Object.assign({},node,{chain:chain.concat([mkPointChainItem(t)])}))}
 
-  var nOutEfx=(node.outEfx||[]).length, nOutMask=(node.outMask||[]).length
-  var outTabs=[
-    {id:"effects",label:"Effects"+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
-    {id:"masks",  label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
-  ]
-  // Compute source IDs for effects that need a sourceId context
-  var firstSourceId=null
-  for(var fsi=0;fsi<chain.length;fsi++){if(chain[fsi].type==="_source"){firstSourceId=chain[fsi].refId;break}}
-
-  // Modifier groups — reuse EFX_GROUPS filtered to point context
+  var firstSourceId=sources.length>0?sources[0].refId:null
   var modGroups=EFX_GROUPS.map(function(g){
     var fi=g.items.filter(function(t){return POINT_CONTEXT_EFFECTS.includes(t)})
     return fi.length?{label:g.label,items:fi}:null
   }).filter(Boolean)
+  var outTabs=[
+    {id:"modifiers",label:"Modifiers"+(nOutMod>0?" ("+nOutMod+")":""),color:"ac"},
+    {id:"masks",    label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
+  ]
 
   return (
     <div style={{padding:10,overflowY:"auto"}}>
-      {/* Chain */}
+      {/* ── Sources input (top, like output at bottom) ─────────── */}
+      <div className="card" style={{marginBottom:10}}>
+        <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+            textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Sources</span>
+          <button className="lv" style={{fontSize:10,padding:"0 10px",minHeight:28}}
+            onClick={addSource}>+ source</button>
+        </div>
+        <div style={{padding:10}}>
+          {sources.length===0&&<div className="empty">no sources — tap + to add</div>}
+          {sources.map(function(entry,ei2){
+            return (
+              <PointSourceEntryCard key={entry.id} entry={entry} index={ei2}
+                nodes={nodes} selfId={node.id} iC={props.iC}
+                navPush={navPush} onNavigate={props.onNavigate}
+                onDel={function(){delSource(ei2)}}
+                onChange={function(patch){updSource(ei2,patch)}}/>
+            )
+          })}
+        </div>
+      </div>
+      {/* ── Modifier chain ──────────────────────────────────────── */}
       <div style={{marginBottom:10}}>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
           <span style={{fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
             textTransform:"uppercase",letterSpacing:".1em",color:"var(--ac)",flex:1}}>
-            ◉ Chain
+            Modifiers
           </span>
           <span style={{fontSize:9,color:"var(--mu)"}}>top → bottom</span>
-        </div>
-        {chain.length===0&&<div className="empty">empty — add a source to start</div>}
-        {chain.map(function(item,ci){
-          return (
-            <PointChainItemCard key={item.id} item={item} index={ci}
-              isFirst={ci===0} isLast={ci===chain.length-1}
-              nodes={nodes} selfId={node.id} iC={props.iC}
-              sourceId={firstSourceId}
-              navPush={navPush} onNavigate={props.onNavigate}
-              onMove={function(dir){moveItem(ci,dir)}}
-              onDel={function(){delItem(ci)}}
-              onChange={function(patch){updItem(ci,patch)}}/>
-          )
-        })}
-        {/* Add buttons */}
-        <div style={{display:"flex",gap:4,marginTop:6}}>
-          <button className="lv" style={{flex:1,fontSize:11,minHeight:36}}
-            onClick={addSource}>+ source</button>
-          <div ref={addModAnchorRef} style={{position:"relative",flex:2}}>
-            <button className="ac" style={{width:"100%",height:"100%",fontSize:11}}
+          <div ref={addModAnchorRef} style={{position:"relative"}}>
+            <button className="ac" style={{fontSize:10,padding:"0 10px",minHeight:28}}
               onClick={function(){setAddModOpen(!addModOpen)}}>+ modifier</button>
             {addModOpen&&addModPos&&createPortal(
               <div ref={addModMenuRef} className="eff-menu" style={addModPos}>
@@ -7698,8 +7745,21 @@ function PointCompProps(props) {
             )}
           </div>
         </div>
+        {chain.length===0&&<div className="empty">no modifiers — tap + to add</div>}
+        {chain.map(function(item,ci2){
+          return (
+            <PointChainItemCard key={item.id} item={item} index={ci2}
+              isFirst={ci2===0} isLast={ci2===chain.length-1}
+              nodes={nodes} selfId={node.id} iC={props.iC}
+              sourceId={firstSourceId}
+              navPush={navPush} onNavigate={props.onNavigate}
+              onMove={function(dir){moveChain(ci2,dir)}}
+              onDel={function(){delChain(ci2)}}
+              onChange={function(patch){updChain(ci2,patch)}}/>
+          )
+        })}
       </div>
-      {/* Output section */}
+      {/* ── Output (bottom, like sources at top) ────────────────── */}
       <div className="card">
         <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
@@ -7711,12 +7771,15 @@ function PointCompProps(props) {
             fn={function(v){onChange(Object.assign({},node,{outOpacity:v}))}}/>
         </div>
         <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
-        {outTab==="effects"&&(
+        {outTab==="modifiers"&&(
           <div style={{padding:10}}>
-            <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
-              filterTypes={POINT_CONTEXT_EFFECTS}
-              basePath={{slotKey:"outEfx",steps:[]}} onNavigate={props.onNavigate}
-              onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}/>
+            <div style={{fontSize:9,color:"var(--mu)",marginBottom:6,lineHeight:1.5}}>
+              Post-chain point modifiers — show-points, source-at-points, etc.
+            </div>
+            <EfxStack stack={node.outModifiers||[]} nodes={nodes} selfId={node.id}
+              navPush={navPush} filterTypes={POINT_CONTEXT_EFFECTS}
+              basePath={{slotKey:"outModifiers",steps:[]}} onNavigate={props.onNavigate}
+              onChange={function(es){onChange(Object.assign({},node,{outModifiers:es}))}}/>
           </div>
         )}
         {outTab==="masks"&&(
