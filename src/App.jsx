@@ -530,6 +530,10 @@ function mkEfx(t) {
   if(t==="edge-detect")  params={strength:100, invert:false}
   if(t==="pixelate")     params={size:8}
   if(t==="duotone")      params={shadow:"#0a0a2a", highlight:"#f5e642"}
+  if(t==="combine")      params={setA:"",setB:"",outputSet:"",mode:"union"}
+  if(t==="separate")     params={inputSet:"",by:"opacity",threshold:.5,outputA:"",outputB:""}
+  if(t==="filter")       params={attr:"opacity",op:">",value:.5}
+  if(t==="delete")       params={attr:"opacity",op:"<",value:.1}
   var ptDomain=["point-map","source-at-points"]; return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[], blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}}, domain:ptDomain.includes(t)?"points":"pixels" }
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, fillOpacity:100, opacity:100, blendMode:"multiply", effectStack:[], enabled:true, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} } }
@@ -553,6 +557,17 @@ function mkLayerComp() {
   return { id:uid(), name:"Layer Comp "+(_uid-100), type:"layers", section:2, enabled:true,
     context:"pixel",  // "pixel" | "point"
     layers:[l2,l1], outFillOpacity:100, outOpacity:100, outEfx:[], outMask:[] }
+}
+function mkPointModifier() {
+  return { id:uid(), name:"", enabled:true,
+    sourceSlot:{refId:null},
+    effectStack:[], isolateStack:[],
+    setId:"", opacity:100, blendMode:"normal" }
+}
+function mkPointComp() {
+  var m=mkPointModifier(); m.name="modifier 1"
+  return { id:uid(), name:"Point Comp "+(_uid-100), type:"point-comp", section:2, enabled:true,
+    modifiers:[m], outEfx:[], outMask:[] }
 }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
 
@@ -1926,6 +1941,8 @@ function getRootArr(node, slotKey) {
   // Handle layers[N].effectStack / layers[N].maskStack
   var lm = slotKey.match(/^layers\[(\d+)\]\.(\w+)$/)
   if (lm) { var li=parseInt(lm[1]); return ((node.layers||[])[li]||{})[lm[2]] || [] }
+  var mm = slotKey.match(/^modifiers\[(\d+)\]\.(\w+)$/)
+  if (mm) { var mi2=parseInt(mm[1]); return ((node.modifiers||[])[mi2]||{})[mm[2]] || [] }
   var parts = slotKey.split(".")
   var slot = node[parts[0]] || {}
   return slot[parts[1]] || []
@@ -1944,6 +1961,15 @@ function setRootArr(node, slotKey, newArr) {
       var upd={}; upd[lm[2]]=newArr; return Object.assign({},l,upd)
     })
     return Object.assign({},node,{layers:nl})
+  }
+  var mm = slotKey.match(/^modifiers\[(\d+)\]\.(\w+)$/)
+  if (mm) {
+    var mi2=parseInt(mm[1])
+    var nmod=(node.modifiers||[]).map(function(m,i){
+      if(i!==mi2) return m
+      var upd={}; upd[mm[2]]=newArr; return Object.assign({},m,upd)
+    })
+    return Object.assign({},node,{modifiers:nmod})
   }
   var parts = slotKey.split(".")
   var slotObj = Object.assign({}, node[parts[0]])
@@ -2310,6 +2336,38 @@ function applyEfxToPoints(pts,efx,w,h) {
         }
       })
     })
+  } else if(t==="filter"){
+    var fAttr=p.attr||"opacity", fOp=p.op||">", fVal=p.value==null?.5:p.value
+    out=out.filter(function(pt){
+      var v=pt[fAttr]; if(v==null)return false
+      if(fOp===">")  return v>fVal
+      if(fOp===">=") return v>=fVal
+      if(fOp==="<")  return v<fVal
+      if(fOp==="<=") return v<=fVal
+      if(fOp==="==") return Math.abs(v-fVal)<.001
+      if(fOp==="!=") return Math.abs(v-fVal)>=.001
+      return true
+    })
+  } else if(t==="delete"){
+    var dAttr=p.attr||"opacity", dOp=p.op||"<", dVal=p.value==null?.1:p.value
+    out=out.filter(function(pt){
+      var v=pt[dAttr]; if(v==null)return true
+      if(dOp===">")  return !(v>dVal)
+      if(dOp===">=") return !(v>=dVal)
+      if(dOp==="<")  return !(v<dVal)
+      if(dOp==="<=") return !(v<=dVal)
+      if(dOp==="==") return !(Math.abs(v-dVal)<.001)
+      if(dOp==="!=") return !(Math.abs(v-dVal)>=.001)
+      return true
+    })
+  } else if(t==="separate"){
+    var sAttr=p.by||"opacity",sThresh=p.threshold==null?.5:p.threshold
+    out=out.map(function(pt){
+      var v=pt[sAttr]; var norm=v==null?0:Math.max(0,Math.min(1,v))
+      return Object.assign({},pt,{_setGroup:norm>=sThresh?"A":"B"})
+    })
+  } else if(t==="combine"){
+    // combine is handled at Point Comp engine level; no-op in linear chain
   }
   return out
 }
@@ -2866,6 +2924,76 @@ function compPromoted(n,cmap,cache,iC,w,h,vis){
   return cv2
 }
 
+function compPointComp(n,cmap,cache,iC,w,h,vis) {
+  var cv=mkCv(w,h),ctx=cv.getContext("2d")
+  var allPts=[]
+  var mods=n.modifiers||[]
+  // Bottom-to-top accumulation (index mods.length-1 → 0)
+  for(var mi=mods.length-1;mi>=0;mi--){
+    var mod=mods[mi]
+    if(mod.enabled===false) continue
+    var srcId=mod.sourceSlot&&mod.sourceSlot.refId
+    if(!srcId||vis.has(srcId)) continue
+    var srcCv=compAny(srcId,cmap,cache,iC,w,h,new Set(vis))
+    if(!srcCv) continue
+    var pts=(srcCv._points||[]).map(function(p){return Object.assign({},p)})
+    if(!pts.length) continue
+    // Apply effectStack (point-domain effects only)
+    if(mod.effectStack&&mod.effectStack.length>0){
+      var tmpCv=mkCv(w,h),tmpCtx=tmpCv.getContext("2d")
+      tmpCtx.canvas._points=pts
+      var ptEfx=mod.effectStack.filter(function(e){return e.enabled&&POINT_CONTEXT_EFFECTS.includes(e.type)})
+      for(var ei=0;ei<ptEfx.length;ei++){
+        if(tmpCtx.canvas._points) tmpCtx.canvas._points=applyEfxToPoints(tmpCtx.canvas._points,ptEfx[ei],w,h)
+      }
+      pts=tmpCtx.canvas._points||pts
+    }
+    // Apply isolate mask: restrict which points are affected (weight by mask luminance at point pos)
+    if(mod.isolateStack&&mod.isolateStack.length>0){
+      var iv=new Set(vis); iv.add(n.id)
+      var mv=compMasks(mod.isolateStack,cmap,cache,iC,w,h,iv)
+      if(mv){
+        pts=pts.filter(function(pt){
+          var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
+          var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
+          return mv[py*w+px]>0.01
+        }).map(function(pt){
+          var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
+          var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
+          var mval=mv[py*w+px]
+          return Object.assign({},pt,{opacity:(pt.opacity==null?1:pt.opacity)*mval})
+        })
+      }
+    }
+    // Tag with modifier index and apply modifier opacity
+    var mop=(mod.opacity==null?100:mod.opacity)/100
+    pts=pts.map(function(pt){
+      return Object.assign({},pt,{_modIdx:mi,opacity:(pt.opacity==null?1:pt.opacity)*mop})
+    })
+    allPts=allPts.concat(pts)
+  }
+  cv._points=allPts
+  // Default render: dots sized by scale, coloured by pt.color or accent
+  if(allPts.length>0){
+    allPts.forEach(function(pt){
+      ctx.globalAlpha=Math.max(0,Math.min(1,pt.opacity==null?1:pt.opacity))
+      ctx.fillStyle=pt.color||"#24cca8"
+      var r=Math.max(1,(pt.scale==null?1:pt.scale)*3)
+      ctx.beginPath(); ctx.arc(pt.x*w,pt.y*h,r,0,Math.PI*2); ctx.fill()
+    })
+    ctx.globalAlpha=1
+  }
+  // outEfx: show-points / source-at-points / other point effects
+  if(n.outEfx&&n.outEfx.length>0) applyEfxStk(ctx,n.outEfx,cmap,cache,iC,w,h,new Set(vis))
+  if(n.outMask&&n.outMask.length>0) maskToAlpha(ctx,n.outMask,cmap,cache,iC,w,h,new Set(vis))
+  if(n.outOpacity!=null&&n.outOpacity<100){
+    var oid=ctx.getImageData(0,0,w,h),of=n.outOpacity/100
+    for(var oi=0;oi<w*h;oi++) oid.data[oi*4+3]=Math.round(oid.data[oi*4+3]*of)
+    ctx.putImageData(oid,0,0)
+  }
+  return cv
+}
+
 function compAny(id,cmap,cache,iC,w,h,vis) {
   if(!vis)vis=new Set()
   if(cache.has(id))return cache.get(id)
@@ -2937,6 +3065,14 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     }
     else if(n.type==="image")gImg(ctx,n.props,iC,w,h)
     cache.set(id,cv);return cv
+  }
+
+  // ── Point Comp compositor ──────────────────────────────────
+  if(n.type==="point-comp"){
+    vis.add(id)
+    var pccv=compPointComp(n,cmap,cache,iC,w,h,new Set(vis))
+    if(pccv) cache.set(id,pccv)
+    vis.delete(id); return pccv
   }
 
   // ── Promoted tap point ───────────────────────────────────
@@ -3642,7 +3778,7 @@ function SolidP(props) {
 // Geometry types that are point-based (use point render controls)
 var GEO_POINT_TYPES = ["grid","spiral","polar-grid","phyllotaxis","scatter"]
 // Effects available in point context (transform + point-specific only)
-var POINT_CONTEXT_EFFECTS = ["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","uv-distort","match","point-map","source-at-points","show-points"]
+var POINT_CONTEXT_EFFECTS = ["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","uv-distort","match","point-map","source-at-points","show-points","attributes","combine","separate","filter","delete"]
 function getSourceGeomType(nodes, sourceId) {
   if(!sourceId||!nodes) return null
   var n=(nodes||[]).find(function(x){return x.id===sourceId})
@@ -5032,6 +5168,82 @@ function EfxPrimary(props) {
       </div>
     )
   }
+  if(efx.type==="combine") return (
+    <div>
+      <PR l="set A"><input type="text" value={p.setA||""} placeholder="modifier set (blank=all)"
+        onChange={function(e){up({setA:e.target.value})}}
+        style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}/></PR>
+      <PR l="set B"><input type="text" value={p.setB||""} placeholder="modifier set (blank=all)"
+        onChange={function(e){up({setB:e.target.value})}}
+        style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}/></PR>
+      <Se l="mode" v={p.mode||"union"} opts={["union","intersection"]}
+        fn={function(v){up({mode:v})}}/>
+      <PR l="output set"><input type="text" value={p.outputSet||""} placeholder="output set name"
+        onChange={function(e){up({outputSet:e.target.value})}}
+        style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}/></PR>
+      <div style={{fontSize:9,color:"var(--mu)",padding:"4px 0 0 84px",fontStyle:"italic",lineHeight:1.5}}>
+        Merges two named point sets into one output set
+      </div>
+    </div>)
+  if(efx.type==="separate") return (
+    <div>
+      <Se l="split by" v={p.by||"opacity"}
+        opts={["opacity","scale","x","y","rotation","sourceIndex","pointIndex","_modIdx","_setGroup"]}
+        fn={function(v){up({by:v})}}/>
+      <Sl l="threshold" v={p.threshold==null?.5:p.threshold} mn={0} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({threshold:v})}}/>
+      <PR l="output A"><input type="text" value={p.outputA||""} placeholder="set name for ≥ threshold"
+        onChange={function(e){up({outputA:e.target.value})}}
+        style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}/></PR>
+      <PR l="output B"><input type="text" value={p.outputB||""} placeholder="set name for < threshold"
+        onChange={function(e){up({outputB:e.target.value})}}
+        style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}/></PR>
+      <div style={{fontSize:9,color:"var(--mu)",padding:"4px 0 0 84px",fontStyle:"italic",lineHeight:1.5}}>
+        Tags points with _setGroup A or B — use filter to split downstream
+      </div>
+    </div>)
+  if(efx.type==="filter") return (
+    <div>
+      <Se l="attribute" v={p.attr||"opacity"}
+        opts={["opacity","scale","x","y","rotation","sourceIndex","pointIndex","_modIdx","_setGroup"]}
+        fn={function(v){up({attr:v})}}/>
+      <PR l="operator">
+        <div style={{display:"flex",gap:4,flex:1}}>
+          {[">",">=","<","<=","==","!="].map(function(op){
+            return <button key={op}
+              className={(p.op||">")===op?"ac":"ghost"}
+              style={{flex:1,fontSize:11,minHeight:32,fontFamily:"'IBM Plex Mono',monospace"}}
+              onClick={function(){up({op:op})}}>{op}</button>
+          })}
+        </div>
+      </PR>
+      <Sl l="value" v={p.value==null?.5:p.value} mn={-10} mx={10} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({value:v})}}/>
+      <div style={{fontSize:9,color:"var(--mu)",padding:"4px 0 0 84px",fontStyle:"italic",lineHeight:1.5}}>
+        Keeps only points where {p.attr||"attr"} {p.op||">"} {(p.value==null?.5:p.value).toFixed(2)}
+      </div>
+    </div>)
+  if(efx.type==="delete") return (
+    <div>
+      <Se l="attribute" v={p.attr||"opacity"}
+        opts={["opacity","scale","x","y","rotation","sourceIndex","pointIndex","_modIdx","_setGroup"]}
+        fn={function(v){up({attr:v})}}/>
+      <PR l="operator">
+        <div style={{display:"flex",gap:4,flex:1}}>
+          {[">",">=","<","<=","==","!="].map(function(op){
+            return <button key={op}
+              className={(p.op||"<")===op?"ac":"ghost"}
+              style={{flex:1,fontSize:11,minHeight:32,fontFamily:"'IBM Plex Mono',monospace"}}
+              onClick={function(){up({op:op})}}>{op}</button>
+          })}
+        </div>
+      </PR>
+      <Sl l="value" v={p.value==null?.1:p.value} mn={-10} mx={10} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({value:v})}}/>
+      <div style={{fontSize:9,color:"var(--mu)",padding:"4px 0 0 84px",fontStyle:"italic",lineHeight:1.5}}>
+        Removes points where {p.attr||"attr"} {p.op||"<"} {(p.value==null?.1:p.value).toFixed(2)}
+      </div>
+    </div>)
   return <div className="empty">no parameters</div>
 }
 
@@ -5661,11 +5873,11 @@ function EfxCard(props) {
 /* ─── ADD EFFECT MENU ─────────────────────────────────── */
 var EFX_GROUPS=[
   {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
-  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map"]},
-  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise"]},
+  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map","colour"]},
+  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise","duotone"]},
   {label:"Distort",  items:["wave","twirl","bulge","uv-distort","polar-to-cart","cart-to-polar"]},
-  {label:"Transform",items:["match","transform","attributes","combine","separate","filter","delete"]},
-  {label:"Points",   items:["show-points","point-map","source-at-points"]},
+  {label:"Transform",items:["match","transform"]},
+  {label:"Points",   items:["show-points","point-map","source-at-points","attributes","combine","separate","filter","delete"]},
 ]
 // Hook: compute a fixed-position rect for a popover relative to an anchor ref.
 // placement: "above" or "below" — menu opens above or below the anchor, whichever fits.
@@ -5713,12 +5925,16 @@ function AddEfxMenu(props) {
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
+  var displayGroups=(props.filterTypes
+    ?EFX_GROUPS.map(function(g){var fi=g.items.filter(function(t){return props.filterTypes.includes(t)});return fi.length?{label:g.label,items:fi}:null}).filter(Boolean)
+    :EFX_GROUPS
+  ).filter(function(g){return !(props.excludeGroups||[]).includes(g.label)})
   return (
     <div ref={anchorRef} style={{position:"relative",flex:2,minWidth:0}}>
       <button className="ac" style={{width:"100%",height:"100%"}} onClick={function(){setOpen(!open)}}>+ effect</button>
       {open&&pos&&createPortal(
         <div ref={menuRef} className="eff-menu" style={pos}>
-          {EFX_GROUPS.map(function(grp){
+          {displayGroups.map(function(grp){
             return (
               <div key={grp.label}>
                 <div className="drop-grp">{grp.label}</div>
@@ -5813,7 +6029,7 @@ function EfxStack(props) {
       })}
       <div style={{display:"flex",gap:4,marginTop:6,alignItems:"stretch",minHeight:36}}>
         {/* + effect — 2 parts */}
-        <AddEfxMenu onAdd={addEfx}/>
+        <AddEfxMenu onAdd={addEfx} filterTypes={props.filterTypes} excludeGroups={props.excludeGroups}/>
         {/* + stack — 2 parts */}
         <div ref={lkRef} style={{position:"relative",flex:2,minWidth:0}}>
           <button className="ac" style={{width:"100%",height:"100%",fontSize:11}}
@@ -5965,6 +6181,7 @@ function SlotPanel(props) {
           <EfxStack key={(slot.effectStack||[]).map(function(e){return e.id}).join(",")}
             stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             sourceId={slot.refId}
+            excludeGroups={["Points"]}
             basePath={{slotKey:(props.slotKey||"")+".effectStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
@@ -6258,6 +6475,7 @@ function BlenderProps(props) {
         {outTab==="effects" && (
           <div style={{padding:10}}>
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              excludeGroups={["Points"]}
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
@@ -6426,7 +6644,7 @@ function BlenderProps(props) {
 }
 
 /* ─── NODE ITEM ───────────────────────────────────────── */
-var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","tile":"#20a890","grid":"#48a8d0","spiral":"#d0a048","polar-grid":"#a048d0","phyllotaxis":"#48d090","scatter":"#d07048","blender":"#b82880","layers":"#e06828","stack":"#24acc4","promoted":"#d4b428"}
+var TDOT={"solid":"#3850a0","shape":"#18b860","gradient":"#7820b0","noise":"#a87018","pattern":"#1878b0","image":"#2060a8","tile":"#20a890","grid":"#48a8d0","spiral":"#d0a048","polar-grid":"#a048d0","phyllotaxis":"#48d090","scatter":"#d07048","blender":"#b82880","layers":"#e06828","stack":"#24acc4","promoted":"#d4b428","point-comp":"#24cca8"}
 /* ─── DISPLAY MODE BUTTON ──────────────────────────────── */
 // Renders a stacked-layers SVG icon in a round-rect.
 // A small triangle badge in the bottom-right signals multiple modes.
@@ -6575,7 +6793,7 @@ function NodeItem(props) {
       </div>
       <span className={"ftag "+(node.type==="stack"?"tstack":node.type==="promoted"?"tprom":node.type==="layers"?"tco":node.section===1?"tgn":"tco")}
         style={node.type==="layers"?{borderColor:"#e06828",color:"#e06828",background:"rgba(224,104,40,.1)"}:{}}>
-        {node.type==="stack"?(node.stackType||"effect")+" stack":node.type==="layers"?"layer comp":node.type}
+        {node.type==="stack"?(node.stackType||"effect")+" stack":node.type==="layers"?"layer comp":node.type==="point-comp"?"point comp ◉":node.type}
       </span>
       <button className="icon-btn sm" onClick={function(e){e.stopPropagation();props.onTog(node.id)}} style={{color:node.enabled?"var(--ac)":"var(--mu)"}}>
         {node.enabled?"●":"○"}
@@ -6627,7 +6845,7 @@ function AddMenu(props) {
   },[open])
   var s1standard=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Geometry"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
   var s1advanced=[{t:"tile",l:"Tile"}]
-  var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"}]
+  var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"},{t:"__div__",l:"Point Context"},{t:"point-comp",l:"Point Comp ◉"}]
   return (
     <div ref={anchorRef} style={{position:"relative"}}>
       <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
@@ -6641,7 +6859,10 @@ function AddMenu(props) {
               Advanced
             </div>,
             s1advanced.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})
-          ]:s2items.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})}
+          ]:s2items.map(function(item){
+  if(item.t==="__div__") return <div key={item.t} className="drop-grp" style={{borderTop:"1px solid var(--bd)",marginTop:4}}>{item.l}</div>
+  return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>
+})}
         </div>,
         document.body
       )}
@@ -6935,6 +7156,7 @@ function LayerCard(props) {
             navPush={props.navPush} iC={props.iC}
             sourceId={lyr.refId}
             context={props.context}
+            excludeGroups={["Points"]}
             basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
@@ -7187,6 +7409,7 @@ function LayerCompProps(props) {
         {outTab==="effects" && (
           <div style={{padding:10}}>
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              excludeGroups={["Points"]}
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
@@ -7205,6 +7428,241 @@ function LayerCompProps(props) {
     </div>
   )
 }
+
+/* ─── POINT MODIFIER CARD ────────────────────────────── */
+function PointModifierCard(props) {
+  var mod=props.mod, mi=props.mi
+  var tabSt=useState("source"); var tab=tabSt[0], setTab=tabSt[1]
+  var delArmedSt=useState(false); var delArmed=delArmedSt[0], setDelArmed=delArmedSt[1]
+  var nEfx=(mod.effectStack||[]).length, nIso=(mod.isolateStack||[]).length
+  var tabs=[
+    {id:"source",  label:"Source"},
+    {id:"effects", label:"Modifiers"+(nEfx>0?" ("+nEfx+")":""), color:"ac"},
+    {id:"isolate", label:"Isolate"+(nIso>0?" ("+nIso+")":""),   color:"lv"},
+    {id:"layer",   label:"Layer"},
+  ]
+  var isCollapsed=props.collapsed||false
+  return (
+    <div className="card" style={{marginBottom:8}}>
+      <div className="card-hdr" style={{background:"rgba(36,204,168,.06)",
+        borderBottom:isCollapsed?"none":"1px solid var(--bd)",
+        borderRadius:isCollapsed?8:"8px 8px 0 0"}}>
+        <span className={"bp-chevron"+(isCollapsed?"":" open")}
+          onClick={props.onToggleCollapse}
+          style={{color:"var(--ac)",flexShrink:0,fontSize:18}}>›</span>
+        <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+          <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
+          <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
+        </div>
+        <button className="icon-btn sm"
+          onClick={function(){props.onChange({enabled:mod.enabled===false})}}
+          style={{color:mod.enabled===false?"var(--mu)":"var(--ac)",fontSize:18}}>
+          {mod.enabled===false?"○":"●"}
+        </button>
+        <InlineRename value={mod.name} fallback={"modifier "+(props.totalMods-mi)}
+          onChange={function(nw){props.onChange({name:nw})}}
+          labelStyle={{fontSize:12,color:"var(--ac)",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
+        <button
+          onClick={function(){
+            if(props.totalMods<=1) return
+            if(delArmed){props.onDel();setDelArmed(false)}
+            else setDelArmed(true)
+          }}
+          onBlur={function(){setDelArmed(false)}}
+          disabled={props.totalMods<=1}
+          style={{minHeight:32,padding:"0 8px",fontSize:delArmed?9:14,
+            color:props.totalMods<=1?"var(--bd)":delArmed?"var(--dng)":"var(--mu)",
+            background:delArmed?"rgba(224,48,96,.12)":"none",
+            border:delArmed?"1px solid var(--dng)":"none",
+            borderRadius:6,minWidth:delArmed?56:32,
+            cursor:props.totalMods<=1?"default":"pointer",transition:"all .15s"}}>
+          {props.totalMods<=1?"×":delArmed?"confirm ×":"×"}
+        </button>
+      </div>
+      {!isCollapsed && <TabBar tabs={tabs} active={tab} onChange={setTab}/>}
+      {!isCollapsed && tab==="source" && (
+        <div className="card-body">
+          <NRef l="source" v={mod.sourceSlot&&mod.sourceSlot.refId||null}
+            nodes={props.nodes} selfId={props.selfId} iC={props.iC} mode="source"
+            fn={function(v){props.onChange({sourceSlot:Object.assign({},mod.sourceSlot||{},{refId:v})})}}/>
+          <PR l="set id">
+            <input type="text" value={mod.setId||""} placeholder="auto (modifier index)"
+              onChange={function(e){props.onChange({setId:e.target.value})}}
+              style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}/>
+          </PR>
+          <div style={{fontSize:9,color:"var(--mu)",padding:"0 0 4px 84px",lineHeight:1.5}}>
+            Named sets can be referenced by combine/filter/delete effects downstream.
+          </div>
+        </div>
+      )}
+      {!isCollapsed && tab==="effects" && (
+        <div style={{padding:10}}>
+          <div style={{fontSize:9,color:"var(--mu)",marginBottom:6,lineHeight:1.5}}>
+            Point-domain effects only. Transforms, waves, mappings etc. operate on this modifier's points.
+          </div>
+          <EfxStack
+            key={(mod.effectStack||[]).map(function(e){return e.id}).join(",")}
+            stack={mod.effectStack||[]} nodes={props.nodes} selfId={props.selfId}
+            navPush={props.navPush} iC={props.iC}
+            filterTypes={POINT_CONTEXT_EFFECTS}
+            basePath={{slotKey:"modifiers["+mi+"].effectStack", steps:[]}}
+            onNavigate={props.onNavigate}
+            onChange={function(es){props.onChange({effectStack:es})}}/>
+        </div>
+      )}
+      {!isCollapsed && tab==="isolate" && (
+        <div style={{padding:10}}>
+          <div style={{fontSize:9,color:"var(--mu)",marginBottom:6,lineHeight:1.5}}>
+            Restricts which points are contributed. White = included, black = excluded. Weighted by mask luminance at each point position.
+          </div>
+          <MaskStackPanel
+            key={(mod.isolateStack||[]).map(function(m){return m.id}).join(",")}
+            stack={mod.isolateStack||[]} nodes={props.nodes} selfId={props.selfId}
+            navPush={props.navPush} iC={props.iC}
+            basePath={{slotKey:"modifiers["+mi+"].isolateStack", steps:[]}}
+            onNavigate={props.onNavigate}
+            onChange={function(ms){props.onChange({isolateStack:ms})}}/>
+        </div>
+      )}
+      {!isCollapsed && tab==="layer" && (
+        <div className="card-body">
+          <Sl l="opacity" v={mod.opacity==null?100:mod.opacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){props.onChange({opacity:v})}}/>
+          <Se l="blend" v={mod.blendMode||"normal"} opts={BMODES}
+            fn={function(v){props.onChange({blendMode:v})}}/>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── POINT COMP PROPS ────────────────────────────────── */
+function PointCompProps(props) {
+  var node=props.node, onChange=props.onChange, nodes=props.nodes
+  var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
+  var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  function navPush(item){setNavStack(function(s){return s.concat([item])})}
+
+  // Drill-down: modifier effect → masks, or modifier mask → effects
+  if(navStack.length>0){
+    var top=navStack[navStack.length-1]
+    var topSteps=(top.parentSteps||[]).concat(top.kind?[{kind:top.kind,id:top.id}]:top.steps||[])
+    var drillTarget=resolvePath(node,top.slotKey,topSteps)
+    if(!drillTarget){ setTimeout(function(){setNavStack([])},0); return <div style={{padding:20,color:"var(--mu)",fontSize:11}}>Target gone — returning…</div> }
+    function jumpTo(idx){setNavStack(function(s){return s.slice(0,idx)})}
+    var childBasePath={slotKey:top.slotKey,steps:topSteps}
+    var isEffectDrill=top.kind==="effect"
+    var stackToShow=isEffectDrill?(drillTarget.maskStack||[]):(drillTarget.effectStack||[])
+    return (
+      <div style={{display:"flex",flexDirection:"column",minHeight:300}}>
+        <div className="breadcrumb">
+          <span className="bc-item" onClick={function(){setNavStack([])}}>{node.name}</span>
+          {navStack.map(function(n,i){
+            var isCur=i===navStack.length-1
+            return (
+              <span key={i} style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                <span style={{color:"var(--mu)",margin:"0 2px"}}>›</span>
+                <span className={"bc-item"+(isCur?" cur":"")} onClick={function(){jumpTo(i)}}>{n.label}</span>
+              </span>
+            )
+          })}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:10}}>
+          {isEffectDrill
+            ? <MaskStackPanel key={stackToShow.map(function(m){return m.id}).join(",")}
+                stack={stackToShow} nodes={nodes} selfId={node.id}
+                navPush={navPush} iC={props.iC} basePath={childBasePath} onNavigate={props.onNavigate}
+                onChange={function(ms){var nn=updatePath(node,top.slotKey,topSteps,function(efx){return Object.assign({},efx,{maskStack:ms})});onChange(nn)}}/>
+            : <EfxStack key={stackToShow.map(function(e){return e.id}).join(",")}
+                stack={stackToShow} nodes={nodes} selfId={node.id}
+                navPush={navPush} filterTypes={POINT_CONTEXT_EFFECTS}
+                basePath={childBasePath} onNavigate={props.onNavigate}
+                onChange={function(es){var nn=updatePath(node,top.slotKey,topSteps,function(mask){return Object.assign({},mask,{effectStack:es})});onChange(nn)}}/>
+          }
+        </div>
+      </div>
+    )
+  }
+
+  var mods=node.modifiers||[]
+  var pcUi=node._ui||{}
+  function setPcUi(patch){onChange(Object.assign({},node,{_ui:Object.assign({},pcUi,patch)}))}
+  var modCollapsed=pcUi.modCollapsed||{}
+  function toggleModCollapse(id){var nc=Object.assign({},modCollapsed);nc[id]=!nc[id];setPcUi({modCollapsed:nc})}
+  function updMod(idx,patch){var nm=mods.map(function(m,i){return i===idx?Object.assign({},m,patch):m});onChange(Object.assign({},node,{modifiers:nm,_ui:pcUi}))}
+  function addMod(){var m=mkPointModifier();m.name="modifier "+(mods.length+1);onChange(Object.assign({},node,{modifiers:[m].concat(mods)}))}
+  function delMod(idx){if(mods.length<=1)return;onChange(Object.assign({},node,{modifiers:mods.filter(function(_,i){return i!==idx})}))}
+  function moveMod(idx,dir){var ni=Math.max(0,Math.min(mods.length-1,idx+dir));if(ni===idx)return;var a=mods.slice();var tmp=a[idx];a[idx]=a[ni];a[ni]=tmp;onChange(Object.assign({},node,{modifiers:a}))}
+
+  var nOutEfx=(node.outEfx||[]).length, nOutMask=(node.outMask||[]).length
+  var outTabs=[
+    {id:"effects",label:"Effects"+(nOutEfx>0?" ("+nOutEfx+")":""),color:"ac"},
+    {id:"masks",  label:"Masks"+(nOutMask>0?" ("+nOutMask+")":""),color:"lv"},
+  ]
+
+  return (
+    <div style={{padding:10,overflowY:"auto"}}>
+      {/* Modifiers list */}
+      <div style={{marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+          <span style={{fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+            textTransform:"uppercase",letterSpacing:".1em",color:"var(--ac)",flex:1}}>
+            ◉ Modifiers
+          </span>
+          <span style={{fontSize:9,color:"var(--mu)"}}>bottom → top</span>
+          <button className="ac" style={{fontSize:10,padding:"0 10px",minHeight:30}} onClick={addMod}>+ modifier</button>
+        </div>
+        {mods.length===0 && <div className="empty">no modifiers — tap + to add</div>}
+        {mods.map(function(mod,mi){
+          return (
+            <PointModifierCard key={mod.id} mod={mod} mi={mi}
+              isFirst={mi===0} isLast={mi===mods.length-1}
+              totalMods={mods.length}
+              collapsed={!!modCollapsed[mod.id]}
+              onToggleCollapse={function(){toggleModCollapse(mod.id)}}
+              nodes={nodes} selfId={node.id} iC={props.iC}
+              navPush={navPush} onNavigate={props.onNavigate}
+              onMove={function(dir){moveMod(mi,dir)}}
+              onDel={function(){delMod(mi)}}
+              onChange={function(patch){updMod(mi,patch)}}/>
+          )
+        })}
+      </div>
+      {/* Output section */}
+      <div className="card">
+        <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+          <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
+            textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
+        </div>
+        <div className="card-body" style={{paddingBottom:0}}>
+          <Sl l="opacity" v={node.outOpacity==null?100:node.outOpacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){onChange(Object.assign({},node,{outOpacity:v}))}}/>
+        </div>
+        <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
+        {outTab==="effects" && (
+          <div style={{padding:10}}>
+            <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
+              filterTypes={POINT_CONTEXT_EFFECTS}
+              basePath={{slotKey:"outEfx",steps:[]}}
+              onNavigate={props.onNavigate}
+              onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}/>
+          </div>
+        )}
+        {outTab==="masks" && (
+          <div style={{padding:10}}>
+            <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush} iC={props.iC}
+              basePath={{slotKey:"outMask",steps:[]}}
+              onNavigate={props.onNavigate}
+              onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}/>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 
 function NodeDetailSheet(props) {
   // props: node, sec, open, onClose, onUpdate, onLoad, nodes, dispId, onDsp
@@ -7285,6 +7743,8 @@ function NodeDetailSheet(props) {
               : props.node.type==="layers"
                 ? <LayerCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
                     onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                : props.node.type==="point-comp"
+                  ? <PointCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
                 : props.node.type==="promoted"
                 ? <PromotedProps node={props.node} nodes={props.nodes}/>
                 : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
@@ -7490,6 +7950,8 @@ function Section(props) {
                           ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                         : node.type==="stack"
                           ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                          : node.type==="point-comp"
+                            ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
                           : null
                     }
                   </div>
@@ -7518,7 +7980,9 @@ function Section(props) {
                       onTog={props.onTog}/>
                     {isSel && props.panelStyle!=="sheet" && (
                       <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
-                        <PromotedProps node={node} nodes={props.nodes}/>
+                        {node.type==="point-comp"
+                          ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
+                          : <PromotedProps node={node} nodes={props.nodes}/>}
                       </div>
                     )}
                   </div>
@@ -7895,7 +8359,7 @@ function App() {
     iC.current.set(url,img)
     img.src=url
   }
-  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="rasterise"?mkRasterise():type==="isolate"?mkIsolate():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
+  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="point-comp"?mkPointComp():type==="rasterise"?mkRasterise():type==="isolate"?mkIsolate():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
   function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id){setDispId(null);setDispMask(false);setDispSlot(null)}}
   function upd(u){
     setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})
