@@ -3790,6 +3790,9 @@ function SolidP(props) {
 // Geometry types that are point-based (use point render controls)
 var GEO_POINT_TYPES = ["grid","spiral","polar-grid","phyllotaxis","scatter"]
 // Effects available in point context (transform + point-specific only)
+// Effects available in Point Comp isolate mask effect stacks.
+// Luminance/shape ops only — no colour manipulation (masks are greyscale).
+var ISOLATE_MASK_EFFECTS = ["brightness","contrast","curves","exposure","levels","posterize","invert","threshold","pixelate","blur"]
 var POINT_CONTEXT_EFFECTS = ["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","uv-distort","match","point-map","source-at-points","show-points","attributes","combine","separate","filter","delete"]
 function getSourceGeomType(nodes, sourceId) {
   if(!sourceId||!nodes) return null
