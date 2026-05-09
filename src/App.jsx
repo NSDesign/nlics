@@ -2959,6 +2959,7 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
   var chain=n.chain||[]
   for(var ci=0;ci<chain.length;ci++){
     var item=chain[ci]
+    if(item.type==="_source") continue  // legacy — sources now live in n.sources[]
     if(item.enabled===false||!pts.length) continue
     // Split by isolate into targets (modifier applies) + unchanged (passes through)
     var targets=pts, unchanged=[]
@@ -2996,7 +2997,14 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
   }
   // outModifiers (point-context: show-points, source-at-points, etc.)
   if(n.outModifiers&&n.outModifiers.length>0) applyEfxStk(ctx,n.outModifiers,cmap,cache,iC,w,h,new Set(vis))
-  if(n.outMask&&n.outMask.length>0) maskToAlpha(ctx,n.outMask,cmap,cache,iC,w,h,new Set(vis))
+  if(n.outMask&&n.outMask.length>0){
+    if(n.outMaskOpacity!=null&&n.outMaskOpacity<100){
+      var omid=ctx.getImageData(0,0,w,h),omf=n.outMaskOpacity/100
+      for(var omi=0;omi<w*h;omi++) omid.data[omi*4+3]=Math.round(omid.data[omi*4+3]*omf)
+      ctx.putImageData(omid,0,0)
+    }
+    maskToAlpha(ctx,n.outMask,cmap,cache,iC,w,h,new Set(vis))
+  }
   if(n.outOpacity!=null&&n.outOpacity<100){
     var oid=ctx.getImageData(0,0,w,h),of=n.outOpacity/100
     for(var oi=0;oi<w*h;oi++) oid.data[oi*4+3]=Math.round(oid.data[oi*4+3]*of)
@@ -5312,6 +5320,7 @@ function MaskCard(props) {
     blendMode:"multiply", effectStack:[], enabled:true, name:""
   }, props.mask||{})
   var tabSt=useState("source"); var tab=tabSt[0], setTab=tabSt[1]
+  var collSt=useState(false); var collapsed=collSt[0], setCollapsed=collSt[1]
   var armSt=useState(false); var armed=armSt[0], setArmed=armSt[1]
   var timerRef=useRef(null)
   useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
@@ -5329,6 +5338,11 @@ function MaskCard(props) {
     <div className="card" style={{marginBottom:10,border:"1px solid rgba(176,96,240,.25)"}}>
       {/* Header — matches EfxCard layout */}
       <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
+        <button onClick={function(){setCollapsed(!collapsed)}}
+          style={{fontSize:11,color:"var(--mu)",background:"none",border:"none",
+            cursor:"pointer",padding:"0 2px",alignSelf:"stretch",display:"flex",alignItems:"center"}}>
+          {collapsed?"▸":"▾"}
+        </button>
         <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
           {props.onMove&&<button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>}
           {props.onMove&&<button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>}
@@ -5412,8 +5426,8 @@ function MaskCard(props) {
           {armed?"confirm ×":"×"}
         </button>
       </div>
-      <TabBar tabs={tabs} active={tab} onChange={setTab}/>
-      {tab==="source" && (
+      {!collapsed && <TabBar tabs={tabs} active={tab} onChange={setTab}/>}
+      {!collapsed && tab==="source" && (
         <div className="card-body">
           {!mk.refId && (
             <div style={{fontSize:9,color:"#e0a060",background:"rgba(224,160,96,.1)",
@@ -5443,7 +5457,7 @@ function MaskCard(props) {
           </PR>
         </div>
       )}
-      {tab==="layer" && (
+      {!collapsed && tab==="layer" && (
         <div className="card-body">
           <Se l="blend" v={mk.blendMode} opts={MBMS}
             fn={function(v){props.onChange(Object.assign({},mk,{blendMode:v}))}}/>
@@ -5460,7 +5474,7 @@ function MaskCard(props) {
           </BlendIfAccordion>
         </div>
       )}
-      {tab==="effects" && (
+      {!collapsed && tab==="effects" && (
         <div className="card-body" style={{paddingTop:8}}>
           {nEfx===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no effects on this mask</div>}
           {props.onEditEffects && (
@@ -7446,74 +7460,6 @@ function LayerCompProps(props) {
   )
 }
 
-/* ─── POINT SOURCE ENTRY CARD ────────────────────────── */
-// One entry in the Sources input section.
-// Each entry has a geometry source reference and its own isolate mask.
-function PointSourceEntryCard(props) {
-  var entry=props.entry, ei=props.index
-  var armedSt=useState(false); var armed=armedSt[0], setArmed=armedSt[1]
-  var isoOpenSt=useState(false); var isoOpen=isoOpenSt[0], setIsoOpen=isoOpenSt[1]
-  var timerRef=useRef(null)
-  useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
-  function handleDel(){
-    if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
-    else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
-  }
-  var nIso=(entry.isolate||[]).length
-  return (
-    <div style={{background:"var(--bg)",border:"1px solid rgba(176,96,240,.22)",borderRadius:8,
-      marginBottom:8,overflow:"hidden"}}>
-      <div style={{display:"flex",alignItems:"center",gap:4,padding:"0 8px 0 10px",
-        minHeight:"var(--tap)",background:"var(--sf)",borderBottom:"1px solid var(--bd)"}}>
-        <button className="icon-btn sm"
-          onClick={function(){props.onChange(Object.assign({},entry,{enabled:entry.enabled===false}))}}
-          style={{color:entry.enabled===false?"var(--mu)":"var(--lv)",fontSize:18}}>
-          {entry.enabled===false?"○":"●"}
-        </button>
-        <InlineRename value={entry.name} fallback={"source "+(ei+1)}
-          onChange={function(nw){props.onChange(Object.assign({},entry,{name:nw}))}}
-          labelStyle={{fontSize:12,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
-        {nIso>0&&<span style={{fontSize:9,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",
-          background:"rgba(176,96,240,.1)",border:"1px solid rgba(176,96,240,.25)",
-          borderRadius:3,padding:"1px 5px",flexShrink:0}}>◈{nIso}</span>}
-        <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,
-          background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",
-          color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
-          {armed?"confirm ×":"×"}
-        </button>
-      </div>
-      <div style={{padding:"8px 12px"}}>
-        <NRef l="source" v={entry.refId||null} nodes={props.nodes} selfId={props.selfId}
-          iC={props.iC} mode="source"
-          fn={function(v){props.onChange(Object.assign({},entry,{refId:v}))}}/>
-      </div>
-      {/* Isolate accordion */}
-      <div style={{borderTop:"1px solid var(--bd)"}}>
-        <button onClick={function(){setIsoOpen(!isoOpen)}}
-          style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"8px 12px",
-            background:"none",border:"none",cursor:"pointer"}}>
-          <span className={"bp-chevron"+(isoOpen?" open":"")} style={{fontSize:14,color:"var(--lv)"}}>›</span>
-          <span style={{fontSize:9,textTransform:"uppercase",letterSpacing:".1em",
-            fontFamily:"'IBM Plex Mono',monospace",color:"var(--di)"}}>
-            Isolate{nIso>0?" ("+nIso+")":""}
-          </span>
-          {nIso===0&&<span style={{fontSize:9,color:"var(--mu)",marginLeft:4}}>— filter which points enter</span>}
-        </button>
-        {isoOpen&&(
-          <div style={{padding:"0 10px 10px"}}>
-            <MaskStackPanel
-              key={(entry.isolate||[]).map(function(m){return m.id}).join(",")}
-              stack={entry.isolate||[]} nodes={props.nodes} selfId={props.selfId}
-              navPush={props.navPush} iC={props.iC}
-              basePath={{slotKey:"sources["+ei+"].isolate", steps:[]}}
-              onNavigate={props.onNavigate}
-              onChange={function(ms){props.onChange(Object.assign({},entry,{isolate:ms}))}}/>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 /* ─── POINT CHAIN ITEM CARD ──────────────────────────── */
 // A single modifier in the chain. Each item is one point-context operation.
@@ -7609,6 +7555,8 @@ function PointCompProps(props) {
   var node=props.node, onChange=props.onChange, nodes=props.nodes
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
   var outTabSt=useState("modifiers"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
+  var srcTabSt=useState(0); var srcTab=srcTabSt[0], setSrcTab=srcTabSt[1]
+  var srcSubSt=useState("source"); var srcSub=srcSubSt[0], setSrcSub=srcSubSt[1]
   var addModOpenSt=useState(false); var addModOpen=addModOpenSt[0], setAddModOpen=addModOpenSt[1]
   var addModAnchorRef=useRef(null), addModMenuRef=useRef(null)
   var addModPos=usePopoverPosition(addModAnchorRef, addModOpen, "above")
@@ -7702,26 +7650,95 @@ function PointCompProps(props) {
 
   return (
     <div style={{padding:10,overflowY:"auto"}}>
-      {/* ── Sources input (top, like output at bottom) ─────────── */}
+      {/* ── Sources input — tabbed ───────────────────────────── */}
       <div className="card" style={{marginBottom:10}}>
         <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
             textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Sources</span>
           <button className="lv" style={{fontSize:10,padding:"0 10px",minHeight:28}}
-            onClick={addSource}>+ source</button>
+            onClick={function(){addSource();setSrcTab(sources.length)}}>+ source</button>
         </div>
-        <div style={{padding:10}}>
-          {sources.length===0&&<div className="empty">no sources — tap + to add</div>}
-          {sources.map(function(entry,ei2){
-            return (
-              <PointSourceEntryCard key={entry.id} entry={entry} index={ei2}
-                nodes={nodes} selfId={node.id} iC={props.iC}
-                navPush={navPush} onNavigate={props.onNavigate}
-                onDel={function(){delSource(ei2)}}
-                onChange={function(patch){updSource(ei2,patch)}}/>
-            )
-          })}
-        </div>
+        {/* Source tabs — one per entry */}
+        {sources.length===0
+          ? <div className="empty">no sources — tap + to add</div>
+          : <div>
+              <div className="bp-tabs">
+                {sources.map(function(entry,ei2){
+                  var nIso=(entry.isolate||[]).length
+                  return (
+                    <button key={entry.id}
+                      className={"bp-tab"+(srcTab===ei2?" on lv":"")}
+                      onClick={function(){setSrcTab(ei2);setSrcSub("source")}}>
+                      {entry.name||("source "+(ei2+1))}
+                      {entry.enabled===false&&" ○"}
+                      {nIso>0&&" ◈"}
+                    </button>
+                  )
+                })}
+              </div>
+              {(function(){
+                var entry=sources[Math.min(srcTab,sources.length-1)]
+                var ei2=Math.min(srcTab,sources.length-1)
+                if(!entry) return null
+                var nIso=(entry.isolate||[]).length
+                var subTabs=[
+                  {id:"source",label:"Source"},
+                  {id:"isolate",label:"Isolate"+(nIso>0?" ("+nIso+")":""),color:"lv"},
+                ]
+                return (
+                  <div>
+                    {/* Sub-tab bar: Source | Isolate */}
+                    <div style={{display:"flex",gap:0,borderBottom:"1px solid var(--bd)"}}>
+                      <div style={{display:"flex",flex:1}}>
+                        {subTabs.map(function(t){
+                          var on=srcSub===t.id
+                          return <button key={t.id}
+                            className={"tab"+(on?" on"+(t.color?" "+t.color:""):"")}
+                            onClick={function(){setSrcSub(t.id)}}>{t.label}</button>
+                        })}
+                      </div>
+                      {/* Enable toggle + delete in sub-header */}
+                      <button className="icon-btn sm"
+                        onClick={function(){updSource(ei2,{enabled:entry.enabled===false})}}
+                        style={{color:entry.enabled===false?"var(--mu)":"var(--lv)",fontSize:16}}>
+                        {entry.enabled===false?"○":"●"}
+                      </button>
+                      <InlineRename value={entry.name} fallback={"source "+(ei2+1)}
+                        onChange={function(nw){updSource(ei2,{name:nw})}}
+                        labelStyle={{fontSize:11,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",maxWidth:80}}/>
+                      {sources.length>1&&<button
+                        onClick={function(){delSource(ei2);setSrcTab(Math.max(0,ei2-1))}}
+                        style={{fontSize:12,color:"var(--mu)",background:"none",border:"none",
+                          cursor:"pointer",padding:"0 10px",minHeight:32}}>×</button>}
+                    </div>
+                    {/* Source sub-tab */}
+                    {srcSub==="source"&&(
+                      <div className="card-body">
+                        <NRef l="source" v={entry.refId||null}
+                          nodes={nodes} selfId={node.id} iC={props.iC} mode="source"
+                          fn={function(v){updSource(ei2,{refId:v})}}/>
+                      </div>
+                    )}
+                    {/* Isolate sub-tab */}
+                    {srcSub==="isolate"&&(
+                      <div style={{padding:10}}>
+                        <div style={{fontSize:9,color:"var(--mu)",marginBottom:6,lineHeight:1.5}}>
+                          Filters which points from this source enter the working set.
+                        </div>
+                        <MaskStackPanel
+                          key={(entry.isolate||[]).map(function(m){return m.id}).join(",")}
+                          stack={entry.isolate||[]} nodes={nodes} selfId={node.id}
+                          navPush={navPush} iC={props.iC}
+                          basePath={{slotKey:"sources["+ei2+"].isolate",steps:[]}}
+                          onNavigate={props.onNavigate}
+                          onChange={function(ms){updSource(ei2,{isolate:ms})}}/>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
+        }
       </div>
       {/* ── Modifier chain ──────────────────────────────────────── */}
       <div style={{marginBottom:10}}>
@@ -7750,8 +7767,8 @@ function PointCompProps(props) {
             )}
           </div>
         </div>
-        {chain.length===0&&<div className="empty">no modifiers — tap + to add</div>}
-        {chain.map(function(item,ci2){
+        {chain.filter(function(it){return it.type!=="_source"}).length===0&&<div className="empty">no modifiers — tap + to add</div>}
+        {chain.filter(function(it){return it.type!=="_source"}).map(function(item,ci2){
           return (
             <PointChainItemCard key={item.id} item={item} index={ci2}
               isFirst={ci2===0} isLast={ci2===chain.length-1}
@@ -7771,9 +7788,12 @@ function PointCompProps(props) {
             textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
         </div>
         <div className="card-body" style={{paddingBottom:0}}>
-          <Sl l="opacity" v={node.outOpacity==null?100:node.outOpacity} mn={0} mx={100} st={1}
+          <Sl l="pts opacity" v={node.outOpacity==null?100:node.outOpacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
             fn={function(v){onChange(Object.assign({},node,{outOpacity:v}))}}/>
+          <Sl l="msk opacity" v={node.outMaskOpacity==null?100:node.outMaskOpacity} mn={0} mx={100} st={1}
+            fmt={function(v){return Math.round(v)+"%"}}
+            fn={function(v){onChange(Object.assign({},node,{outMaskOpacity:v}))}}/>
         </div>
         <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
         {outTab==="modifiers"&&(
