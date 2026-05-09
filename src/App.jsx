@@ -7653,7 +7653,7 @@ function PointCompProps(props) {
                 onChange={function(ms){onChange(updatePath(node,top.slotKey,topSteps,function(e){return Object.assign({},e,{maskStack:ms})}))}}/>
             : <EfxStack key={drillStack.map(function(e){return e.id}).join(",")}
                 stack={drillStack} nodes={nodes} selfId={node.id}
-                navPush={navPush} filterTypes={POINT_CONTEXT_EFFECTS}
+                navPush={navPush} filterTypes={ISOLATE_MASK_EFFECTS}
                 basePath={{slotKey:top.slotKey,steps:topSteps}}
                 onNavigate={props.onNavigate}
                 onChange={function(es){onChange(updatePath(node,top.slotKey,topSteps,function(m){return Object.assign({},m,{effectStack:es})}))}}/>
