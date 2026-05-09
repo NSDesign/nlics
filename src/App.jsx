@@ -6334,6 +6334,7 @@ function BlenderProps(props) {
                 stack={stackToShow}
                 nodes={nodes} selfId={node.id}
                 navPush={navPush}
+                filterTypes={ISOLATE_MASK_EFFECTS}
                 basePath={childBasePath}
                 onNavigate={props.onNavigate}
                 onPromote={wrappedPromote}
@@ -7328,6 +7329,7 @@ function LayerCompProps(props) {
               stack={stackToShow}
               nodes={nodes} selfId={node.id}
               navPush={navPush} iC={props.iC}
+              filterTypes={ISOLATE_MASK_EFFECTS}
               basePath={childBasePath}
               onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
@@ -7939,6 +7941,7 @@ function StackProps(props) {
             key={(drillMask.effectStack||[]).map(function(e){return e.id}).join(",")}
             stack={drillMask.effectStack||[]} nodes={nodes} selfId={node.id}
             navPush={navPush}
+            filterTypes={ISOLATE_MASK_EFFECTS}
             basePath={{slotKey:top.slotKey,steps:topStepsS}}
             onNavigate={props.onNavigate}
             onPromote={wrappedPromote}
