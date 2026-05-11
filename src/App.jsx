@@ -2244,7 +2244,7 @@ function applyEfxToPoints(pts,efx,w,h) {
       var dx=pt.x-.5,dy=pt.y-.5
       var ang=(Math.atan2(dy,dx)+Math.PI*2)%(Math.PI*2)
       var r=Math.sqrt(dx*dx+dy*dy)
-      pt.x=ang/(Math.PI*2); pt.y=Math.min(1,r*2)
+      pt.x=ang/(Math.PI*2); pt.y=r*2
     })
   } else if(t==="polar-to-cart"){
     out.forEach(function(pt){
@@ -2273,7 +2273,7 @@ function applyEfxToPoints(pts,efx,w,h) {
       out.forEach(function(pt){
         var vx2=uvRd2(pt.x,pt.y,uvChX2), vy2=uvRd2(pt.x,pt.y,uvChY2)
         if(uvMode2==="absolute"){
-          pt.x=Math.max(0,Math.min(1,vx2)); pt.y=Math.max(0,Math.min(1,vy2))
+          pt.x=vx2; pt.y=vy2
         } else {
           pt.x=pt.x+(vx2-.5)*uvAmtX2
           pt.y=pt.y+(vy2-.5)*uvAmtY2
@@ -7636,7 +7636,13 @@ function PointCompProps(props) {
     var a=chain.slice(); var tmp=a[idx]; a[idx]=a[ni]; a[ni]=tmp
     onChange(Object.assign({},node,{chain:a}))
   }
-  function addModifier(t){onChange(Object.assign({},node,{chain:chain.concat([mkPointChainItem(t)])}))}
+  var lastAddRef=useRef(0)
+  function addModifier(t){
+    var now=Date.now()
+    if(now-lastAddRef.current<250) return  // guard against duplicate fires
+    lastAddRef.current=now
+    onChange(Object.assign({},node,{chain:chain.concat([mkPointChainItem(t)])}))
+  }
 
   var modGroups=EFX_GROUPS.map(function(g){
     var fi=g.items.filter(function(t){return POINT_CONTEXT_EFFECTS.includes(t)})
