@@ -2204,21 +2204,24 @@ function applyEfxToPoints(pts,efx,w,h) {
   var p=efx.params||{}, t=efx.type
   var out=pts.map(function(pt){ return Object.assign({},pt) })
   if(t==="transform"){
-    var tx=p.tx||0,ty=p.ty||0,rot=(p.rot||0)*Math.PI/180,su=p.su!=null?p.su:1
+    var tx=p.tx||0,ty=p.ty||0,rot=(p.rot||0)*Math.PI/180
+    var su=p.su!=null?p.su:1
+    var sx2=(p.sx!=null?p.sx:1)*su, sy2=(p.sy!=null?p.sy:1)*su  // non-uniform scale
     var cx2=w/2,cy2=h/2
     out.forEach(function(pt){
       var px=pt.x*w-cx2, py=pt.y*h-cy2
       var rx=px*Math.cos(rot)-py*Math.sin(rot), ry=px*Math.sin(rot)+py*Math.cos(rot)
-      pt.x=Math.max(0,Math.min(1,(rx*su+cx2+tx*w)/w))
-      pt.y=Math.max(0,Math.min(1,(ry*su+cy2+ty*h)/h))
+      // No clamping — points are allowed to travel beyond canvas bounds
+      pt.x=(rx*sx2+cx2+tx*w)/w
+      pt.y=(ry*sy2+cy2+ty*h)/h
       pt.rotation=(pt.rotation||0)+(p.rot||0)
-      pt.scale=(pt.scale||1)*(su)
+      pt.scale=(pt.scale||1)*su
     })
   } else if(t==="wave"){
     var wA=(p.amplitude||.05),fX=p.freqX||3,fY=p.freqY||3
     out.forEach(function(pt){
-      pt.x=Math.max(0,Math.min(1,pt.x+Math.sin(pt.y*fY*Math.PI*2+(p.phaseY||0))*wA))
-      pt.y=Math.max(0,Math.min(1,pt.y+Math.sin(pt.x*fX*Math.PI*2+(p.phaseX||0))*wA))
+      pt.x=pt.x+Math.sin(pt.y*fY*Math.PI*2+(p.phaseY||0))*wA
+      pt.y=pt.y+Math.sin(pt.x*fX*Math.PI*2+(p.phaseX||0))*wA
     })
   } else if(t==="twirl"){
     var tA=(p.angle||180)*Math.PI/180,tR=p.radius||.5
@@ -2272,8 +2275,8 @@ function applyEfxToPoints(pts,efx,w,h) {
         if(uvMode2==="absolute"){
           pt.x=Math.max(0,Math.min(1,vx2)); pt.y=Math.max(0,Math.min(1,vy2))
         } else {
-          pt.x=Math.max(0,Math.min(1,pt.x+(vx2-.5)*uvAmtX2))
-          pt.y=Math.max(0,Math.min(1,pt.y+(vy2-.5)*uvAmtY2))
+          pt.x=pt.x+(vx2-.5)*uvAmtX2
+          pt.y=pt.y+(vy2-.5)*uvAmtY2
         }
       })
     }
@@ -2974,6 +2977,12 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
           return mv1[py*w+px]>0.01
         })
       }
+    }
+    // Renderer items (show-points, source-at-points): draw to canvas, don't transform pts
+    if(item.type==="show-points"||item.type==="source-at-points"){
+      ctx.canvas._points=pts  // expose current set
+      applyEfxStk(ctx,[item],cmap,cache,iC,w,h,new Set(vis))
+      continue
     }
     if(item.type==="uv-distort"&&item.params&&item.params.uvRefId)
       item._uvCanvas=compAny(item.params.uvRefId,cmap,new Map(),iC,w,h,new Set(vis))||null
