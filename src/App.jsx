@@ -5741,7 +5741,7 @@ function EfxCard(props) {
                 <div className="drop-grp">{grp.label}</div>
                 {grp.items.map(function(t){return (
                   <div key={t} className={"drop-item"+(t===efx.type?" sel":"")}
-                    onClick={function(){pickType(t)}}
+                    onPointerDown={function(e){e.preventDefault();pickType(t)}}
                     style={t===efx.type?{color:"var(--ac)"}:{}}>
                     {t}{t===efx.type?" ✓":""}
                   </div>
@@ -5972,7 +5972,7 @@ function AddEfxMenu(props) {
                 <div className="drop-grp">{grp.label}</div>
                 {grp.items.map(function(t){
                   return (
-                    <div key={t} className="drop-item" onClick={function(){props.onAdd(t);setOpen(false)}}>{t}</div>
+                    <div key={t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(t);setOpen(false)}}>{t}</div>
                   )
                 })}
               </div>
@@ -7703,7 +7703,7 @@ function PointCompProps(props) {
                       <div className="drop-grp">{grp.label}</div>
                       {grp.items.map(function(t){return (
                         <div key={t} className="drop-item"
-                          onClick={function(){addModifier(t);setAddModOpen(false)}}>{t}</div>
+                          onPointerDown={function(e){e.preventDefault();addModifier(t);setAddModOpen(false)}}>{t}</div>
                       )})}
                     </div>
                   )})}
