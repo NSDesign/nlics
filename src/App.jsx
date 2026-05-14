@@ -7495,13 +7495,13 @@ function PointChainItemCard(props) {
   var item=props.item, ci=props.index
   var collSt=useState(false); var coll=collSt[0], setColl=collSt[1]
   var armedSt=useState(false); var armed=armedSt[0], setArmed=armedSt[1]
-  var isoOpenSt=useState(false); var isoOpen=isoOpenSt[0], setIsoOpen=isoOpenSt[1]
+  var tabSt=useState("primary"); var tab=tabSt[0], setTab=tabSt[1]
   var isoPreviewSt=useState("off"); var isoPreviewMode=isoPreviewSt[0], setIsoPreviewMode=isoPreviewSt[1]
   var isoCanvasRef=useRef(null)
   var timerRef=useRef(null)
   useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
   useEffect(function(){
-    if(!isoOpen||isoPreviewMode==="off"||!(item.isolate||[]).length)return
+    if(tab!=="isolate"||isoPreviewMode==="off"||!(item.isolate||[]).length)return
     var cv=isoCanvasRef.current; if(!cv)return
     var W=cv.width,H=cv.height
     var cmap2=new Map((props.nodes||[]).map(function(n){return [n.id,n]}))
@@ -7514,20 +7514,24 @@ function PointChainItemCard(props) {
         ctx2.putImageData(id2,0,0)
       }
     }catch(_){}
-  },[isoOpen,isoPreviewMode,item.isolate,props.iC,props.nodes])
+  },[tab,isoPreviewMode,item.isolate,props.iC,props.nodes])
   function handleDel(){
     if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
     else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
   }
   var nIso=(item.isolate||[]).length
+  var tabs=[
+    {id:"primary", label:"Primary"},
+    {id:"isolate", label:"Isolate"+(nIso>0?" ("+nIso+")":""), color:"lv"},
+  ]
   return (
     <div className="card" style={{marginBottom:8}}>
-      <div className="card-hdr" style={{background:"rgba(36,204,168,.06)"}}>
-        <button onClick={function(){setColl(!coll)}}
-          style={{fontSize:11,color:"var(--mu)",background:"none",border:"none",
-            cursor:"pointer",padding:"0 2px",alignSelf:"stretch",display:"flex",alignItems:"center"}}>
-          {coll?"▸":"▾"}
-        </button>
+      <div className="card-hdr" style={{background:"rgba(36,204,168,.06)",
+        borderBottom:coll?"none":"1px solid var(--bd)",
+        borderRadius:coll?8:"8px 8px 0 0"}}>
+        <span className={"bp-chevron"+(coll?"":" open")}
+          onClick={function(){setColl(!coll)}}
+          style={{color:"var(--ac)",flexShrink:0,fontSize:18}}>›</span>
         <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
           <button className="icon-btn sm" onClick={function(){props.onMove(-1)}} disabled={props.isFirst} style={{fontSize:11,height:20,width:28}}>▲</button>
           <button className="icon-btn sm" onClick={function(){props.onMove(1)}}  disabled={props.isLast}  style={{fontSize:11,height:20,width:28}}>▼</button>
@@ -7547,68 +7551,51 @@ function PointChainItemCard(props) {
           onChange={function(nw){props.onChange(Object.assign({},item,{name:nw}))}}
           labelStyle={{fontSize:11,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
             fontStyle:"italic",padding:"2px 0"}}/>
-        {nIso>0&&<span style={{fontSize:9,color:"var(--lv)",fontFamily:"'IBM Plex Mono',monospace",
-          background:"rgba(176,96,240,.1)",border:"1px solid rgba(176,96,240,.25)",
-          borderRadius:3,padding:"1px 5px",flexShrink:0}}>◈{nIso}</span>}
         <button onClick={handleDel} style={{minHeight:32,padding:"0 10px",fontSize:armed?10:14,
           background:armed?"rgba(224,48,96,.2)":"none",border:armed?"1px solid var(--dng)":"none",
           color:armed?"var(--dng)":"var(--mu)",borderRadius:6,minWidth:armed?70:32}}>
           {armed?"confirm ×":"×"}
         </button>
       </div>
-      {!coll&&(
+      {!coll&&<TabBar tabs={tabs} active={tab} onChange={setTab}/>}
+      {!coll&&tab==="primary"&&(
         <div className="card-body">
           <EfxPrimary efx={item} onChange={props.onChange}
             nodes={props.nodes} selfId={props.selfId} iC={props.iC}
             sourceId={props.sourceId}/>
         </div>
       )}
-      {!coll&&(
-        <div style={{borderTop:"1px solid var(--bd)"}}>
-          <button onClick={function(){setIsoOpen(!isoOpen)}}
-            style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"8px 12px",
-              background:"none",border:"none",cursor:"pointer"}}>
-            <span className={"bp-chevron"+(isoOpen?" open":"")} style={{fontSize:14,color:"var(--lv)"}}>›</span>
-            <span style={{fontSize:9,textTransform:"uppercase",letterSpacing:".1em",
-              fontFamily:"'IBM Plex Mono',monospace",color:"var(--di)"}}>
-              Isolate{nIso>0?" ("+nIso+")":""}
-            </span>
-            {nIso===0&&<span style={{fontSize:9,color:"var(--mu)",marginLeft:4}}>
-              — restrict which points this modifier affects
-            </span>}
-          </button>
-          {isoOpen&&(
-            <div style={{padding:"0 10px 10px"}}>
-              <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
-                <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:".07em",flexShrink:0}}>attr</span>
-                <input value={item.isolateAttr||""} placeholder={"isolate_"+(ci+1)}
-                  onChange={function(e){props.onChange(Object.assign({},item,{isolateAttr:e.target.value}))}}
-                  style={{flex:1,fontSize:10,padding:"3px 6px",background:"var(--sf)",border:"1px solid var(--bd)",
-                    borderRadius:4,color:"var(--tx)",fontFamily:"'IBM Plex Mono',monospace"}}/>
-                <button onClick={function(){setIsoPreviewMode(function(m){return m==="off"?"mask":"off"})}}
-                  style={{fontSize:9,padding:"3px 8px",
-                    background:isoPreviewMode==="mask"?"rgba(176,96,240,.15)":"none",
-                    border:"1px solid "+(isoPreviewMode==="mask"?"rgba(176,96,240,.4)":"var(--bd)"),
-                    borderRadius:4,cursor:"pointer",
-                    color:isoPreviewMode==="mask"?"var(--lv)":"var(--mu)",
-                    fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>
-                  {isoPreviewMode==="mask"?"◈ mask":"◻ mask"}
-                </button>
-              </div>
-              {isoPreviewMode==="mask"&&(item.isolate||[]).length>0&&(
-                <canvas ref={isoCanvasRef} width={256} height={144}
-                  style={{width:"100%",display:"block",marginBottom:8,borderRadius:4,
-                    border:"1px solid var(--bd)",background:"#000"}}/>
-              )}
-              <MaskStackPanel
-                key={(item.isolate||[]).map(function(m){return m.id}).join(",")}
-                stack={item.isolate||[]} nodes={props.nodes} selfId={props.selfId}
-                navPush={props.navPush} iC={props.iC}
-                basePath={{slotKey:"chain["+ci+"].isolate", steps:[]}}
-                onNavigate={props.onNavigate}
-                onChange={function(ms){props.onChange(Object.assign({},item,{isolate:ms}))}}/>
-            </div>
+      {!coll&&tab==="isolate"&&(
+        <div style={{padding:10}}>
+          <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
+              textTransform:"uppercase",letterSpacing:".07em",flexShrink:0}}>attr</span>
+            <input value={item.isolateAttr||""} placeholder={"isolate_"+(ci+1)}
+              onChange={function(e){props.onChange(Object.assign({},item,{isolateAttr:e.target.value}))}}
+              style={{flex:1,fontSize:10,padding:"3px 6px",background:"var(--sf)",border:"1px solid var(--bd)",
+                borderRadius:4,color:"var(--tx)",fontFamily:"'IBM Plex Mono',monospace"}}/>
+            <button onClick={function(){setIsoPreviewMode(function(m){return m==="off"?"mask":"off"})}}
+              style={{fontSize:9,padding:"3px 8px",
+                background:isoPreviewMode==="mask"?"rgba(176,96,240,.15)":"none",
+                border:"1px solid "+(isoPreviewMode==="mask"?"rgba(176,96,240,.4)":"var(--bd)"),
+                borderRadius:4,cursor:"pointer",
+                color:isoPreviewMode==="mask"?"var(--lv)":"var(--mu)",
+                fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>
+              {isoPreviewMode==="mask"?"◈ mask":"◻ mask"}
+            </button>
+          </div>
+          {isoPreviewMode==="mask"&&(item.isolate||[]).length>0&&(
+            <canvas ref={isoCanvasRef} width={256} height={144}
+              style={{width:"100%",display:"block",marginBottom:8,borderRadius:4,
+                border:"1px solid var(--bd)",background:"#000"}}/>
           )}
+          <MaskStackPanel
+            key={(item.isolate||[]).map(function(m){return m.id}).join(",")}
+            stack={item.isolate||[]} nodes={props.nodes} selfId={props.selfId}
+            navPush={props.navPush} iC={props.iC}
+            basePath={{slotKey:"chain["+ci+"].isolate", steps:[]}}
+            onNavigate={props.onNavigate}
+            onChange={function(ms){props.onChange(Object.assign({},item,{isolate:ms}))}}/>
         </div>
       )}
     </div>
