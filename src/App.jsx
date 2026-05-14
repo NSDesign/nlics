@@ -6234,7 +6234,7 @@ function SlotPanel(props) {
       )}
       {tab==="effects" && (
         <div style={{padding:10}}>
-          <EfxStack key={(slot.effectStack||[]).map(function(e){return e.id}).join(",")}
+          <EfxStack key={(props.slotKey||"slot")+"_efx"}
             stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             sourceId={slot.refId}
             excludeGroups={["Points"]}
@@ -6354,7 +6354,7 @@ function BlenderProps(props) {
               return (<div>
                 <div className="stack-lbl">{stackLabel}</div>
                 <MaskStackPanel
-                  key={stackToShow.map(function(m){return m.id}).join(",")}
+                  key={top.id+"_masks"}
                   stack={stackToShow} nodes={nodes} selfId={node.id}
                   navPush={navPush} iC={props.iC}
                   basePath={childBasePath}
@@ -6371,7 +6371,7 @@ function BlenderProps(props) {
             return (<div>
               <div className="stack-lbl">{stackLabel}</div>
               <EfxStack
-                key={stackToShow.map(function(e){return e.id}).join(",")}
+                key={top.id+"_efxdrll"}
                 stack={stackToShow}
                 nodes={nodes} selfId={node.id}
                 navPush={navPush}
@@ -7208,7 +7208,7 @@ function LayerCard(props) {
       {!isCollapsed && layerTab==="effects" && (
         <div style={{padding:10}}>
           <EfxStack
-            key={(lyr.effectStack||[]).map(function(e){return e.id}).join(",")}
+            key={lyr.id+"_efx"}
             stack={lyr.effectStack||[]} nodes={props.nodes} selfId={props.selfId}
             navPush={props.navPush} iC={props.iC}
             sourceId={lyr.refId}
@@ -7352,7 +7352,7 @@ function LayerCompProps(props) {
         <div style={{flex:1,overflowY:"auto",padding:10}}>
           {isEffectDrill?(
             <MaskStackPanel
-              key={stackToShow.map(function(m){return m.id}).join(",")}
+              key={top.id+"_masks"}
               stack={stackToShow} nodes={nodes} selfId={node.id}
               navPush={navPush} iC={props.iC}
               basePath={childBasePath}
@@ -7366,7 +7366,7 @@ function LayerCompProps(props) {
               }}/>
           ):(
             <EfxStack
-              key={stackToShow.map(function(e){return e.id}).join(",")}
+              key={top.id+"_efxdrll"}
               stack={stackToShow}
               nodes={nodes} selfId={node.id}
               navPush={navPush} iC={props.iC}
@@ -7638,6 +7638,7 @@ function PointCompProps(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[addModOpen])
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
+  var lastAddRef=useRef(0)  // must be above drill-view early return (hooks must be unconditional)
 
   // Drill-down: isolate mask → effect stack editing
   if(navStack.length>0){
@@ -7665,13 +7666,13 @@ function PointCompProps(props) {
         </div>
         <div style={{flex:1,overflowY:"auto",padding:10}}>
           {isEffDrill
-            ? <MaskStackPanel key={drillStack.map(function(m){return m.id}).join(",")}
+            ? <MaskStackPanel key={top.id+"_masks"}
                 stack={drillStack} nodes={nodes} selfId={node.id}
                 navPush={navPush} iC={props.iC}
                 basePath={{slotKey:top.slotKey,steps:topSteps}}
                 onNavigate={props.onNavigate}
                 onChange={function(ms){onChange(updatePath(node,top.slotKey,topSteps,function(e){return Object.assign({},e,{maskStack:ms})}))}}/>
-            : <EfxStack key={drillStack.map(function(e){return e.id}).join(",")}
+            : <EfxStack key={top.id+"_efxdrll"}
                 stack={drillStack} nodes={nodes} selfId={node.id}
                 navPush={navPush} filterTypes={ISOLATE_MASK_EFFECTS}
                 iC={props.iC}
@@ -7703,7 +7704,6 @@ function PointCompProps(props) {
     var a=chain.slice(); var tmp=a[idx]; a[idx]=a[ni]; a[ni]=tmp
     onChange(Object.assign({},node,{chain:a}))
   }
-  var lastAddRef=useRef(0)
   function addModifier(t){
     var now=Date.now()
     if(now-lastAddRef.current<250) return  // guard against duplicate fires
