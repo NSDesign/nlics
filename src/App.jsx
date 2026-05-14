@@ -6956,30 +6956,48 @@ function AddMenu(props) {
 function LivePreview(props) {
   var zSt=useState(1); var zoom=zSt[0], setZoom=zSt[1]
   var fSt=useState("png"); var fmt=fSt[0], setFmt=fSt[1]
+  var bSt=useState(true); var barsVis=bSt[0], setBarsVis=bSt[1]
   var fsStyle = props.fullscreen
     ? {position:"fixed",top:0,left:0,width:"100%",height:"100%",
        zIndex:500,background:"var(--bg)",WebkitOverflowScrolling:"touch"}
     : {flex:1,minHeight:0}
   return (
-    <div style={Object.assign({display:"flex",flexDirection:"column",overflow:"hidden"},fsStyle)}>
-      <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"var(--pn)",borderBottom:"1px solid var(--bd)",flexShrink:0,overflowX:"auto"}}>
-        <select value={String(props.sz)} onChange={function(e){props.onResize(parseInt(e.target.value))}} style={{width:58,fontSize:10,padding:"3px 4px",flexShrink:0}}>
-          {["256","400","512","768","1024"].map(function(s){return <option key={s} value={s}>{s}</option>})}
-        </select>
-        <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.max(.25,z-.25)})}} style={{fontSize:16,width:32,height:32}}>-</button>
-        <span style={{fontSize:10,color:"var(--di)",minWidth:30,textAlign:"center",flexShrink:0}}>{Math.round(zoom*100)}%</span>
-        <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.min(4,z+.25)})}} style={{fontSize:16,width:32,height:32}}>+</button>
-        <button onClick={function(){setZoom(1)}} style={{fontSize:10,padding:"0 8px",minHeight:30,flexShrink:0}}>1:1</button>
-        <select value={fmt} onChange={function(e){setFmt(e.target.value)}} style={{width:50,fontSize:10,padding:"3px 3px",flexShrink:0}}>
-          {["png","jpeg","webp"].map(function(f){return <option key={f}>{f}</option>})}
-        </select>
-        <button className="ac" onClick={function(){props.onExport(fmt)}} style={{padding:"0 10px",fontSize:11,flexShrink:0}}>↓</button>
-        <span style={{flex:1}}/>
-        <button className={"hico"+(props.fullscreen?" exit":"")}
-          title={props.fullscreen?"Exit fullscreen":"Fullscreen preview"}
-          onClick={props.onFullscreen}
-          style={{fontSize:16,width:32,height:32,flexShrink:0}}>{props.fullscreen?"⊠":"⊡"}</button>
-      </div>
+    <div style={Object.assign({display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"},fsStyle)}>
+      {/* Floating bars toggle — always visible, floats above the top bar */}
+      <button
+        title={barsVis?"Hide bars":"Show bars"}
+        onClick={function(){setBarsVis(function(v){return !v})}}
+        style={{
+          position:"absolute",top:6,right:6,zIndex:10,
+          width:32,height:32,fontSize:16,flexShrink:0,
+          background:barsVis?"var(--pn)":"rgba(36,204,168,.18)",
+          border:"1px solid "+(barsVis?"var(--bd)":"rgba(36,204,168,.5)"),
+          borderRadius:6,cursor:"pointer",display:"flex",alignItems:"center",
+          justifyContent:"center",
+          color:barsVis?"var(--di)":"var(--ac)",
+          boxShadow:barsVis?"none":"0 0 0 1px rgba(36,204,168,.2)"
+        }}>
+        {barsVis?"⊡":"⊠"}
+      </button>
+      {/* Top bar */}
+      {barsVis&&(
+        <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",
+          paddingRight:46,
+          background:"var(--pn)",borderBottom:"1px solid var(--bd)",flexShrink:0,overflowX:"auto"}}>
+          <select value={String(props.sz)} onChange={function(e){props.onResize(parseInt(e.target.value))}} style={{width:58,fontSize:10,padding:"3px 4px",flexShrink:0}}>
+            {["256","400","512","768","1024"].map(function(s){return <option key={s} value={s}>{s}</option>})}
+          </select>
+          <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.max(.25,z-.25)})}} style={{fontSize:16,width:32,height:32}}>-</button>
+          <span style={{fontSize:10,color:"var(--di)",minWidth:30,textAlign:"center",flexShrink:0}}>{Math.round(zoom*100)}%</span>
+          <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.min(4,z+.25)})}} style={{fontSize:16,width:32,height:32}}>+</button>
+          <button onClick={function(){setZoom(1)}} style={{fontSize:10,padding:"0 8px",minHeight:30,flexShrink:0}}>1:1</button>
+          <select value={fmt} onChange={function(e){setFmt(e.target.value)}} style={{width:50,fontSize:10,padding:"3px 3px",flexShrink:0}}>
+            {["png","jpeg","webp"].map(function(f){return <option key={f}>{f}</option>})}
+          </select>
+          <button className="ac" onClick={function(){props.onExport(fmt)}} style={{padding:"0 10px",fontSize:11,flexShrink:0}}>↓</button>
+        </div>
+      )}
+      {/* Canvas area — expands to fill all available space when bars are hidden */}
       <div className="checker" style={{flex:1,overflow:"auto",display:"flex",alignItems:"center",justifyContent:"center",padding:20,position:"relative"}}>
         {!props.active && (
           <div style={{position:"absolute",textAlign:"center",pointerEvents:"none"}}>
@@ -6991,12 +7009,15 @@ function LivePreview(props) {
           <canvas ref={props.cvRef} width={props.sz} height={props.sz} style={{display:"block",imageRendering:zoom>2?"pixelated":"auto"}}/>
         </div>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",background:"var(--pn)",borderTop:"1px solid var(--bd)",flexShrink:0}}>
-        <span style={{fontSize:9,color:"var(--mu)"}}>{props.sz}x{props.sz}px</span>
-        {props.active && <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>[{props.active.type}]</span>}
-        <span style={{flex:1}}/>
-        <span style={{fontSize:9,color:"var(--mu)",letterSpacing:".08em",fontFamily:"'IBM Plex Mono',monospace"}}>{(typeof __BUILD_HASH__!=="undefined"?__BUILD_HASH__:"dev")+" · Selena"}</span>
-      </div>
+      {/* Bottom bar */}
+      {barsVis&&(
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",background:"var(--pn)",borderTop:"1px solid var(--bd)",flexShrink:0}}>
+          <span style={{fontSize:9,color:"var(--mu)"}}>{props.sz}x{props.sz}px</span>
+          {props.active && <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>[{props.active.type}]</span>}
+          <span style={{flex:1}}/>
+          <span style={{fontSize:9,color:"var(--mu)",letterSpacing:".08em",fontFamily:"'IBM Plex Mono',monospace"}}>{(typeof __BUILD_HASH__!=="undefined"?__BUILD_HASH__:"dev")+" · Selena"}</span>
+        </div>
+      )}
     </div>
   )
 }
