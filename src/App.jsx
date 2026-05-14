@@ -3846,7 +3846,25 @@ function getPointAttrs(geomType) {
   if(geomType==="spiral")     return base.concat(["spiralT"]).concat(mapped)
   if(geomType==="phyllotaxis") return base.concat(["fibIndex"]).concat(mapped)
   if(geomType==="scatter")    return base.concat(["scatterIndex"]).concat(mapped)
-  return []
+  return base.concat(mapped)
+}
+// Collects custom attribute names from a point-comp node's chain:
+// isolate mask attrs, attributes modifier add/set op names, system attrs
+function getChainCustomAttrs(node) {
+  if(!node||node.type!=="point-comp") return []
+  var attrs=[]
+  function addA(a){var t=(a||"").trim();if(t&&!attrs.includes(t))attrs.push(t)}
+  if((node.isolate||[]).length>0) addA((node.isolateAttr||"").trim()||"isolate")
+  ;(node.chain||[]).forEach(function(item,ci){
+    if((item.isolate||[]).length>0) addA((item.isolateAttr||"").trim()||("isolate_"+(ci+1)))
+    if(item.type==="attributes"){
+      ;((item.params&&item.params.ops)||[]).forEach(function(op){
+        if((op.action==="add"||op.action==="set")&&op.name) addA(op.name)
+      })
+    }
+  })
+  addA("_modIdx"); addA("_setGroup")
+  return attrs
 }
 
 function ShapeP(props) {
@@ -4669,6 +4687,10 @@ function EfxPrimary(props) {
   var srcNode=(props.nodes||[]).find(function(n){return n.id===props.sourceId})
   var srcShape=srcNode?(srcNode.type==="shape"?srcNode.props&&srcNode.props.shapeType:srcNode.type):null
   var ptAttrs=getPointAttrs(srcShape||"")
+  // Merge in custom attrs from point-comp chain (isolate masks, attributes ops)
+  var pcNode=(props.nodes||[]).find(function(n){return n.id===props.selfId&&n.type==="point-comp"})
+  var customAttrs=getChainCustomAttrs(pcNode)
+  var allAttrs=ptAttrs.concat(customAttrs.filter(function(a){return !ptAttrs.includes(a)}))
   function up(np){props.onChange(Object.assign({},efx,{params:Object.assign({},p,np)}))}
   if(efx.type==="brightness") return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
   if(efx.type==="contrast")   return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
@@ -5117,8 +5139,8 @@ function EfxPrimary(props) {
         </button>
       </PR>
       {p.showLabels&&<div>
-        {ptAttrs.length
-          ?<Se l="attribute" v={p.labelAttr||ptAttrs[0]} opts={ptAttrs} fn={function(v){up({labelAttr:v})}}/>
+        {allAttrs.length
+          ?<Se l="attribute" v={p.labelAttr||allAttrs[0]} opts={allAttrs} fn={function(v){up({labelAttr:v})}}/>
           :<div style={{fontSize:10,color:"var(--mu)",padding:"4px 0"}}>Set a geometry source on the slot to use labels</div>}
         <Sl l="label size" v={p.labelSize||9} mn={5} mx={72} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>
         <Co l="label col" v={p.labelColor||"#ffffff"} fn={function(v){up({labelColor:v})}}/>
@@ -5149,7 +5171,7 @@ function EfxPrimary(props) {
                   fontFamily:"'IBM Plex Mono',monospace",textDecoration:m.enabled===false?"line-through":"none"}}>mapping {mi+1}</span>
                 <button onClick={function(){delMapping(mi)}} className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
               </div>
-              <Se l="input" v={m.inputAttr||"pointIndex"} opts={ptAttrs.filter(function(a){return ["scale","rotation","opacity","sourceIndex"].indexOf(a)<0})} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
+              <Se l="input" v={m.inputAttr||"pointIndex"} opts={allAttrs.filter(function(a){return ["scale","rotation","opacity","sourceIndex"].indexOf(a)<0})} fn={function(v){updMapping(mi,{inputAttr:v})}}/>
               <Se l="output" v={m.outputAttr||"scale"} opts={["scale","rotation","opacity","x","y","sourceIndex","color"]} fn={function(v){updMapping(mi,{outputAttr:v,min:null,max:null})}}/>
               <Se l="mode" v={m.mode||"linear"} opts={["linear","normalise","invert","log","exp","random"]} fn={function(v){updMapping(mi,{mode:v})}}/>
               <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 2px"}}>
@@ -5243,7 +5265,7 @@ function EfxPrimary(props) {
   if(efx.type==="separate") return (
     <div>
       <Se l="split by" v={p.by||"opacity"}
-        opts={["opacity","scale","x","y","rotation","sourceIndex","pointIndex","_modIdx","_setGroup"]}
+        opts={allAttrs}
         fn={function(v){up({by:v})}}/>
       <Sl l="threshold" v={p.threshold==null?.5:p.threshold} mn={0} mx={1} st={.01}
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up({threshold:v})}}/>
@@ -5260,9 +5282,8 @@ function EfxPrimary(props) {
   if(efx.type==="filter") return (
     <div>
       <Se l="attribute" v={p.attr||"opacity"}
-        opts={["opacity","scale","x","y","rotation","sourceIndex","pointIndex","_modIdx","_setGroup"]}
-        fn={function(v){up({attr:v})}}/>
-      <PR l="operator">
+        opts={allAttrs}
+        fn={function(v){up({attr:v})}}/>      <PR l="operator">
         <div style={{display:"flex",gap:4,flex:1}}>
           {[">",">=","<","<=","==","!="].map(function(op){
             return <button key={op}
@@ -5281,9 +5302,8 @@ function EfxPrimary(props) {
   if(efx.type==="delete") return (
     <div>
       <Se l="attribute" v={p.attr||"opacity"}
-        opts={["opacity","scale","x","y","rotation","sourceIndex","pointIndex","_modIdx","_setGroup"]}
-        fn={function(v){up({attr:v})}}/>
-      <PR l="operator">
+        opts={allAttrs}
+        fn={function(v){up({attr:v})}}/>      <PR l="operator">
         <div style={{display:"flex",gap:4,flex:1}}>
           {[">",">=","<","<=","==","!="].map(function(op){
             return <button key={op}
