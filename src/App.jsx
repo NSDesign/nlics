@@ -510,8 +510,8 @@ function mkEfx(t) {
   if(t==="match")      params={matchPos:"xy",matchScale:false,matchRot:false,sourceId:null,efxId:null,offsetX:0,offsetY:0,offsetScale:1,offsetRot:0}
   if(t==="transform")  params={tx:0,ty:0,rot:0,su:1,sx:1,sy:1,skX:0,skY:0,space:"local"}
   if(t==="wave")          params={amplitude:.05,freqX:3,freqY:3,phaseX:0,phaseY:0}
-  if(t==="twirl")         params={angle:180,radius:.5,cx:.5,cy:.5}
-  if(t==="bulge")         params={strength:.5,radius:.7,cx:.5,cy:.5}
+  if(t==="twirl")         params={angle:180,radius:.5,cx:.5,cy:.5,softness:.3}
+  if(t==="bulge")         params={strength:.5,radius:.7,cx:.5,cy:.5,softness:.3}
   if(t==="solarise")      params={threshold:.5}
   if(t==="uv-distort")    params={uvRefId:null,mode:"displacement",amtX:.1,amtY:.1,chX:"R",chY:"G"}
   if(t==="polar-to-cart") params={amount:1}
@@ -565,11 +565,11 @@ function mkLayerComp() {
 function mkPointChainItem(t) {
   var efx=mkEfx(t)
   return { id:efx.id, type:efx.type, name:efx.name, enabled:efx.enabled,
-    params:efx.params, isolate:[] }
+    params:efx.params, isolate:[], isolateAttr:"" }
 }
 function mkPointComp() {
   return { id:uid(), name:"Point Comp "+(_uid-100), type:"point-comp", section:2, enabled:true,
-    refId:null, isolate:[],
+    refId:null, isolate:[], isolateAttr:"",
     chain:[], outModifiers:[], outMask:[] }
 }
 function mkNode(t) { return { id:uid(), name:t+" "+(_uid-100), type:t, section:1, enabled:true, props:getCreatorDefaults(t) } }
@@ -1083,15 +1083,19 @@ function pxFn(d,w,h,t,p) {
       d[di]=orig[si];d[di+1]=orig[si+1];d[di+2]=orig[si+2];d[di+3]=orig[si+3]
     }
   } else if (t==="twirl") {
-    // Rotate pixels around centre with angle decreasing with distance
+    // Rotate pixels around centre; angle decreases with distance; softness feathers the edge
     var tAngle=(p.angle||180)*Math.PI/180, tRadius=(p.radius||0.5)*Math.min(w,h)*0.5
+    var tSoftPx=p.softness==null?.3:p.softness
     var tcx=p.cx!=null?p.cx*w:w/2, tcy=p.cy!=null?p.cy*h:h/2
     var orig2=new Uint8ClampedArray(d)
     for(i=0;i<w*h;i++){
       var tx=i%w-tcx, ty=Math.floor(i/w)-tcy
       var dist2=Math.sqrt(tx*tx+ty*ty)
       if(dist2<tRadius){
-        var a=tAngle*(1-dist2/tRadius)
+        var rawA2=tAngle*(1-dist2/tRadius)
+        var tBl=1
+        if(tSoftPx>0&&dist2>tRadius*(1-tSoftPx)){var tt2=(dist2-tRadius*(1-tSoftPx))/(tRadius*tSoftPx);tt2=Math.min(1,Math.max(0,tt2));tBl=1-tt2*tt2*(3-2*tt2)}
+        var a=rawA2*tBl
         var ca=Math.cos(a),sa=Math.sin(a)
         var sx2=Math.round(tcx+tx*ca-ty*sa), sy2=Math.round(tcy+tx*sa+ty*ca)
         sx2=Math.max(0,Math.min(w-1,sx2)); sy2=Math.max(0,Math.min(h-1,sy2))
@@ -1100,8 +1104,9 @@ function pxFn(d,w,h,t,p) {
       }
     }
   } else if (t==="bulge") {
-    // Radial bulge/pinch from centre
+    // Radial bulge/pinch; softness feathers the displacement at the radius boundary
     var bStrength=p.strength||0.5, bRadius=(p.radius||0.7)*Math.min(w,h)*0.5
+    var bSoftPx=p.softness==null?.3:p.softness
     var bcx=p.cx!=null?p.cx*w:w/2, bcy=p.cy!=null?p.cy*h:h/2
     var orig3=new Uint8ClampedArray(d)
     for(i=0;i<w*h;i++){
@@ -1110,8 +1115,11 @@ function pxFn(d,w,h,t,p) {
       if(bd<bRadius&&bd>0){
         var norm=bd/bRadius
         var newR=norm>0?Math.pow(norm,1/(1+bStrength))*bRadius:0
-        var scale=newR/bd
-        var sx3=Math.round(bcx+bx*scale), sy3=Math.round(bcy+by*scale)
+        var bScl=newR/bd
+        var bBl=1
+        if(bSoftPx>0&&bd>bRadius*(1-bSoftPx)){var bt2=(bd-bRadius*(1-bSoftPx))/(bRadius*bSoftPx);bt2=Math.min(1,Math.max(0,bt2));bBl=1-bt2*bt2*(3-2*bt2)}
+        var bScFin=bScl*bBl+(1-bBl)
+        var sx3=Math.round(bcx+bx*bScFin), sy3=Math.round(bcy+by*bScFin)
         sx3=Math.max(0,Math.min(w-1,sx3)); sy3=Math.max(0,Math.min(h-1,sy3))
         var si3=(sy3*w+sx3)*4, di3=i*4
         d[di3]=orig3[si3];d[di3+1]=orig3[si3+1];d[di3+2]=orig3[si3+2];d[di3+3]=orig3[si3+3]
@@ -2225,19 +2233,29 @@ function applyEfxToPoints(pts,efx,w,h) {
     })
   } else if(t==="twirl"){
     var tA=(p.angle||180)*Math.PI/180,tR=p.radius||.5
+    var tSoftPt=p.softness==null?.3:p.softness
     var tcx=p.cx!=null?p.cx:.5,tcy=p.cy!=null?p.cy:.5
     out.forEach(function(pt){
       var dx=pt.x-tcx,dy=pt.y-tcy,d=Math.sqrt(dx*dx+dy*dy)
-      if(d<tR){var a=tA*(1-d/tR);var ca=Math.cos(a),sa=Math.sin(a)
+      if(d<tR){
+        var rawAt=tA*(1-d/tR)
+        var spBl=1
+        if(tSoftPt>0&&d>tR*(1-tSoftPt)){var st2=(d-tR*(1-tSoftPt))/(tR*tSoftPt);st2=Math.min(1,Math.max(0,st2));spBl=1-st2*st2*(3-2*st2)}
+        var a=rawAt*spBl;var ca=Math.cos(a),sa=Math.sin(a)
         pt.x=tcx+dx*ca-dy*sa; pt.y=tcy+dx*sa+dy*ca}
     })
   } else if(t==="bulge"){
     var bS=p.strength||.5,bR=p.radius||.7
+    var bSoftPt=p.softness==null?.3:p.softness
     var bcx=p.cx!=null?p.cx:.5,bcy=p.cy!=null?p.cy:.5
     out.forEach(function(pt){
       var dx=pt.x-bcx,dy=pt.y-bcy,d=Math.sqrt(dx*dx+dy*dy)
-      if(d>0&&d<bR){var norm=d/bR,newR=Math.pow(norm,1/(1+bS))*bR
-        var sc2=newR/d; pt.x=bcx+dx*sc2; pt.y=bcy+dy*sc2}
+      if(d>0&&d<bR){
+        var norm=d/bR,newR=Math.pow(norm,1/(1+bS))*bR
+        var sc2=newR/d
+        var bpBl=1
+        if(bSoftPt>0&&d>bR*(1-bSoftPt)){var bpt2=(d-bR*(1-bSoftPt))/(bR*bSoftPt);bpt2=Math.min(1,Math.max(0,bpt2));bpBl=1-bpt2*bpt2*(3-2*bpt2)}
+        var blSc=sc2*bpBl+(1-bpBl); pt.x=bcx+dx*blSc; pt.y=bcy+dy*blSc}
     })
   } else if(t==="cart-to-polar"){
     out.forEach(function(pt){
@@ -2947,11 +2965,15 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
       if(srcIso.length>0){
         var iv0=new Set(vis); iv0.add(n.id)
         var mv0=compMasks(srcIso,cmap,cache,iC,w,h,iv0)
-        if(mv0) pts=pts.filter(function(pt){
-          var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
-          var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
-          return mv0[py*w+px]>0.01
-        })
+        if(mv0){
+          var srcIsoAttr=n.isolateAttr&&n.isolateAttr.trim()?n.isolateAttr.trim():"isolate"
+          pts.forEach(function(pt){
+            var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
+            var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
+            pt[srcIsoAttr]=mv0[py*w+px]
+          })
+          pts=pts.filter(function(pt){return pt[srcIsoAttr]>0.01})
+        }
       }
     }
   }
@@ -2966,16 +2988,14 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
       var iv1=new Set(vis); iv1.add(n.id)
       var mv1=compMasks(item.isolate,cmap,cache,iC,w,h,iv1)
       if(mv1){
-        unchanged=pts.filter(function(pt){
+        var isoAttrNm=item.isolateAttr&&item.isolateAttr.trim()?item.isolateAttr.trim():("isolate_"+(ci+1))
+        pts.forEach(function(pt){
           var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
           var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
-          return mv1[py*w+px]<=0.01
+          pt[isoAttrNm]=mv1[py*w+px]
         })
-        targets=pts.filter(function(pt){
-          var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
-          var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
-          return mv1[py*w+px]>0.01
-        })
+        unchanged=pts.filter(function(pt){return pt[isoAttrNm]<=0.01})
+        targets=pts.filter(function(pt){return pt[isoAttrNm]>0.01})
       }
     }
     // Renderer items (show-points, source-at-points): draw to canvas, don't transform pts
@@ -5036,6 +5056,8 @@ function EfxPrimary(props) {
         fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
       <Sl l="radius" v={p.radius==null?.5:p.radius} mn={.05} mx={1.5} st={.01}
         fn={function(v){up({radius:v})}}/>
+      <Sl l="softness" v={p.softness==null?.3:p.softness} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({softness:v})}}/>
       <Sl l="centre x" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up({cx:v})}}/>
       <Sl l="centre y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up({cy:v})}}/>
     </div>)
@@ -5045,6 +5067,8 @@ function EfxPrimary(props) {
         fmt={function(v){return v.toFixed(2)}} fn={function(v){up({strength:v})}}/>
       <Sl l="radius" v={p.radius==null?.7:p.radius} mn={.05} mx={1.5} st={.01}
         fn={function(v){up({radius:v})}}/>
+      <Sl l="softness" v={p.softness==null?.3:p.softness} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({softness:v})}}/>
       <Sl l="centre x" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up({cx:v})}}/>
       <Sl l="centre y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up({cy:v})}}/>
     </div>)
@@ -5741,7 +5765,7 @@ function EfxCard(props) {
                 <div className="drop-grp">{grp.label}</div>
                 {grp.items.map(function(t){return (
                   <div key={t} className={"drop-item"+(t===efx.type?" sel":"")}
-                    onPointerDown={function(e){e.preventDefault();pickType(t)}}
+                    onClick={function(e){e.stopPropagation();pickType(t)}}
                     style={t===efx.type?{color:"var(--ac)"}:{}}>
                     {t}{t===efx.type?" ✓":""}
                   </div>
@@ -5972,7 +5996,7 @@ function AddEfxMenu(props) {
                 <div className="drop-grp">{grp.label}</div>
                 {grp.items.map(function(t){
                   return (
-                    <div key={t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(t);setOpen(false)}}>{t}</div>
+                    <div key={t} className="drop-item" onClick={function(e){e.stopPropagation();props.onAdd(t);setOpen(false)}}>{t}</div>
                   )
                 })}
               </div>
@@ -7472,8 +7496,25 @@ function PointChainItemCard(props) {
   var collSt=useState(false); var coll=collSt[0], setColl=collSt[1]
   var armedSt=useState(false); var armed=armedSt[0], setArmed=armedSt[1]
   var isoOpenSt=useState(false); var isoOpen=isoOpenSt[0], setIsoOpen=isoOpenSt[1]
+  var isoPreviewSt=useState("off"); var isoPreviewMode=isoPreviewSt[0], setIsoPreviewMode=isoPreviewSt[1]
+  var isoCanvasRef=useRef(null)
   var timerRef=useRef(null)
   useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
+  useEffect(function(){
+    if(!isoOpen||isoPreviewMode==="off"||!(item.isolate||[]).length)return
+    var cv=isoCanvasRef.current; if(!cv)return
+    var W=cv.width,H=cv.height
+    var cmap2=new Map((props.nodes||[]).map(function(n){return [n.id,n]}))
+    try{
+      var mv=compMasks(item.isolate,cmap2,new Map(),props.iC||new Map(),W,H,new Set())
+      var ctx2=cv.getContext("2d")
+      if(mv){
+        var id2=ctx2.createImageData(W,H)
+        for(var pi=0;pi<W*H;pi++){var v2=Math.round(mv[pi]*255);id2.data[pi*4]=v2;id2.data[pi*4+1]=v2;id2.data[pi*4+2]=v2;id2.data[pi*4+3]=255}
+        ctx2.putImageData(id2,0,0)
+      }
+    }catch(_){}
+  },[isoOpen,isoPreviewMode,item.isolate,props.iC,props.nodes])
   function handleDel(){
     if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
     else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
@@ -7538,6 +7579,27 @@ function PointChainItemCard(props) {
           </button>
           {isoOpen&&(
             <div style={{padding:"0 10px 10px"}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+                <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:".07em",flexShrink:0}}>attr</span>
+                <input value={item.isolateAttr||""} placeholder={"isolate_"+(ci+1)}
+                  onChange={function(e){props.onChange(Object.assign({},item,{isolateAttr:e.target.value}))}}
+                  style={{flex:1,fontSize:10,padding:"3px 6px",background:"var(--sf)",border:"1px solid var(--bd)",
+                    borderRadius:4,color:"var(--tx)",fontFamily:"'IBM Plex Mono',monospace"}}/>
+                <button onClick={function(){setIsoPreviewMode(function(m){return m==="off"?"mask":"off"})}}
+                  style={{fontSize:9,padding:"3px 8px",
+                    background:isoPreviewMode==="mask"?"rgba(176,96,240,.15)":"none",
+                    border:"1px solid "+(isoPreviewMode==="mask"?"rgba(176,96,240,.4)":"var(--bd)"),
+                    borderRadius:4,cursor:"pointer",
+                    color:isoPreviewMode==="mask"?"var(--lv)":"var(--mu)",
+                    fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>
+                  {isoPreviewMode==="mask"?"◈ mask":"◻ mask"}
+                </button>
+              </div>
+              {isoPreviewMode==="mask"&&(item.isolate||[]).length>0&&(
+                <canvas ref={isoCanvasRef} width={256} height={144}
+                  style={{width:"100%",display:"block",marginBottom:8,borderRadius:4,
+                    border:"1px solid var(--bd)",background:"#000"}}/>
+              )}
               <MaskStackPanel
                 key={(item.isolate||[]).map(function(m){return m.id}).join(",")}
                 stack={item.isolate||[]} nodes={props.nodes} selfId={props.selfId}
@@ -7612,9 +7674,14 @@ function PointCompProps(props) {
             : <EfxStack key={drillStack.map(function(e){return e.id}).join(",")}
                 stack={drillStack} nodes={nodes} selfId={node.id}
                 navPush={navPush} filterTypes={ISOLATE_MASK_EFFECTS}
+                iC={props.iC}
                 basePath={{slotKey:top.slotKey,steps:topSteps}}
                 onNavigate={props.onNavigate}
-                onChange={function(es){onChange(updatePath(node,top.slotKey,topSteps,function(m){return Object.assign({},m,{effectStack:es})}))}}/>
+                onChange={function(es){
+                  var slk=top.slotKey,stp=topSteps.slice()
+                  var upd=updatePath(node,slk,stp,function(m){return Object.assign({},m,{effectStack:es})})
+                  if(upd) onChange(upd)
+                }}/>
           }
         </div>
       </div>
@@ -7681,16 +7748,17 @@ function PointCompProps(props) {
         {srcTab==="modifiers"&&(
           <div style={{padding:10}}>
             {nChain===0&&<div className="empty">no modifiers — tap + to add</div>}
-            {chain.filter(function(it){return it.type!=="_source"}).map(function(item,ci2){
+            {chain.filter(function(it){return it.type!=="_source"}).map(function(item,ci2,filt){
+              var realIdx=chain.indexOf(item)
               return (
-                <PointChainItemCard key={item.id} item={item} index={ci2}
-                  isFirst={ci2===0} isLast={ci2===chain.length-1}
+                <PointChainItemCard key={item.id} item={item} index={realIdx}
+                  isFirst={ci2===0} isLast={ci2===filt.length-1}
                   nodes={nodes} selfId={node.id} iC={props.iC}
                   sourceId={node.refId}
                   navPush={navPush} onNavigate={props.onNavigate}
-                  onMove={function(dir){moveChain(ci2,dir)}}
-                  onDel={function(){delChain(ci2)}}
-                  onChange={function(patch){updChain(ci2,patch)}}/>
+                  onMove={function(dir){moveChain(realIdx,dir)}}
+                  onDel={function(){delChain(realIdx)}}
+                  onChange={function(patch){updChain(realIdx,patch)}}/>
               )
             })}
             <div ref={addModAnchorRef} style={{position:"relative",marginTop:nChain>0?6:0}}>
@@ -7703,7 +7771,7 @@ function PointCompProps(props) {
                       <div className="drop-grp">{grp.label}</div>
                       {grp.items.map(function(t){return (
                         <div key={t} className="drop-item"
-                          onPointerDown={function(e){e.preventDefault();addModifier(t);setAddModOpen(false)}}>{t}</div>
+                          onClick={function(e){e.stopPropagation();addModifier(t);setAddModOpen(false)}}>{t}</div>
                       )})}
                     </div>
                   )})}
@@ -7718,6 +7786,13 @@ function PointCompProps(props) {
           <div style={{padding:10}}>
             <div style={{fontSize:9,color:"var(--mu)",marginBottom:6,lineHeight:1.5}}>
               Spatial filter — restricts which points from the source enter the modifier chain.
+            </div>
+            <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+              <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:".07em",flexShrink:0}}>attr</span>
+              <input value={node.isolateAttr||""} placeholder="isolate"
+                onChange={function(e){onChange(Object.assign({},node,{isolateAttr:e.target.value}))}}
+                style={{flex:1,fontSize:10,padding:"3px 6px",background:"var(--sf)",border:"1px solid var(--bd)",
+                  borderRadius:4,color:"var(--tx)",fontFamily:"'IBM Plex Mono',monospace"}}/>
             </div>
             <MaskStackPanel
               key={(node.isolate||[]).map(function(m){return m.id}).join(",")}
