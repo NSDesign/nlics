@@ -3000,7 +3000,7 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
     }
     // Renderer items (show-points, source-at-points): draw to canvas, don't transform pts
     if(item.type==="show-points"||item.type==="source-at-points"){
-      ctx.canvas._points=pts  // expose current set
+      ctx.canvas._points=targets  // respect isolate filter (targets=pts when no isolate)
       applyEfxStk(ctx,[item],cmap,cache,iC,w,h,new Set(vis))
       continue
     }
@@ -3310,6 +3310,11 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
           if(outRes) ctx.drawImage(outRes,0,0)
           else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
         }
+      } else if(dispSlot.slot&&dispSlot.slot.indexOf("chain_isolate_")===0&&dsNode){
+        // Point Comp chain item isolate mask
+        var isoCI=parseInt(dispSlot.slot.replace("chain_isolate_",""))
+        var isoItem=dsNode&&(dsNode.chain||[])[isoCI]
+        renderMaskGrey(isoItem?isoItem.isolate||[]:[],"no isolate mask")
       } else {
         var dsSlot=dsNode&&(dispSlot.slot==="inputA"?dsNode.inputA:dsNode.inputB)
         if(dsSlot&&dsSlot.refId){
@@ -7496,30 +7501,16 @@ function PointChainItemCard(props) {
   var collSt=useState(false); var coll=collSt[0], setColl=collSt[1]
   var armedSt=useState(false); var armed=armedSt[0], setArmed=armedSt[1]
   var tabSt=useState("primary"); var tab=tabSt[0], setTab=tabSt[1]
-  var isoPreviewSt=useState("off"); var isoPreviewMode=isoPreviewSt[0], setIsoPreviewMode=isoPreviewSt[1]
-  var isoCanvasRef=useRef(null)
   var timerRef=useRef(null)
   useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
-  useEffect(function(){
-    if(tab!=="isolate"||isoPreviewMode==="off"||!(item.isolate||[]).length)return
-    var cv=isoCanvasRef.current; if(!cv)return
-    var W=cv.width,H=cv.height
-    var cmap2=new Map((props.nodes||[]).map(function(n){return [n.id,n]}))
-    try{
-      var mv=compMasks(item.isolate,cmap2,new Map(),props.iC||new Map(),W,H,new Set())
-      var ctx2=cv.getContext("2d")
-      if(mv){
-        var id2=ctx2.createImageData(W,H)
-        for(var pi=0;pi<W*H;pi++){var v2=Math.round(mv[pi]*255);id2.data[pi*4]=v2;id2.data[pi*4+1]=v2;id2.data[pi*4+2]=v2;id2.data[pi*4+3]=255}
-        ctx2.putImageData(id2,0,0)
-      }
-    }catch(_){}
-  },[tab,isoPreviewMode,item.isolate,props.iC,props.nodes])
   function handleDel(){
     if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
     else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
   }
   var nIso=(item.isolate||[]).length
+  // Main preview is "active" when the dispSlot points to this chain item's isolate
+  var isoDispActive=!!(props.dispSlot&&props.dispSlot.nodeId===props.nodeId
+    &&props.dispSlot.slot==="chain_isolate_"+ci)
   var tabs=[
     {id:"primary", label:"Primary"},
     {id:"isolate", label:"Isolate"+(nIso>0?" ("+nIso+")":""), color:"lv"},
@@ -7574,21 +7565,18 @@ function PointChainItemCard(props) {
               onChange={function(e){props.onChange(Object.assign({},item,{isolateAttr:e.target.value}))}}
               style={{flex:1,fontSize:10,padding:"3px 6px",background:"var(--sf)",border:"1px solid var(--bd)",
                 borderRadius:4,color:"var(--tx)",fontFamily:"'IBM Plex Mono',monospace"}}/>
-            <button onClick={function(){setIsoPreviewMode(function(m){return m==="off"?"mask":"off"})}}
-              style={{fontSize:9,padding:"3px 8px",
-                background:isoPreviewMode==="mask"?"rgba(176,96,240,.15)":"none",
-                border:"1px solid "+(isoPreviewMode==="mask"?"rgba(176,96,240,.4)":"var(--bd)"),
-                borderRadius:4,cursor:"pointer",
-                color:isoPreviewMode==="mask"?"var(--lv)":"var(--mu)",
-                fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>
-              {isoPreviewMode==="mask"?"◈ mask":"◻ mask"}
-            </button>
+            {props.onDispIso&&(
+              <button onClick={function(){props.onDispIso(ci)}}
+                style={{fontSize:9,padding:"3px 8px",
+                  background:isoDispActive?"rgba(176,96,240,.15)":"none",
+                  border:"1px solid "+(isoDispActive?"rgba(176,96,240,.4)":"var(--bd)"),
+                  borderRadius:4,cursor:"pointer",
+                  color:isoDispActive?"var(--lv)":"var(--mu)",
+                  fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>
+                {isoDispActive?"◈ mask":"◻ mask"}
+              </button>
+            )}
           </div>
-          {isoPreviewMode==="mask"&&(item.isolate||[]).length>0&&(
-            <canvas ref={isoCanvasRef} width={256} height={144}
-              style={{width:"100%",display:"block",marginBottom:8,borderRadius:4,
-                border:"1px solid var(--bd)",background:"#000"}}/>
-          )}
           <MaskStackPanel
             key={(item.isolate||[]).map(function(m){return m.id}).join(",")}
             stack={item.isolate||[]} nodes={props.nodes} selfId={props.selfId}
@@ -7697,6 +7685,11 @@ function PointCompProps(props) {
     lastAddRef.current=now
     onChange(Object.assign({},node,{chain:chain.concat([mkPointChainItem(t)])}))
   }
+  // Toggle chain item isolate mask display in the main preview
+  function dispChainIso(chainIdx){
+    if(!props.dspSlot) return
+    props.dspSlot(node.id,"chain_isolate_"+chainIdx)
+  }
 
   var modGroups=EFX_GROUPS.map(function(g){
     var fi=g.items.filter(function(t){return POINT_CONTEXT_EFFECTS.includes(t)})
@@ -7743,6 +7736,8 @@ function PointCompProps(props) {
                   nodes={nodes} selfId={node.id} iC={props.iC}
                   sourceId={node.refId}
                   navPush={navPush} onNavigate={props.onNavigate}
+                  nodeId={node.id} dispSlot={props.dispSlot}
+                  onDispIso={dispChainIso}
                   onMove={function(dir){moveChain(realIdx,dir)}}
                   onDel={function(){delChain(realIdx)}}
                   onChange={function(patch){updChain(realIdx,patch)}}/>
@@ -8117,7 +8112,7 @@ function Section(props) {
                         : node.type==="stack"
                           ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
                           : node.type==="point-comp"
-                            ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
+                            ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot}/>
                           : null
                     }
                   </div>
@@ -8147,7 +8142,7 @@ function Section(props) {
                     {isSel && props.panelStyle!=="sheet" && (
                       <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
                         {node.type==="point-comp"
-                          ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
+                          ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot}/>
                           : <PromotedProps node={node} nodes={props.nodes}/>}
                       </div>
                     )}
