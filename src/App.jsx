@@ -8730,9 +8730,11 @@ function App() {
   }
   function autoSaveNow() {
     try {
-      var data = JSON.stringify({version:"1.0",name:projName,nodes:nodes,savedAt:new Date().toISOString(),_uid:_uid})
+      var st=stRef.current
+      var data = JSON.stringify({version:"1.0",name:st.projName||projName,nodes:st.nodes||nodes,
+        savedAt:new Date().toISOString(),_uid:_uid,dispId:st.dispId||dispId})
       localStorage.setItem("nlics:autosave",data)
-      localStorage.setItem("nlics:autosave:name",projName)
+      localStorage.setItem("nlics:autosave:name",st.projName||projName)
     } catch(e) {}
   }
   // Auto-save interval
@@ -8756,7 +8758,7 @@ function App() {
     showToast()
   }
 
-  useEffect(function(){stRef.current={nodes:nodes,dispId:dispId,dispMask:dispMask,dispSlot:dispSlot}},[nodes,dispId,dispMask,dispSlot])
+  useEffect(function(){stRef.current={nodes:nodes,dispId:dispId,dispMask:dispMask,dispSlot:dispSlot,projName:projName}},[nodes,dispId,dispMask,dispSlot,projName])
 
   // ── Persist settings via localStorage ───────────────────────────────────
   // Works on GitHub Pages, local dev, and any browser.
@@ -9177,7 +9179,14 @@ function App() {
                     : <button onClick={function(){
                         try{
                           localStorage.setItem("nlics:default-project-name",r.name)
-                          if(hasData) localStorage.setItem("nlics:default-project",JSON.stringify(r.data))
+                          if(hasData){
+                            // If this is the currently loaded project, use the live dispId
+                            // so a display change after the last explicit save is honoured
+                            var defData=r.name===projName
+                              ?Object.assign({},r.data,{dispId:dispId})
+                              :r.data
+                            localStorage.setItem("nlics:default-project",JSON.stringify(defData))
+                          }
                         }catch(e){}
                         setLoadDialog(false); setTimeout(function(){setLoadDialog(true)},0)
                       }} style={{width:20,height:20,minWidth:20,minHeight:20,borderRadius:"50%",
