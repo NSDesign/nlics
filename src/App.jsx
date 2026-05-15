@@ -6218,6 +6218,22 @@ function EfxStack(props) {
         )
       })}
       <div style={{display:"flex",gap:4,marginTop:6,alignItems:"stretch",minHeight:36}}>
+        {/* bypass all toggle */}
+        {props.stack.length>0&&(function(){
+          var anyDisabled=props.stack.some(function(e){return e.enabled===false})
+          return (
+            <button title={anyDisabled?"Enable all":"Disable all"}
+              onClick={function(){
+                var en=anyDisabled
+                props.onChange(props.stack.map(function(e){return Object.assign({},e,{enabled:en})}))
+              }}
+              style={{fontSize:14,width:36,flexShrink:0,borderRadius:6,cursor:"pointer",
+                color:anyDisabled?"var(--mu)":"var(--ac)",
+                background:"none",border:"1px solid var(--bd)"}}>
+              {anyDisabled?"○":"●"}
+            </button>
+          )
+        })()}
         {/* + effect — 2 parts */}
         <AddEfxMenu onAdd={addEfx} filterTypes={props.filterTypes} excludeGroups={props.excludeGroups}/>
         {/* + stack — 2 parts */}
@@ -6312,6 +6328,22 @@ function MaskStackPanel(props) {
         )
       })}
       <div style={{display:"flex",gap:4,marginTop:6,alignItems:"stretch",minHeight:36}}>
+        {/* bypass all toggle */}
+        {props.stack.length>0&&(function(){
+          var anyDisabled=props.stack.some(function(m){return m.enabled===false})
+          return (
+            <button title={anyDisabled?"Enable all":"Disable all"}
+              onClick={function(){
+                var en=anyDisabled
+                props.onChange(props.stack.map(function(m){return Object.assign({},m,{enabled:en})}))
+              }}
+              style={{fontSize:14,width:36,flexShrink:0,borderRadius:6,cursor:"pointer",
+                color:anyDisabled?"var(--mu)":"var(--lv)",
+                background:"none",border:"1px solid var(--bd)"}}>
+              {anyDisabled?"○":"●"}
+            </button>
+          )
+        })()}
         {/* + mask — 2 parts */}
         <button className="lv" style={{flex:2,minWidth:0,fontSize:11}}
           onClick={addMask}>+ mask</button>
@@ -7778,17 +7810,7 @@ function PointChainItemCard(props) {
               onChange={function(e){props.onChange(Object.assign({},item,{isolateAttr:e.target.value}))}}
               style={{flex:1,fontSize:10,padding:"3px 6px",background:"var(--sf)",border:"1px solid var(--bd)",
                 borderRadius:4,color:"var(--tx)",fontFamily:"'IBM Plex Mono',monospace"}}/>
-            {props.onDispIso&&(
-              <button onClick={function(){props.onDispIso(ci)}}
-                style={{fontSize:9,padding:"3px 8px",
-                  background:isoDispActive?"rgba(176,96,240,.15)":"none",
-                  border:"1px solid "+(isoDispActive?"rgba(176,96,240,.4)":"var(--bd)"),
-                  borderRadius:4,cursor:"pointer",
-                  color:isoDispActive?"var(--lv)":"var(--mu)",
-                  fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>
-                {isoDispActive?"◈ mask":"◻ mask"}
-              </button>
-            )}
+
           </div>
           <MaskStackPanel
             key={(item.isolate||[]).map(function(m){return m.id}).join(",")}
@@ -8051,8 +8073,26 @@ function PointCompProps(props) {
                   onChange={function(patch){updChain(realIdx,patch)}}/>
               )
             })}
-            <div ref={addModAnchorRef} style={{position:"relative",marginTop:nChain>0?6:0}}>
-              <button className="ac" style={{width:"100%",fontSize:11,minHeight:36}}
+            <div ref={addModAnchorRef} style={{display:"flex",gap:4,position:"relative",marginTop:nChain>0?6:0}}>
+              {nChain>0&&(function(){
+                var srcChain=chain.filter(function(it){return it.type!=="_source"})
+                var anyDisabled=srcChain.some(function(it){return it.enabled===false})
+                return (
+                  <button title={anyDisabled?"Enable all":"Disable all"}
+                    onClick={function(){
+                      var en=anyDisabled
+                      onChange(Object.assign({},node,{chain:chain.map(function(it){
+                        return it.type==="_source"?it:Object.assign({},it,{enabled:en})
+                      })}))
+                    }}
+                    style={{fontSize:14,width:36,flexShrink:0,borderRadius:6,cursor:"pointer",
+                      color:anyDisabled?"var(--mu)":"var(--ac)",
+                      background:"none",border:"1px solid var(--bd)"}}>
+                    {anyDisabled?"○":"●"}
+                  </button>
+                )
+              })()}
+              <button className="ac" style={{flex:1,fontSize:11,minHeight:36}}
                 onClick={function(){setAddModOpen(!addModOpen)}}>+ modifier</button>
               {addModOpen&&addModPos&&createPortal(
                 <div ref={addModMenuRef} className="eff-menu" style={addModPos}>
@@ -8083,17 +8123,7 @@ function PointCompProps(props) {
                 onChange={function(e){onChange(Object.assign({},node,{isolateAttr:e.target.value}))}}
                 style={{flex:1,fontSize:10,padding:"3px 6px",background:"var(--sf)",border:"1px solid var(--bd)",
                   borderRadius:4,color:"var(--tx)",fontFamily:"'IBM Plex Mono',monospace"}}/>
-              {props.dspSlot&&(
-                <button onClick={dispSourceIso}
-                  style={{fontSize:9,padding:"3px 8px",
-                    background:props.dispSlot&&props.dispSlot.nodeId===node.id&&props.dispSlot.slot==="source_isolate"?"rgba(176,96,240,.15)":"none",
-                    border:"1px solid "+(props.dispSlot&&props.dispSlot.nodeId===node.id&&props.dispSlot.slot==="source_isolate"?"rgba(176,96,240,.4)":"var(--bd)"),
-                    borderRadius:4,cursor:"pointer",
-                    color:props.dispSlot&&props.dispSlot.nodeId===node.id&&props.dispSlot.slot==="source_isolate"?"var(--lv)":"var(--mu)",
-                    fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>
-                  {props.dispSlot&&props.dispSlot.nodeId===node.id&&props.dispSlot.slot==="source_isolate"?"◈ mask":"◻ mask"}
-                </button>
-              )}
+
             </div>
             <MaskStackPanel
               key={(node.isolate||[]).map(function(m){return m.id}).join(",")}
@@ -8133,8 +8163,23 @@ function PointCompProps(props) {
                   onChange={function(patch){updOutChain(oi,patch)}}/>
               )
             })}
-            <div ref={outAddModAnchorRef} style={{position:"relative",marginTop:nOutMod>0?6:0}}>
-              <button className="ac" style={{width:"100%",fontSize:11,minHeight:36}}
+            <div ref={outAddModAnchorRef} style={{display:"flex",gap:4,position:"relative",marginTop:nOutMod>0?6:0}}>
+              {nOutMod>0&&(function(){
+                var anyDisabled=outMods.some(function(it){return it.enabled===false})
+                return (
+                  <button title={anyDisabled?"Enable all":"Disable all"}
+                    onClick={function(){
+                      var en=anyDisabled
+                      onChange(Object.assign({},node,{outModifiers:outMods.map(function(it){return Object.assign({},it,{enabled:en})})}))
+                    }}
+                    style={{fontSize:14,width:36,flexShrink:0,borderRadius:6,cursor:"pointer",
+                      color:anyDisabled?"var(--mu)":"var(--ac)",
+                      background:"none",border:"1px solid var(--bd)"}}>
+                    {anyDisabled?"○":"●"}
+                  </button>
+                )
+              })()}
+              <button className="ac" style={{flex:1,fontSize:11,minHeight:36}}
                 onClick={function(){setOutAddModOpen(!outAddModOpen)}}>+ modifier</button>
               {outAddModOpen&&outAddModPos&&createPortal(
                 <div ref={outAddModMenuRef} className="eff-menu" style={outAddModPos}>
