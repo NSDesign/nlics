@@ -5826,22 +5826,26 @@ function EfxCard(props) {
         </button>
 
         {/* Type badge — tap ⇄ to open effect-swap picker */}
-        <span style={{fontSize:10,padding:"1px 7px",borderRadius:"4px 0 0 4px",flexShrink:0,
-          fontFamily:"'IBM Plex Mono',monospace",
-          background:"rgba(255,255,255,.06)",
-          color:efx.enabled?"var(--di)":"var(--mu)",
-          border:"1px solid var(--bd)",borderRight:"none"}}>
-          {efx.type}
-        </span>
-        <button ref={swapAnchorRef} onClick={function(){setSwap(swap==="picking"?null:"picking")}}
-          title="Swap effect type"
-          style={{fontSize:9,padding:"1px 5px",borderRadius:"0 4px 4px 0",flexShrink:0,
+        <div style={{display:"flex",alignItems:"stretch",flexShrink:0}}>
+          <span style={{fontSize:10,padding:"1px 7px",borderRadius:"4px 0 0 4px",
             fontFamily:"'IBM Plex Mono',monospace",
             background:"rgba(255,255,255,.06)",
-            color:swap==="picking"?"var(--di)":"var(--mu)",
-            border:"1px solid var(--bd)",cursor:"pointer"}}>
-          ⇄
-        </button>
+            color:efx.enabled?"var(--di)":"var(--mu)",
+            border:"1px solid var(--bd)",borderRight:"none",
+            display:"flex",alignItems:"center"}}>
+            {efx.type}
+          </span>
+          <button ref={swapAnchorRef} onClick={function(){setSwap(swap==="picking"?null:"picking")}}
+            title="Swap effect type"
+            style={{fontSize:9,padding:"0 5px",borderRadius:"0 4px 4px 0",
+              fontFamily:"'IBM Plex Mono',monospace",
+              background:"rgba(255,255,255,.06)",
+              color:swap==="picking"?"var(--di)":"var(--mu)",
+              border:"1px solid var(--bd)",cursor:"pointer",
+              display:"flex",alignItems:"center"}}>
+            ⇄
+          </button>
+        </div>
         {/* Custom name (separate from type) */}
         <InlineRename value={efx.name} fallback=""
           onChange={function(nw){props.onChange(Object.assign({},efx,{name:nw}))}}
@@ -7671,20 +7675,24 @@ function PointChainItemCard(props) {
           style={{color:item.enabled===false?"var(--mu)":"var(--ac)",fontSize:18}}>
           {item.enabled===false?"○":"●"}
         </button>
-        <span style={{fontSize:10,padding:"1px 7px",borderRadius:"4px 0 0 4px",flexShrink:0,
-          fontFamily:"'IBM Plex Mono',monospace",
-          background:"rgba(36,204,168,.12)",color:"var(--ac)",
-          border:"1px solid rgba(36,204,168,.25)",borderRight:"none"}}>
-          {item.type}
-        </span>
-        <button ref={swapAnchorRef} title="Swap modifier type"
-          onClick={function(){setSwapOpen(!swapOpen)}}
-          style={{fontSize:9,padding:"1px 5px",borderRadius:"0 4px 4px 0",flexShrink:0,
+        <div style={{display:"flex",alignItems:"stretch",flexShrink:0}}>
+          <span style={{fontSize:10,padding:"1px 7px",borderRadius:"4px 0 0 4px",
             fontFamily:"'IBM Plex Mono',monospace",
-            background:"rgba(36,204,168,.08)",color:swapOpen?"var(--ac)":"rgba(36,204,168,.6)",
-            border:"1px solid rgba(36,204,168,.25)",cursor:"pointer"}}>
-          ⇄
-        </button>
+            background:"rgba(36,204,168,.12)",color:"var(--ac)",
+            border:"1px solid rgba(36,204,168,.25)",borderRight:"none",
+            display:"flex",alignItems:"center"}}>
+            {item.type}
+          </span>
+          <button ref={swapAnchorRef} title="Swap modifier type"
+            onClick={function(){setSwapOpen(!swapOpen)}}
+            style={{fontSize:9,padding:"0 5px",borderRadius:"0 4px 4px 0",
+              fontFamily:"'IBM Plex Mono',monospace",
+              background:"rgba(36,204,168,.08)",color:swapOpen?"var(--ac)":"rgba(36,204,168,.5)",
+              border:"1px solid rgba(36,204,168,.25)",cursor:"pointer",
+              display:"flex",alignItems:"center"}}>
+            ⇄
+          </button>
+        </div>
         {swapOpen&&swapPos&&createPortal(
           <div ref={swapMenuRef} className="eff-menu" style={swapPos}>
             {modGroups.map(function(grp){return (
