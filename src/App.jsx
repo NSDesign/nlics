@@ -3377,10 +3377,18 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
           else { ctx.fillStyle="#040412"; ctx.fillRect(0,0,w,h) }
         }
       } else if(dispSlot.slot&&dispSlot.slot.indexOf("chain_isolate_")===0&&dsNode){
-        // Point Comp chain item isolate mask
+        // Point Comp source-chain item isolate mask — individual modifier's isolate
         var isoCI=parseInt(dispSlot.slot.replace("chain_isolate_",""))
         var isoItem=dsNode&&(dsNode.chain||[])[isoCI]
         renderMaskGrey(isoItem?isoItem.isolate||[]:[],"no isolate mask")
+      } else if(dispSlot.slot==="source_isolate"&&dsNode){
+        // Point Comp source-level isolate mask — combined result of the source mask stack
+        renderMaskGrey(dsNode.isolate||[],"no source isolate mask")
+      } else if(dispSlot.slot&&dispSlot.slot.indexOf("out_isolate_")===0&&dsNode){
+        // Point Comp output-chain item isolate mask — individual output modifier's isolate
+        var outIsoCI=parseInt(dispSlot.slot.replace("out_isolate_",""))
+        var outIsoItem=dsNode&&(dsNode.outModifiers||[])[outIsoCI]
+        renderMaskGrey(outIsoItem?outIsoItem.isolate||[]:[],"no output isolate mask")
       } else {
         var dsSlot=dsNode&&(dispSlot.slot==="inputA"?dsNode.inputA:dsNode.inputB)
         if(dsSlot&&dsSlot.refId){
@@ -3447,6 +3455,14 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
               em2=effectiveMatte(lls,mll.maskStack,cmap,new Map(),iC,w,h,new Set())
               emLabel="layer "+(mli+1)+" effective matte"; break
             }
+          }
+        }
+        // Point-comp: source isolate mask (combined) → outMask fallback
+        if(!em2&&mn.type==="point-comp"){
+          if(mn.isolate&&mn.isolate.length>0){
+            em2=compMasks(mn.isolate,cmap,new Map(),iC,w,h,new Set()); emLabel="source isolate"
+          } else if(mn.outMask&&mn.outMask.length>0){
+            em2=compMasks(mn.outMask,cmap,new Map(),iC,w,h,new Set()); emLabel="output mask"
           }
         }
         // §1 creators: show intrinsic alpha channel as matte
@@ -7652,7 +7668,7 @@ function PointChainItemCard(props) {
   function upSP(np){props.onChange(Object.assign({},item,{params:Object.assign({},item.params,np)}))}
   // Main preview is "active" when the dispSlot points to this chain item's isolate
   var isoDispActive=!!(props.dispSlot&&props.dispSlot.nodeId===props.nodeId
-    &&props.dispSlot.slot==="chain_isolate_"+ci)
+    &&(props.dispSlot.slot==="chain_isolate_"+ci||props.dispSlot.slot==="out_isolate_"+ci))
   var tabs=isShowPoints
     ? [{id:"primary",label:"Primary"},{id:"attributes",label:"Attributes"+(spLabels.length>0?" ("+spLabels.length+")":""),color:"di"}]
     : isRenderUtil
@@ -7929,6 +7945,14 @@ function PointCompProps(props) {
     if(!props.dspSlot) return
     props.dspSlot(node.id,"chain_isolate_"+chainIdx)
   }
+  function dispOutChainIso(outIdx){
+    if(!props.dspSlot) return
+    props.dspSlot(node.id,"out_isolate_"+outIdx)
+  }
+  function dispSourceIso(){
+    if(!props.dspSlot) return
+    props.dspSlot(node.id,"source_isolate")
+  }
 
   // Output chain handlers (point context — runs before render)
   var outMods=node.outModifiers||[]
@@ -8034,6 +8058,17 @@ function PointCompProps(props) {
                 onChange={function(e){onChange(Object.assign({},node,{isolateAttr:e.target.value}))}}
                 style={{flex:1,fontSize:10,padding:"3px 6px",background:"var(--sf)",border:"1px solid var(--bd)",
                   borderRadius:4,color:"var(--tx)",fontFamily:"'IBM Plex Mono',monospace"}}/>
+              {props.dspSlot&&(
+                <button onClick={dispSourceIso}
+                  style={{fontSize:9,padding:"3px 8px",
+                    background:props.dispSlot&&props.dispSlot.nodeId===node.id&&props.dispSlot.slot==="source_isolate"?"rgba(176,96,240,.15)":"none",
+                    border:"1px solid "+(props.dispSlot&&props.dispSlot.nodeId===node.id&&props.dispSlot.slot==="source_isolate"?"rgba(176,96,240,.4)":"var(--bd)"),
+                    borderRadius:4,cursor:"pointer",
+                    color:props.dispSlot&&props.dispSlot.nodeId===node.id&&props.dispSlot.slot==="source_isolate"?"var(--lv)":"var(--mu)",
+                    fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>
+                  {props.dispSlot&&props.dispSlot.nodeId===node.id&&props.dispSlot.slot==="source_isolate"?"◈ mask":"◻ mask"}
+                </button>
+              )}
             </div>
             <MaskStackPanel
               key={(node.isolate||[]).map(function(m){return m.id}).join(",")}
@@ -8067,6 +8102,7 @@ function PointCompProps(props) {
                   sourceId={node.refId}
                   navPush={navPush} onNavigate={props.onNavigate}
                   nodeId={node.id} dispSlot={props.dispSlot}
+                  onDispIso={dispOutChainIso}
                   onMove={function(dir){moveOutChain(oi,dir)}}
                   onDel={function(){delOutChain(oi)}}
                   onChange={function(patch){updOutChain(oi,patch)}}/>
