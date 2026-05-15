@@ -1956,6 +1956,8 @@ function getRootArr(node, slotKey) {
   if (slotKey === "isolate") return node.isolate || []
   var cm = slotKey.match(/^chain\[(\d+)\]\.isolate$/)
   if (cm) { var ci2=parseInt(cm[1]); return ((node.chain||[])[ci2]||{}).isolate || [] }
+  var om = slotKey.match(/^outModifiers\[(\d+)\]\.isolate$/)
+  if (om) { var oi2=parseInt(om[1]); return ((node.outModifiers||[])[oi2]||{}).isolate || [] }
   var parts = slotKey.split(".")
   var slot = node[parts[0]] || {}
   return slot[parts[1]] || []
@@ -1985,6 +1987,15 @@ function setRootArr(node, slotKey, newArr) {
       return Object.assign({},item,{isolate:newArr})
     })
     return Object.assign({},node,{chain:nc2})
+  }
+  var om = slotKey.match(/^outModifiers\[(\d+)\]\.isolate$/)
+  if (om) {
+    var oi2=parseInt(om[1])
+    var no2=(node.outModifiers||[]).map(function(item,i){
+      if(i!==oi2) return item
+      return Object.assign({},item,{isolate:newArr})
+    })
+    return Object.assign({},node,{outModifiers:no2})
   }
   var parts = slotKey.split(".")
   var slotObj = Object.assign({}, node[parts[0]])
@@ -3035,7 +3046,38 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
     pts=unchanged.concat(targets)
   }
   cv._points=pts
-  // ── 3. Render ─────────────────────────────────────────────────────────────
+  // ── 3. Output chain (point context modifiers applied before rendering) ───
+  var outChain=n.outModifiers||[]
+  for(var oci=0;oci<outChain.length;oci++){
+    var outItem=outChain[oci]
+    if(outItem.enabled===false||!pts.length) continue
+    var outTargets=pts, outUnchanged=[]
+    if(outItem.isolate&&outItem.isolate.length>0){
+      var oiv=new Set(vis); oiv.add(n.id)
+      var omv=compMasks(outItem.isolate,cmap,cache,iC,w,h,oiv)
+      if(omv){
+        var oAttr=outItem.isolateAttr&&outItem.isolateAttr.trim()?outItem.isolateAttr.trim():("out_isolate_"+(oci+1))
+        pts.forEach(function(pt){
+          var px=Math.max(0,Math.min(w-1,Math.round(pt.x*(w-1))))
+          var py=Math.max(0,Math.min(h-1,Math.round(pt.y*(h-1))))
+          pt[oAttr]=omv[py*w+px]
+        })
+        outUnchanged=pts.filter(function(pt){return pt[oAttr]<=0.01})
+        outTargets=pts.filter(function(pt){return pt[oAttr]>0.01})
+      }
+    }
+    if(outItem.type==="show-points"||outItem.type==="source-at-points"){
+      cv._points=outTargets
+      applyEfxStk(ctx,[outItem],cmap,cache,iC,w,h,new Set(vis))
+      continue
+    }
+    if(outItem.type==="uv-distort"&&outItem.params&&outItem.params.uvRefId)
+      outItem._uvCanvas=compAny(outItem.params.uvRefId,cmap,new Map(),iC,w,h,new Set(vis))||null
+    outTargets=applyEfxToPoints(outTargets,outItem,w,h)
+    pts=outUnchanged.concat(outTargets)
+  }
+  cv._points=pts
+  // ── 4. Render ─────────────────────────────────────────────────────────────
   if(pts.length>0){
     pts.forEach(function(pt){
       ctx.globalAlpha=Math.max(0,Math.min(1,pt.opacity==null?1:pt.opacity))
@@ -3045,7 +3087,6 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
     })
     ctx.globalAlpha=1
   }
-  if(n.outModifiers&&n.outModifiers.length>0) applyEfxStk(ctx,n.outModifiers,cmap,cache,iC,w,h,new Set(vis))
   if(n.outMask&&n.outMask.length>0){
     if(n.outMaskOpacity!=null&&n.outMaskOpacity<100){
       var omid=ctx.getImageData(0,0,w,h),omf=n.outMaskOpacity/100
@@ -5784,14 +5825,22 @@ function EfxCard(props) {
           {efx.enabled?"●":"○"}
         </button>
 
-        {/* Type button — tap to open effect-swap picker */}
-        <button ref={swapAnchorRef} onClick={function(){setSwap(swap==="picking"?null:"picking")}}
-          title="Tap to swap effect type"
-          style={{fontSize:12,padding:"0 8px",minHeight:32,fontFamily:"'IBM Plex Mono',monospace",
-            fontWeight:500,color:efx.enabled?"var(--tx)":"var(--mu)",
-            background:"none",border:"none",cursor:"pointer",flexShrink:0,
-            textDecoration:"underline dotted",textUnderlineOffset:3}}>
+        {/* Type badge — tap ⇄ to open effect-swap picker */}
+        <span style={{fontSize:10,padding:"1px 7px",borderRadius:"4px 0 0 4px",flexShrink:0,
+          fontFamily:"'IBM Plex Mono',monospace",
+          background:"rgba(255,255,255,.06)",
+          color:efx.enabled?"var(--di)":"var(--mu)",
+          border:"1px solid var(--bd)",borderRight:"none"}}>
           {efx.type}
+        </span>
+        <button ref={swapAnchorRef} onClick={function(){setSwap(swap==="picking"?null:"picking")}}
+          title="Swap effect type"
+          style={{fontSize:9,padding:"1px 5px",borderRadius:"0 4px 4px 0",flexShrink:0,
+            fontFamily:"'IBM Plex Mono',monospace",
+            background:"rgba(255,255,255,.06)",
+            color:swap==="picking"?"var(--di)":"var(--mu)",
+            border:"1px solid var(--bd)",cursor:"pointer"}}>
+          ⇄
         </button>
         {/* Custom name (separate from type) */}
         <InlineRename value={efx.name} fallback=""
@@ -7558,12 +7607,38 @@ function PointChainItemCard(props) {
   var armedSt=useState(false); var armed=armedSt[0], setArmed=armedSt[1]
   var tabSt=useState("primary"); var tab=tabSt[0], setTab=tabSt[1]
   var timerRef=useRef(null)
+  var swapOpenSt=useState(false); var swapOpen=swapOpenSt[0], setSwapOpen=swapOpenSt[1]
+  var swapAnchorRef=useRef(null), swapMenuRef=useRef(null)
+  var swapPos=usePopoverPosition(swapAnchorRef,swapOpen,"below")
   useEffect(function(){return function(){if(timerRef.current)clearTimeout(timerRef.current)}},[])
+  useEffect(function(){
+    if(!swapOpen) return
+    function h(e){
+      if(swapAnchorRef.current&&swapAnchorRef.current.contains(e.target)) return
+      if(swapMenuRef.current&&swapMenuRef.current.contains(e.target)) return
+      setSwapOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[swapOpen])
+  function pickModifier(t){
+    if(t===item.type){setSwapOpen(false);return}
+    var newItem=Object.assign({},mkPointChainItem(t),{
+      id:item.id, name:item.name, enabled:item.enabled,
+      isolate:item.isolate||[], isolateAttr:item.isolateAttr||""
+    })
+    props.onChange(newItem); setSwapOpen(false)
+  }
+  var nIso=(item.isolate||[]).length
+  // Modifier groups for the swap picker
+  var modGroups=EFX_GROUPS.map(function(g){
+    var fi=g.items.filter(function(t){return POINT_CONTEXT_EFFECTS.includes(t)})
+    return fi.length?{label:g.label,items:fi}:null
+  }).filter(Boolean)
   function handleDel(){
     if(!armed){setArmed(true);timerRef.current=setTimeout(function(){setArmed(false)},3000)}
     else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
   }
-  var nIso=(item.isolate||[]).length
   // Render utilities (show-points, source-at-points) don't support isolate masking
   var isRenderUtil=item.type==="show-points"||item.type==="source-at-points"
   var isShowPoints=item.type==="show-points"
@@ -7596,12 +7671,37 @@ function PointChainItemCard(props) {
           style={{color:item.enabled===false?"var(--mu)":"var(--ac)",fontSize:18}}>
           {item.enabled===false?"○":"●"}
         </button>
-        <span style={{fontSize:10,padding:"1px 7px",borderRadius:4,flexShrink:0,
+        <span style={{fontSize:10,padding:"1px 7px",borderRadius:"4px 0 0 4px",flexShrink:0,
           fontFamily:"'IBM Plex Mono',monospace",
           background:"rgba(36,204,168,.12)",color:"var(--ac)",
-          border:"1px solid rgba(36,204,168,.25)"}}>
+          border:"1px solid rgba(36,204,168,.25)",borderRight:"none"}}>
           {item.type}
         </span>
+        <button ref={swapAnchorRef} title="Swap modifier type"
+          onClick={function(){setSwapOpen(!swapOpen)}}
+          style={{fontSize:9,padding:"1px 5px",borderRadius:"0 4px 4px 0",flexShrink:0,
+            fontFamily:"'IBM Plex Mono',monospace",
+            background:"rgba(36,204,168,.08)",color:swapOpen?"var(--ac)":"rgba(36,204,168,.6)",
+            border:"1px solid rgba(36,204,168,.25)",cursor:"pointer"}}>
+          ⇄
+        </button>
+        {swapOpen&&swapPos&&createPortal(
+          <div ref={swapMenuRef} className="eff-menu" style={swapPos}>
+            {modGroups.map(function(grp){return (
+              <div key={grp.label}>
+                <div className="drop-grp">{grp.label}</div>
+                {grp.items.map(function(t){return (
+                  <div key={t} className={"drop-item"+(t===item.type?" sel":"")}
+                    onClick={function(e){e.stopPropagation();pickModifier(t)}}
+                    style={t===item.type?{color:"var(--ac)"}:{}}>
+                    {t}{t===item.type?" ✓":""}
+                  </div>
+                )})}
+              </div>
+            )})}
+          </div>,
+          document.body
+        )}
         <InlineRename value={item.name} fallback=""
           onChange={function(nw){props.onChange(Object.assign({},item,{name:nw}))}}
           labelStyle={{fontSize:11,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
@@ -7713,9 +7813,9 @@ function PointCompProps(props) {
   var navSt=useState([]); var navStack=navSt[0], setNavStack=navSt[1]
   // Source card tabs: Source | Modifiers | Isolate
   var srcTabSt=useState("source"); var srcTab=srcTabSt[0], setSrcTab=srcTabSt[1]
-  // Output tabs: Modifiers | Masks
+  // Output tabs: Modifiers | Mask
   var outTabSt=useState("modifiers"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
-  // Add-modifier popover
+  // Source chain add-modifier popover
   var addModOpenSt=useState(false); var addModOpen=addModOpenSt[0], setAddModOpen=addModOpenSt[1]
   var addModAnchorRef=useRef(null), addModMenuRef=useRef(null)
   var addModPos=usePopoverPosition(addModAnchorRef, addModOpen, "above")
@@ -7729,6 +7829,20 @@ function PointCompProps(props) {
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[addModOpen])
+  // Output chain add-modifier popover
+  var outAddModOpenSt=useState(false); var outAddModOpen=outAddModOpenSt[0], setOutAddModOpen=outAddModOpenSt[1]
+  var outAddModAnchorRef=useRef(null), outAddModMenuRef=useRef(null)
+  var outAddModPos=usePopoverPosition(outAddModAnchorRef, outAddModOpen, "above")
+  useEffect(function(){
+    if(!outAddModOpen) return
+    function h(e){
+      if(outAddModAnchorRef.current&&outAddModAnchorRef.current.contains(e.target)) return
+      if(outAddModMenuRef.current&&outAddModMenuRef.current.contains(e.target)) return
+      setOutAddModOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[outAddModOpen])
   function navPush(item){setNavStack(function(s){return s.concat([item])})}
   var lastAddRef=useRef(0)  // must be above drill-view early return (hooks must be unconditional)
 
@@ -7784,7 +7898,7 @@ function PointCompProps(props) {
   var chain=node.chain||[]
   var nChain=chain.filter(function(it){return it.type!=="_source"}).length
   var nIso=(node.isolate||[]).length
-  var nOutMod=(node.outModifiers||[]).length, nOutMask=(node.outMask||[]).length
+  var nOutMask=(node.outMask||[]).length
 
   function updChain(idx,patch){
     var nc=chain.map(function(it,i){return i===idx?Object.assign({},it,patch):it})
@@ -7806,6 +7920,26 @@ function PointCompProps(props) {
   function dispChainIso(chainIdx){
     if(!props.dspSlot) return
     props.dspSlot(node.id,"chain_isolate_"+chainIdx)
+  }
+
+  // Output chain handlers (point context — runs before render)
+  var outMods=node.outModifiers||[]
+  var nOutMod=outMods.length
+  function updOutChain(idx,patch){
+    var nc=outMods.map(function(it,i){return i===idx?Object.assign({},it,patch):it})
+    onChange(Object.assign({},node,{outModifiers:nc}))
+  }
+  function delOutChain(idx){onChange(Object.assign({},node,{outModifiers:outMods.filter(function(_,i){return i!==idx})}))}
+  function moveOutChain(idx,dir){
+    var ni=Math.max(0,Math.min(outMods.length-1,idx+dir)); if(ni===idx)return
+    var a=outMods.slice(); var tmp=a[idx]; a[idx]=a[ni]; a[ni]=tmp
+    onChange(Object.assign({},node,{outModifiers:a}))
+  }
+  function addOutModifier(t){
+    var now=Date.now()
+    if(now-lastAddRef.current<250) return
+    lastAddRef.current=now
+    onChange(Object.assign({},node,{outModifiers:outMods.concat([mkPointChainItem(t)])}))
   }
 
   var modGroups=EFX_GROUPS.map(function(g){
@@ -7904,31 +8038,54 @@ function PointCompProps(props) {
         )}
       </div>
 
-      {/* ── Output card (mirrors LayerComp output) ─────────── */}
+      {/* ── Output card: second point-context chain + output mask ─── */}
       <div className="card">
         <div className="card-hdr" style={{background:"rgba(176,96,240,.06)"}}>
           <span style={{flex:1,fontSize:11,fontFamily:"'Syne',sans-serif",fontWeight:700,
             textTransform:"uppercase",letterSpacing:".1em",color:"var(--lv)"}}>Output</span>
         </div>
-        <div className="card-body" style={{paddingBottom:0}}>
-          <Sl l="pts opacity" v={node.outOpacity==null?100:node.outOpacity} mn={0} mx={100} st={1}
-            fmt={function(v){return Math.round(v)+"%"}}
-            fn={function(v){onChange(Object.assign({},node,{outOpacity:v}))}}/>
-          <Sl l="msk opacity" v={node.outMaskOpacity==null?100:node.outMaskOpacity} mn={0} mx={100} st={1}
-            fmt={function(v){return Math.round(v)+"%"}}
-            fn={function(v){onChange(Object.assign({},node,{outMaskOpacity:v}))}}/>
-        </div>
-        <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
+        <TabBar tabs={[
+          {id:"modifiers",label:"Modifiers"+(nOutMod>0?" ("+nOutMod+")":""),color:"ac"},
+          {id:"mask",     label:"Mask"+(nOutMask>0?" ("+nOutMask+")":""),   color:"lv"},
+        ]} active={outTab} onChange={setOutTab}/>
         {(
           <div style={{display:outTab==="modifiers"?"":"none",padding:10}}>
-            <EfxStack stack={node.outModifiers||[]} nodes={nodes} selfId={node.id}
-              navPush={navPush} filterTypes={POINT_CONTEXT_EFFECTS}
-              basePath={{slotKey:"outModifiers",steps:[]}} onNavigate={props.onNavigate}
-              onChange={function(es){onChange(Object.assign({},node,{outModifiers:es}))}}/>
+            {nOutMod===0&&<div className="empty">no output modifiers — tap + to add</div>}
+            {outMods.map(function(item,oi){
+              return (
+                <PointChainItemCard key={item.id} item={item} index={oi}
+                  isFirst={oi===0} isLast={oi===outMods.length-1}
+                  nodes={nodes} selfId={node.id} iC={props.iC}
+                  sourceId={node.refId}
+                  navPush={navPush} onNavigate={props.onNavigate}
+                  nodeId={node.id} dispSlot={props.dispSlot}
+                  onMove={function(dir){moveOutChain(oi,dir)}}
+                  onDel={function(){delOutChain(oi)}}
+                  onChange={function(patch){updOutChain(oi,patch)}}/>
+              )
+            })}
+            <div ref={outAddModAnchorRef} style={{position:"relative",marginTop:nOutMod>0?6:0}}>
+              <button className="ac" style={{width:"100%",fontSize:11,minHeight:36}}
+                onClick={function(){setOutAddModOpen(!outAddModOpen)}}>+ modifier</button>
+              {outAddModOpen&&outAddModPos&&createPortal(
+                <div ref={outAddModMenuRef} className="eff-menu" style={outAddModPos}>
+                  {modGroups.map(function(grp){return (
+                    <div key={grp.label}>
+                      <div className="drop-grp">{grp.label}</div>
+                      {grp.items.map(function(t){return (
+                        <div key={t} className="drop-item"
+                          onClick={function(e){e.stopPropagation();addOutModifier(t);setOutAddModOpen(false)}}>{t}</div>
+                      )})}
+                    </div>
+                  )})}
+                </div>,
+                document.body
+              )}
+            </div>
           </div>
         )}
         {(
-          <div style={{display:outTab==="masks"?"":"none",padding:10}}>
+          <div style={{display:outTab==="mask"?"":"none",padding:10}}>
             <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id}
               navPush={navPush} iC={props.iC}
               basePath={{slotKey:"outMask",steps:[]}} onNavigate={props.onNavigate}
