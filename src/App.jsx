@@ -2545,12 +2545,41 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
             var satCv=satRendered[srcIdx]; if(!satCv)return
             var ptScale=(pt.scale||1), ptRot=(pt.rotation||0)*Math.PI/180
             var sw=satTW*ptScale, sh=satTH*ptScale
+            // Determine tint colour from source's colorMode
+            var satSrcEntry=satSrcs[srcIdx]||{}
+            var satCM=satSrcEntry.colorMode||"attribute"
+            var satTint=null
+            if(satCM==="attribute"){
+              satTint=pt.color||null
+            } else if(satCM==="solid"){
+              satTint=satSrcEntry.color||null
+            } else if(satCM==="random"){
+              var satRand2=seededRand(pi*1337+(efx._seed||1))
+              var satHue=Math.round(satRand2()*360)
+              satTint="hsl("+satHue+",75%,58%)"
+            } else if(satCM==="range"){
+              var satT=satPts.length>1?pi/(satPts.length-1):0
+              var satCA=h2r(satSrcEntry.colorA||"#ff4488")
+              var satCB=h2r(satSrcEntry.colorB||"#4488ff")
+              var satLC=lrC(satCA,satCB,satT)
+              satTint="#"+("0"+satLC.r.toString(16)).slice(-2)+("0"+satLC.g.toString(16)).slice(-2)+("0"+satLC.b.toString(16)).slice(-2)
+            }
+            // Apply tint via source-atop compositing on an offscreen canvas
+            var drawCv=satCv
+            if(satTint){
+              var tintCv=mkCv(satTW,satTH),tintCtx=tintCv.getContext("2d")
+              tintCtx.drawImage(satCv,0,0)
+              tintCtx.globalCompositeOperation="source-atop"
+              tintCtx.fillStyle=satTint
+              tintCtx.fillRect(0,0,satTW,satTH)
+              drawCv=tintCv
+            }
             ctx.save()
             ctx.translate(pt.x*w,pt.y*h)
             ctx.rotate(ptRot)
             ctx.globalAlpha=Math.max(0,Math.min(1,pt.opacity==null?1:pt.opacity))
             ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high"
-            ctx.drawImage(satCv,-sw/2,-sh/2,sw,sh)
+            ctx.drawImage(drawCv,-sw/2,-sh/2,sw,sh)
             ctx.restore()
           })
         }
@@ -5329,6 +5358,17 @@ function EfxPrimary(props) {
                 mode="source" fn={function(v){updSrc(idx,{refId:v})}}/>})(si)}
               <Sl l="weight" v={s.weight==null?1:s.weight} mn={0} mx={10} st={.1}
                 fmt={function(v){return v.toFixed(1)}} fn={function(v){updSrc(si,{weight:v})}}/>
+              <Se l="colour" v={s.colorMode||"attribute"} opts={["attribute","solid","random","range"]}
+                fn={function(v){(function(idx){updSrc(idx,{colorMode:v})})(si)}}/>
+              {(s.colorMode||"attribute")==="solid"&&(
+                <Co l="colour" v={s.color||"#ffffff"} fn={function(v){(function(idx){updSrc(idx,{color:v})})(si)}}/>
+              )}
+              {(s.colorMode||"attribute")==="range"&&(
+                <>
+                  <Co l="from" v={s.colorA||"#ff4488"} fn={function(v){(function(idx){updSrc(idx,{colorA:v})})(si)}}/>
+                  <Co l="to"   v={s.colorB||"#4488ff"} fn={function(v){(function(idx){updSrc(idx,{colorB:v})})(si)}}/>
+                </>
+              )}
             </div>
           )
         })}
