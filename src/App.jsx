@@ -7368,7 +7368,7 @@ function LayerCard(props) {
             navPush={props.navPush} iC={props.iC}
             sourceId={lyr.refId}
             context={props.context}
-            excludeGroups={props.context==="point"?["Points"]:["Points","Distort","Transform"]}
+            excludeGroups={["Points"]}
             basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
@@ -7622,7 +7622,7 @@ function LayerCompProps(props) {
         {outTab==="effects" && (
           <div style={{padding:10}}>
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
-              excludeGroups={["Points","Distort","Transform"]}
+              excludeGroups={["Points"]}
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
