@@ -7259,7 +7259,7 @@ function LayerCard(props) {
             navPush={props.navPush} iC={props.iC}
             sourceId={lyr.refId}
             context={props.context}
-            excludeGroups={["Points"]}
+            excludeGroups={props.context==="point"?["Points"]:["Points","Distort","Transform"]}
             basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
@@ -7513,7 +7513,7 @@ function LayerCompProps(props) {
         {outTab==="effects" && (
           <div style={{padding:10}}>
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
-              excludeGroups={["Points"]}
+              excludeGroups={["Points","Distort","Transform"]}
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
@@ -7549,13 +7549,17 @@ function PointChainItemCard(props) {
     else{clearTimeout(timerRef.current);setArmed(false);props.onDel()}
   }
   var nIso=(item.isolate||[]).length
+  // Render utilities (show-points, source-at-points) don't support isolate masking
+  var isRenderUtil=item.type==="show-points"||item.type==="source-at-points"
   // Main preview is "active" when the dispSlot points to this chain item's isolate
   var isoDispActive=!!(props.dispSlot&&props.dispSlot.nodeId===props.nodeId
     &&props.dispSlot.slot==="chain_isolate_"+ci)
-  var tabs=[
-    {id:"primary", label:"Primary"},
-    {id:"isolate", label:"Isolate"+(nIso>0?" ("+nIso+")":""), color:"lv"},
-  ]
+  var tabs=isRenderUtil
+    ? [{id:"primary", label:"Primary"}]
+    : [
+        {id:"primary", label:"Primary"},
+        {id:"isolate", label:"Isolate"+(nIso>0?" ("+nIso+")":""), color:"lv"},
+      ]
   return (
     <div className="card" style={{marginBottom:8}}>
       <div className="card-hdr" style={{background:"rgba(36,204,168,.06)",
