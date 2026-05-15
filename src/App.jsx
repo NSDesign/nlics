@@ -3456,12 +3456,38 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
             }
           }
         }
-        // Point-comp: source isolate mask (combined) → outMask fallback
+        // Point-comp: walk all isolate contexts in priority order.
+        // Source isolate → chain item isolates → output chain isolates → outMask.
         if(!em2&&mn.type==="point-comp"){
           if(mn.isolate&&mn.isolate.length>0){
-            em2=compMasks(mn.isolate,cmap,new Map(),iC,w,h,new Set()); emLabel="source isolate"
-          } else if(mn.outMask&&mn.outMask.length>0){
-            em2=compMasks(mn.outMask,cmap,new Map(),iC,w,h,new Set()); emLabel="output mask"
+            em2=compMasks(mn.isolate,cmap,new Map(),iC,w,h,new Set())
+            emLabel="source isolate"
+          }
+          // Chain item isolates — find first one that has masks configured
+          if(!em2){
+            var pcCh=mn.chain||[]
+            for(var pci=0;pci<pcCh.length&&!em2;pci++){
+              var pcIt=pcCh[pci]
+              if(pcIt.isolate&&pcIt.isolate.length>0){
+                em2=compMasks(pcIt.isolate,cmap,new Map(),iC,w,h,new Set())
+                emLabel=(pcIt.name||pcIt.type)+" isolate"
+              }
+            }
+          }
+          // Output chain item isolates
+          if(!em2){
+            var pcOut=mn.outModifiers||[]
+            for(var pco=0;pco<pcOut.length&&!em2;pco++){
+              var pcOIt=pcOut[pco]
+              if(pcOIt.isolate&&pcOIt.isolate.length>0){
+                em2=compMasks(pcOIt.isolate,cmap,new Map(),iC,w,h,new Set())
+                emLabel="output "+(pcOIt.name||pcOIt.type)+" isolate"
+              }
+            }
+          }
+          if(!em2&&mn.outMask&&mn.outMask.length>0){
+            em2=compMasks(mn.outMask,cmap,new Map(),iC,w,h,new Set())
+            emLabel="output mask"
           }
         }
         // §1 creators: show intrinsic alpha channel as matte
