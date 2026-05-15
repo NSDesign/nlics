@@ -2170,13 +2170,12 @@ function compMasks(stack,cmap,cache,iC,w,h,vis) {
         var gid=gctx.createImageData(w,h)
         for(var gi=0;gi<w*h;gi++){
           var gpi=gi*4,gv
-          if(ch==="R")gv=rawId[gpi];else if(ch==="G")gv=rawId[gpi+1];else if(ch==="B")gv=rawId[gpi+2]
-          else gv=Math.round(.299*rawId[gpi]+.587*rawId[gpi+1]+.114*rawId[gpi+2])
-          // Multiply by source alpha — isolates shape from any composited background.
-          // Without this, a composited source (blender, layer comp) leaks background
-          // colour into the mask value for pixels where the foreground is transparent.
-          var ga=rawId[gpi+3]/255
-          gv=Math.round(gv*ga)
+          if(ch==="R")      gv=rawId[gpi]
+          else if(ch==="G") gv=rawId[gpi+1]
+          else if(ch==="B") gv=rawId[gpi+2]
+          else               gv=Math.round(.299*rawId[gpi]+.587*rawId[gpi+1]+.114*rawId[gpi+2])
+          // Use raw RGB channel value — no alpha multiplication.
+          // Alpha (matte) is only relevant when channel==="A" (handled separately below).
           gid.data[gpi]=gv;gid.data[gpi+1]=gv;gid.data[gpi+2]=gv;gid.data[gpi+3]=255
         }
         gctx.putImageData(gid,0,0)
