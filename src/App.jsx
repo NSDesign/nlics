@@ -516,7 +516,7 @@ function mkEfx(t) {
   if(t==="uv-distort")    params={uvRefId:null,mode:"displacement",amtX:.1,amtY:.1,chX:"R",chY:"G"}
   if(t==="polar-to-cart") params={amount:1}
   if(t==="cart-to-polar") params={amount:1}
-  if(t==="show-points")    params={style:"circle",color:"#00ccff",size:6,opacity:.8,showLabels:false,labelAttr:"pointIndex",labelSize:9,labelColor:"#ffffff"}
+  if(t==="show-points")    params={style:"circle",color:"#00ccff",size:6,opacity:.8,labels:[],labelOffsetX:10,labelOffsetY:-4,labelLineSpacing:11}
   if(t==="point-map")      params={mappings:[]}
   if(t==="source-at-points")params={sources:[],distributionMode:"weighted",wrap:"clamp"}
   if(t==="colour")      params={color:"#ff0000",opacity:1}
@@ -2559,14 +2559,29 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
           if(sp2.style==="square") ctx.fillRect(sx-spR,sy-spR,spR*2,spR*2)
           else if(sp2.style==="crosshair"){ctx.beginPath();ctx.moveTo(sx-spR*1.5,sy);ctx.lineTo(sx+spR*1.5,sy);ctx.moveTo(sx,sy-spR*1.5);ctx.lineTo(sx,sy+spR*1.5);ctx.stroke()}
           else {ctx.beginPath();ctx.arc(sx,sy,spR,0,Math.PI*2);ctx.fill()}
-          if(sp2.showLabels&&sp2.labelAttr){
-            var lv=pt[sp2.labelAttr]
-            if(lv!=null){
-              ctx.fillStyle=sp2.labelColor||"#fff"
-              ctx.font=(sp2.labelSize||9)+"px 'IBM Plex Mono',monospace"
-              ctx.fillText(typeof lv==="number"?(Number.isInteger(lv)?String(lv):lv.toFixed(3)):String(lv),sx+spR+2,sy-spR-2)
-              ctx.fillStyle=spC  // restore fill colour for next dot
-            }
+          // Multi-label rendering (backward compat: falls back to old single-label params)
+          var sp2Lbls=sp2.labels||[]
+          if(!sp2Lbls.length&&sp2.showLabels&&sp2.labelAttr) sp2Lbls=[{attr:sp2.labelAttr,color:sp2.labelColor||"#fff",size:sp2.labelSize||9,enabled:true}]
+          if(sp2Lbls.length>0){
+            var lOX2=sp2.labelOffsetX!=null?sp2.labelOffsetX:(spR+3)
+            var lOY2=sp2.labelOffsetY!=null?sp2.labelOffsetY:-(spR+2)
+            var lSp2=sp2.labelLineSpacing!=null?sp2.labelLineSpacing:11
+            var lLine2=0
+            sp2Lbls.forEach(function(lbl){
+              if(lbl.enabled===false) return
+              var lv=pt[lbl.attr]; if(lv==null) return
+              var lx2=sx+lOX2, ly2=sy+lOY2+lLine2*lSp2
+              if(typeof lv==="string"&&lv.startsWith("#")){
+                ctx.fillStyle=lv;ctx.fillRect(lx2,ly2-8,10,8)
+                ctx.strokeStyle="rgba(0,0,0,.4)";ctx.lineWidth=.5;ctx.strokeRect(lx2,ly2-8,10,8)
+              } else {
+                ctx.fillStyle=lbl.color||"#fff"
+                ctx.font=(lbl.size||9)+"px 'IBM Plex Mono',monospace"
+                ctx.fillText(typeof lv==="number"?(Number.isInteger(lv)?String(lv):lv.toFixed(3)):String(lv),lx2,ly2)
+              }
+              lLine2++
+            })
+            ctx.fillStyle=spC; ctx.strokeStyle=spC
           }
         })
         ctx.restore()
@@ -2664,19 +2679,29 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
       else if(sSty==="crosshair"){ctx.moveTo(sx-sDr*1.5,sy);ctx.lineTo(sx+sDr*1.5,sy);ctx.moveTo(sx,sy-sDr*1.5);ctx.lineTo(sx,sy+sDr*1.5);ctx.stroke()}
       else ctx.arc(sx,sy,sDr,0,Math.PI*2)
       if(sSty!=="crosshair") ctx.fill()
-      if(spp.showLabels&&spp.labelAttr){
-        var lv=pt[spp.labelAttr]
-        if(lv!=null){
+      // Multi-label rendering (backward compat: falls back to old single-label params)
+      var sppLbls=spp.labels||[]
+      if(!sppLbls.length&&spp.showLabels&&spp.labelAttr) sppLbls=[{attr:spp.labelAttr,color:spp.labelColor||"#fff",size:spp.labelSize||9,enabled:true}]
+      if(sppLbls.length>0){
+        var lOX=spp.labelOffsetX!=null?spp.labelOffsetX:(sDr+3)
+        var lOY=spp.labelOffsetY!=null?spp.labelOffsetY:-(sDr+2)
+        var lSp=spp.labelLineSpacing!=null?spp.labelLineSpacing:11
+        var lLine=0
+        sppLbls.forEach(function(lbl){
+          if(lbl.enabled===false) return
+          var lv=pt[lbl.attr]; if(lv==null) return
+          var lx=sx+lOX, ly=sy+lOY+lLine*lSp
           if(typeof lv==="string"&&lv.startsWith("#")){
-            ctx.fillStyle=lv;ctx.fillRect(sx+sDr+2,sy-sDr-8,10,8)
-            ctx.strokeStyle="rgba(0,0,0,.4)";ctx.lineWidth=.5;ctx.strokeRect(sx+sDr+2,sy-sDr-8,10,8)
+            ctx.fillStyle=lv;ctx.fillRect(lx,ly-8,10,8)
+            ctx.strokeStyle="rgba(0,0,0,.4)";ctx.lineWidth=.5;ctx.strokeRect(lx,ly-8,10,8)
           } else {
-            ctx.fillStyle=spp.labelColor||"#fff"
-            ctx.font=(spp.labelSize||9)+"px 'IBM Plex Mono',monospace"
-            ctx.fillText(typeof lv==="number"?(Number.isInteger(lv)?String(lv):lv.toFixed(3)):String(lv),sx+sDr+2,sy-sDr-2)
+            ctx.fillStyle=lbl.color||"#fff"
+            ctx.font=(lbl.size||9)+"px 'IBM Plex Mono',monospace"
+            ctx.fillText(typeof lv==="number"?(Number.isInteger(lv)?String(lv):lv.toFixed(3)):String(lv),lx,ly)
           }
-          ctx.fillStyle=pt.color||sClr;ctx.strokeStyle=pt.color||sClr
-        }
+          lLine++
+        })
+        ctx.fillStyle=pt.color||sClr; ctx.strokeStyle=pt.color||sClr
       }
     })
     ctx.restore()
@@ -3866,6 +3891,16 @@ function getChainCustomAttrs(node) {
   addA("_modIdx"); addA("_setGroup")
   return attrs
 }
+// Derive the full available attribute list for a point-comp context.
+// Used by EfxPrimary, PointChainItemCard attributes tab, etc.
+function computeAllAttrs(nodes,selfId,sourceId){
+  var srcNode=(nodes||[]).find(function(n){return n.id===sourceId})
+  var srcShape=srcNode?(srcNode.type==="shape"?srcNode.props&&srcNode.props.shapeType:srcNode.type):null
+  var ptAttrs=getPointAttrs(srcShape||"")
+  var pcNode=(nodes||[]).find(function(n){return n.id===selfId&&n.type==="point-comp"})
+  var customAttrs=getChainCustomAttrs(pcNode)
+  return ptAttrs.concat(customAttrs.filter(function(a){return !ptAttrs.includes(a)}))
+}
 
 function ShapeP(props) {
   var p=props.p, up=props.up, s=p.shapeType
@@ -4683,14 +4718,7 @@ function BezierCurveEditor(props) {
 }
 function EfxPrimary(props) {
   var efx=props.efx, p=efx.params
-  // Resolve source geometry shape type for attribute filtering
-  var srcNode=(props.nodes||[]).find(function(n){return n.id===props.sourceId})
-  var srcShape=srcNode?(srcNode.type==="shape"?srcNode.props&&srcNode.props.shapeType:srcNode.type):null
-  var ptAttrs=getPointAttrs(srcShape||"")
-  // Merge in custom attrs from point-comp chain (isolate masks, attributes ops)
-  var pcNode=(props.nodes||[]).find(function(n){return n.id===props.selfId&&n.type==="point-comp"})
-  var customAttrs=getChainCustomAttrs(pcNode)
-  var allAttrs=ptAttrs.concat(customAttrs.filter(function(a){return !ptAttrs.includes(a)}))
+  var allAttrs=computeAllAttrs(props.nodes,props.selfId,props.sourceId)
   function up(np){props.onChange(Object.assign({},efx,{params:Object.assign({},p,np)}))}
   if(efx.type==="brightness") return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
   if(efx.type==="contrast")   return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
@@ -5132,19 +5160,6 @@ function EfxPrimary(props) {
         fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up({size:v})}}/>
       <Sl l="opacity" v={p.opacity==null?.8:p.opacity} mn={0} mx={1} st={.01}
         fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({opacity:v})}}/>
-      <PR l="labels">
-        <button className={p.showLabels?"ac":"ghost"} style={{flex:1,minHeight:32,fontSize:11}}
-          onClick={function(){up({showLabels:!p.showLabels})}}>
-          {p.showLabels?"on":"off"}
-        </button>
-      </PR>
-      {p.showLabels&&<div>
-        {allAttrs.length
-          ?<Se l="attribute" v={p.labelAttr||allAttrs[0]} opts={allAttrs} fn={function(v){up({labelAttr:v})}}/>
-          :<div style={{fontSize:10,color:"var(--mu)",padding:"4px 0"}}>Set a geometry source on the slot to use labels</div>}
-        <Sl l="label size" v={p.labelSize||9} mn={5} mx={72} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({labelSize:v})}}/>
-        <Co l="label col" v={p.labelColor||"#ffffff"} fn={function(v){up({labelColor:v})}}/>
-      </div>}
     </div>)
   if(efx.type==="point-map") {
     var mappings=p.mappings||[]
@@ -7551,15 +7566,19 @@ function PointChainItemCard(props) {
   var nIso=(item.isolate||[]).length
   // Render utilities (show-points, source-at-points) don't support isolate masking
   var isRenderUtil=item.type==="show-points"||item.type==="source-at-points"
+  var isShowPoints=item.type==="show-points"
+  // show-points: per-instance label list and global label settings
+  var spLabels=isShowPoints?(item.params&&item.params.labels||[]):[]
+  var spAllAttrs=isShowPoints?computeAllAttrs(props.nodes,props.selfId,props.sourceId):[]
+  function upSP(np){props.onChange(Object.assign({},item,{params:Object.assign({},item.params,np)}))}
   // Main preview is "active" when the dispSlot points to this chain item's isolate
   var isoDispActive=!!(props.dispSlot&&props.dispSlot.nodeId===props.nodeId
     &&props.dispSlot.slot==="chain_isolate_"+ci)
-  var tabs=isRenderUtil
-    ? [{id:"primary", label:"Primary"}]
-    : [
-        {id:"primary", label:"Primary"},
-        {id:"isolate", label:"Isolate"+(nIso>0?" ("+nIso+")":""), color:"lv"},
-      ]
+  var tabs=isShowPoints
+    ? [{id:"primary",label:"Primary"},{id:"attributes",label:"Attributes"+(spLabels.length>0?" ("+spLabels.length+")":""),color:"di"}]
+    : isRenderUtil
+      ? [{id:"primary",label:"Primary"}]
+      : [{id:"primary",label:"Primary"},{id:"isolate",label:"Isolate"+(nIso>0?" ("+nIso+")":""),color:"lv"}]
   return (
     <div className="card" style={{marginBottom:8}}>
       <div className="card-hdr" style={{background:"rgba(36,204,168,.06)",
@@ -7629,6 +7648,59 @@ function PointChainItemCard(props) {
             basePath={{slotKey:"chain["+ci+"].isolate", steps:[]}}
             onNavigate={props.onNavigate}
             onChange={function(ms){props.onChange(Object.assign({},item,{isolate:ms}))}}/>
+        </div>
+      )}
+      {/* Attributes tab — show-points only: global label positioning + per-label list */}
+      {!coll&&isShowPoints&&(
+        <div style={{display:tab==="attributes"?"":"none"}}>
+          {/* Global positioning settings — apply to all labels */}
+          <div className="card-body" style={{borderBottom:"1px solid var(--bd)"}}>
+            <Sl l="X offset" v={item.params&&item.params.labelOffsetX!=null?item.params.labelOffsetX:10}
+              mn={-60} mx={120} st={1} fmt={function(v){return Math.round(v)+"px"}}
+              fn={function(v){upSP({labelOffsetX:v})}}/>
+            <Sl l="Y offset" v={item.params&&item.params.labelOffsetY!=null?item.params.labelOffsetY:-4}
+              mn={-60} mx={60} st={1} fmt={function(v){return Math.round(v)+"px"}}
+              fn={function(v){upSP({labelOffsetY:v})}}/>
+            <Sl l="line space" v={item.params&&item.params.labelLineSpacing!=null?item.params.labelLineSpacing:11}
+              mn={6} mx={40} st={.5} fmt={function(v){return v.toFixed(1)+"px"}}
+              fn={function(v){upSP({labelLineSpacing:v})}}/>
+          </div>
+          {/* Per-label list */}
+          <div style={{padding:10}}>
+            {spLabels.length===0&&(
+              <div className="empty" style={{padding:"6px 0 10px"}}>no labels — tap + to add</div>
+            )}
+            {spLabels.map(function(lbl,li){
+              function updLbl(patch){
+                upSP({labels:spLabels.map(function(l,i){return i===li?Object.assign({},l,patch):l})})
+              }
+              return (
+                <div key={lbl.id||li} style={{borderBottom:"1px solid var(--bd)",paddingBottom:8,marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                    <button onClick={function(){updLbl({enabled:lbl.enabled===false?true:false})}}
+                      style={{width:16,height:16,minWidth:16,minHeight:16,borderRadius:"50%",
+                        border:"2px solid "+(lbl.enabled===false?"var(--bd)":"var(--ac)"),
+                        background:lbl.enabled===false?"none":"var(--ac)",
+                        flexShrink:0,cursor:"pointer",padding:0,boxSizing:"content-box"}}/>
+                    <span style={{flex:1,fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
+                      textDecoration:lbl.enabled===false?"line-through":"none"}}>label {li+1}</span>
+                    <button onClick={function(){upSP({labels:spLabels.filter(function(_,i){return i!==li})})}}
+                      className="ghost" style={{fontSize:11,padding:"2px 8px"}}>×</button>
+                  </div>
+                  <Se l="attr" v={lbl.attr||(spAllAttrs[0]||"pointIndex")}
+                    opts={spAllAttrs.length?spAllAttrs:["pointIndex"]}
+                    fn={function(v){updLbl({attr:v})}}/>
+                  <Co l="colour" v={lbl.color||"#ffffff"} fn={function(v){updLbl({color:v})}}/>
+                  <Sl l="size" v={lbl.size||9} mn={5} mx={72} st={1}
+                    fmt={function(v){return Math.round(v)+"px"}}
+                    fn={function(v){updLbl({size:v})}}/>
+                </div>
+              )
+            })}
+            <button className="ac" style={{width:"100%"}} onClick={function(){
+              upSP({labels:spLabels.concat([{id:String(Date.now()),attr:spAllAttrs[0]||"pointIndex",color:"#ffffff",size:9,enabled:true}])})
+            }}>+ add label</button>
+          </div>
         </div>
       )}
     </div>
