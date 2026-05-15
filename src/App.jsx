@@ -5479,8 +5479,8 @@ function MaskCard(props) {
         </button>
       </div>
       {!collapsed && <TabBar tabs={tabs} active={tab} onChange={setTab}/>}
-      {!collapsed && tab==="source" && (
-        <div className="card-body">
+      {!collapsed && (
+        <div style={{display:tab==="source"?"":"none"}} className="card-body">
           {!mk.refId && (
             <div style={{fontSize:9,color:"#e0a060",background:"rgba(224,160,96,.1)",
               border:"1px solid rgba(224,160,96,.25)",borderRadius:4,padding:"4px 8px",marginBottom:8}}>
@@ -5509,8 +5509,8 @@ function MaskCard(props) {
           </PR>
         </div>
       )}
-      {!collapsed && tab==="layer" && (
-        <div className="card-body">
+      {!collapsed && (
+        <div style={{display:tab==="layer"?"":"none"}} className="card-body">
           <Se l="blend" v={mk.blendMode} opts={MBMS}
             fn={function(v){props.onChange(Object.assign({},mk,{blendMode:v}))}}/>
           <Sl l="opacity" v={mk.opacity} mn={0} mx={100} st={1}
@@ -5526,8 +5526,8 @@ function MaskCard(props) {
           </BlendIfAccordion>
         </div>
       )}
-      {!collapsed && tab==="effects" && (
-        <div className="card-body" style={{paddingTop:8}}>
+      {!collapsed && (
+        <div style={{display:tab==="effects"?"":"none",paddingTop:8}} className="card-body">
           {nEfx===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no effects on this mask</div>}
           {props.onEditEffects && (
             <button className="ac" style={{width:"100%",marginTop:nEfx===0?0:4}} onClick={props.onEditEffects}>
@@ -5879,13 +5879,13 @@ function EfxCard(props) {
         </button>
       </div>
       <TabBar tabs={tabs} active={tab} onChange={setTab}/>
-      {!cardCollapsed&&tab==="primary" && (
-        <div className="card-body">
+      {!cardCollapsed && (
+        <div style={{display:tab==="primary"?"":"none"}} className="card-body">
           <EfxPrimary efx={efx} onChange={props.onChange} nodes={props.nodes} selfId={props.selfId} iC={props.iC} sourceId={props.sourceId}/>
         </div>
       )}
-      {tab==="layer" && (
-        <div className="card-body">
+      {(
+        <div style={{display:tab==="layer"?"":"none"}} className="card-body">
           <Sl l="opacity" v={efx.opacity} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){props.onChange(Object.assign({},efx,{opacity:v}))}}/>
           <Se l="blend" v={efx.blendMode||"normal"} opts={EBMS} fn={function(v){props.onChange(Object.assign({},efx,{blendMode:v}))}}/>
           <PR l="channels">
@@ -5914,8 +5914,8 @@ function EfxCard(props) {
           </BlendIfAccordion>
         </div>
       )}
-      {!cardCollapsed&&tab==="mask" && (
-        <div className="card-body" style={{paddingTop:8}}>
+      {!cardCollapsed && (
+        <div style={{display:tab==="mask"?"":"none",paddingTop:8}} className="card-body">
           {nMasks===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no masks on this effect</div>}
           {(efx.maskStack||[]).map(function(mk,mi){
             return (
@@ -6249,16 +6249,16 @@ function SlotPanel(props) {
   var inner = (
     <>
       <TabBar tabs={tabs} active={tab} onChange={setTab}/>
-      {tab==="source" && (
-        <div className="card-body">
+      {(
+        <div style={{display:tab==="source"?"":"none"}} className="card-body">
           <NRef l="source" v={slot.refId} nodes={nodes} selfId={selfId} iC={props.iC} fn={function(v){onChange(Object.assign({},slot,{refId:v}))}}/>
           <Sl l="fill" v={slot.fillOpacity==null?100:slot.fillOpacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
             fn={function(v){onChange(Object.assign({},slot,{fillOpacity:v}))}}/>
         </div>
       )}
-      {tab==="effects" && (
-        <div style={{padding:10}}>
+      {(
+        <div style={{display:tab==="effects"?"":"none",padding:10}}>
           <EfxStack key={(props.slotKey||"slot")+"_efx"}
             stack={slot.effectStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush}
             sourceId={slot.refId}
@@ -6270,8 +6270,8 @@ function SlotPanel(props) {
             onExtract={props.onExtract ? function(){props.onExtract({slot:props.slotKey,slotObj:slot,kind:"effect",owner:props.owner})} : null}/>
         </div>
       )}
-      {tab==="masks" && (
-        <div style={{padding:10}}>
+      {(
+        <div style={{display:tab==="masks"?"":"none",padding:10}}>
           <MaskStackPanel key={(slot.maskStack||[]).map(function(e){return e.id}).join(",")}
             stack={slot.maskStack||[]} nodes={nodes} selfId={selfId} navPush={props.navPush} iC={props.iC}
             basePath={{slotKey:(props.slotKey||"")+".maskStack", steps:[]}}
@@ -6554,8 +6554,8 @@ function BlenderProps(props) {
             fn={function(v){onChange(Object.assign({},node,{outOpacity:v}))}}/>
         </div>
         <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
-        {outTab==="effects" && (
-          <div style={{padding:10}}>
+        {(
+          <div style={{display:outTab==="effects"?"":"none",padding:10}}>
             <EfxStack stack={node.outEfx||[]} nodes={nodes} selfId={node.id} navPush={navPush}
               excludeGroups={["Points"]}
               basePath={{slotKey:"outEfx", steps:[]}}
@@ -6565,8 +6565,8 @@ function BlenderProps(props) {
               onExtract={props.onExtract ? function(){props.onExtract({slot:"outEfx",slotObj:{effectStack:node.outEfx||[]},kind:"effect",owner:node})} : null}/>
           </div>
         )}
-        {outTab==="masks" && (
-          <div style={{padding:10}}>
+        {(
+          <div style={{display:outTab==="masks"?"":"none",padding:10}}>
             <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush} iC={props.iC}
               basePath={{slotKey:"outMask", steps:[]}}
               onNavigate={props.onNavigate}
@@ -7242,8 +7242,8 @@ function LayerCard(props) {
         </button>
       </div>
       {!isCollapsed && <TabBar tabs={lyrTabs} active={layerTab} onChange={setLayerTab}/>}
-      {!isCollapsed && layerTab==="source" && (
-        <div className="card-body">
+      {!isCollapsed && (
+        <div style={{display:layerTab==="source"?"":"none"}} className="card-body">
           <NRef l="source" v={lyr.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC} mode="source"
             fn={function(v){props.onChange({refId:v})}}/>
           <Sl l="fill" v={lyr.fillOpacity==null?100:lyr.fillOpacity} mn={0} mx={100} st={1}
@@ -7251,8 +7251,8 @@ function LayerCard(props) {
             fn={function(v){props.onChange({fillOpacity:v})}}/>
         </div>
       )}
-      {!isCollapsed && layerTab==="effects" && (
-        <div style={{padding:10}}>
+      {!isCollapsed && (
+        <div style={{display:layerTab==="effects"?"":"none",padding:10}}>
           <EfxStack
             key={lyr.id+"_efx"}
             stack={lyr.effectStack||[]} nodes={props.nodes} selfId={props.selfId}
@@ -7266,8 +7266,8 @@ function LayerCard(props) {
             onChange={function(es){props.onChange({effectStack:es})}}/>
         </div>
       )}
-      {!isCollapsed && layerTab==="masks" && (
-        <div style={{padding:10}}>
+      {!isCollapsed && (
+        <div style={{display:layerTab==="masks"?"":"none",padding:10}}>
           <MaskStackPanel
             key={(lyr.maskStack||[]).map(function(m){return m.id}).join(",")}
             stack={lyr.maskStack||[]} nodes={props.nodes} selfId={props.selfId}
@@ -7278,8 +7278,8 @@ function LayerCard(props) {
             onChange={function(ms){props.onChange({maskStack:ms})}}/>
         </div>
       )}
-      {!isCollapsed && layerTab==="layer" && (
-          <div>
+      {!isCollapsed && (
+          <div style={{display:layerTab==="layer"?"":"none"}}>
             <TabBar tabs={[{id:"pixels",label:"Pixels"},{id:"masks",label:"Masks"}]} active={lyBT} onChange={setLyBT}/>
             {lyBT==="pixels"?(
               <div className="card-body">
@@ -7590,15 +7590,15 @@ function PointChainItemCard(props) {
         </button>
       </div>
       {!coll&&<TabBar tabs={tabs} active={tab} onChange={setTab}/>}
-      {!coll&&tab==="primary"&&(
-        <div className="card-body">
+      {!coll&&(
+        <div style={{display:tab==="primary"?"":"none"}} className="card-body">
           <EfxPrimary efx={item} onChange={props.onChange}
             nodes={props.nodes} selfId={props.selfId} iC={props.iC}
             sourceId={props.sourceId}/>
         </div>
       )}
-      {!coll&&tab==="isolate"&&(
-        <div style={{padding:10}}>
+      {!coll&&(
+        <div style={{display:tab==="isolate"?"":"none",padding:10}}>
           <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
             <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",
               textTransform:"uppercase",letterSpacing:".07em",flexShrink:0}}>attr</span>
@@ -7758,16 +7758,16 @@ function PointCompProps(props) {
         </div>
         <TabBar tabs={srcTabs} active={srcTab} onChange={setSrcTab}/>
 
-        {srcTab==="source"&&(
-          <div className="card-body">
+        {(
+          <div style={{display:srcTab==="source"?"":"none"}} className="card-body">
             <NRef l="source" v={node.refId||null} nodes={nodes} selfId={node.id}
               iC={props.iC} mode="source"
               fn={function(v){onChange(Object.assign({},node,{refId:v}))}}/>
           </div>
         )}
 
-        {srcTab==="modifiers"&&(
-          <div style={{padding:10}}>
+        {(
+          <div style={{display:srcTab==="modifiers"?"":"none",padding:10}}>
             {nChain===0&&<div className="empty">no modifiers — tap + to add</div>}
             {chain.filter(function(it){return it.type!=="_source"}).map(function(item,ci2,filt){
               var realIdx=chain.indexOf(item)
@@ -7805,8 +7805,8 @@ function PointCompProps(props) {
           </div>
         )}
 
-        {srcTab==="isolate"&&(
-          <div style={{padding:10}}>
+        {(
+          <div style={{display:srcTab==="isolate"?"":"none",padding:10}}>
             <div style={{fontSize:9,color:"var(--mu)",marginBottom:6,lineHeight:1.5}}>
               Spatial filter — restricts which points from the source enter the modifier chain.
             </div>
@@ -7843,16 +7843,16 @@ function PointCompProps(props) {
             fn={function(v){onChange(Object.assign({},node,{outMaskOpacity:v}))}}/>
         </div>
         <TabBar tabs={outTabs} active={outTab} onChange={setOutTab}/>
-        {outTab==="modifiers"&&(
-          <div style={{padding:10}}>
+        {(
+          <div style={{display:outTab==="modifiers"?"":"none",padding:10}}>
             <EfxStack stack={node.outModifiers||[]} nodes={nodes} selfId={node.id}
               navPush={navPush} filterTypes={POINT_CONTEXT_EFFECTS}
               basePath={{slotKey:"outModifiers",steps:[]}} onNavigate={props.onNavigate}
               onChange={function(es){onChange(Object.assign({},node,{outModifiers:es}))}}/>
           </div>
         )}
-        {outTab==="masks"&&(
-          <div style={{padding:10}}>
+        {(
+          <div style={{display:outTab==="masks"?"":"none",padding:10}}>
             <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id}
               navPush={navPush} iC={props.iC}
               basePath={{slotKey:"outMask",steps:[]}} onNavigate={props.onNavigate}
