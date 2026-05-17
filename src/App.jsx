@@ -514,6 +514,7 @@ function mkEfx(t) {
   if(t==="bulge")         params={strength:.5,radius:.7,cx:.5,cy:.5,softness:.3}
   if(t==="solarise")      params={threshold:.5}
   if(t==="uv-distort")    params={uvRefId:null,mode:"displacement",amtX:.1,amtY:.1,chX:"R",chY:"G"}
+  if(t==="uv-texture")    params={texRefId:null,chU:"R",chV:"G",wrapX:"clamp",wrapY:"clamp"}
   if(t==="polar-to-cart") params={amount:1}
   if(t==="cart-to-polar") params={amount:1}
   if(t==="show-points")    params={style:"circle",color:"#00ccff",size:6,opacity:.8,labels:[],labelOffsetX:10,labelOffsetY:-4,labelLineSpacing:11}
@@ -1198,6 +1199,22 @@ function applyTransform(ctx, p, w, h) {
 
 /* ─── GENERATORS ─────────────────────────────────────────── */
 function gSolid(ctx,p,w,h) { ctx.save();ctx.globalAlpha=p.alpha==null?1:p.alpha;ctx.fillStyle=p.color||"#000";ctx.fillRect(0,0,w,h);ctx.restore() }
+// UV Create — generates a clean UV coordinate canvas:
+// R channel = U = normalised x position (0→1 left→right)
+// G channel = V = normalised y position (0→1 top→bottom)
+// B = 0, A = 255. The identity UV map; distort this before uv-texture.
+function gUVCreate(ctx,p,w,h){
+  var img=ctx.createImageData(w,h),d=img.data
+  var scX=p.scaleX==null?1:p.scaleX, scY=p.scaleY==null?1:p.scaleY
+  var offX=p.offX==null?0:p.offX, offY=p.offY==null?0:p.offY
+  for(var py=0;py<h;py++) for(var px=0;px<w;px++){
+    var i=(py*w+px)*4
+    var u=((px/(w-1))*scX+offX)%1, v=((py/(h-1))*scY+offY)%1
+    if(u<0)u+=1; if(v<0)v+=1
+    d[i]=Math.round(u*255); d[i+1]=Math.round(v*255); d[i+2]=0; d[i+3]=255
+  }
+  ctx.putImageData(img,0,0)
+}
 // Generate normalised points (0-1) for any shape type
 // Returns [{x,y,rotation,scale,opacity,id,pointIndex,pointCount,...}]
 function shapePoints(p,w,h) {
@@ -1539,8 +1556,28 @@ function gNoise(ctx,p,w,h) {
       default:           v=vh(px,py,seed)
     }
     v=Math.max(0,Math.min(1,v))
-    var c=lrC(CB,CA,v),idx=(py*dw+px)*4
-    d[idx]=c.r;d[idx+1]=c.g;d[idx+2]=c.b;d[idx+3]=255
+    var idx2=(py*dw+px)*4
+    if(p.colorMode==="rgb"){
+      // Independent noise per channel — useful for multi-directional UV displacement
+      var sx2=sx,sy2=sy
+      function nv(s){
+        switch(nType){
+          case "perlin":    return octN(sx2,sy2,oct,s,lac,gain)
+          case "fbm":       return fbm(sx2,sy2,oct,lac,gain,s)
+          case "simplex":   return octSimplex(sx2,sy2,oct,lac,gain,s)
+          case "value":     return octSimplex(sx2,sy2,oct,lac,gain,s+777)
+          case "white":     return whiteNoise(px,py,s,grainSize)
+          default:          return octN(sx2,sy2,oct,s,lac,gain)
+        }
+      }
+      var vr=Math.max(0,Math.min(1,nv(seed)))
+      var vg=Math.max(0,Math.min(1,nv(seed+1000)))
+      var vb=Math.max(0,Math.min(1,nv(seed+2000)))
+      d[idx2]=Math.round(vr*255);d[idx2+1]=Math.round(vg*255);d[idx2+2]=Math.round(vb*255);d[idx2+3]=255
+    } else {
+      var c=lrC(CB,CA,v)
+      d[idx2]=c.r;d[idx2+1]=c.g;d[idx2+2]=c.b;d[idx2+3]=255
+    }
   }
   var tc=document.createElement("canvas");tc.width=dw;tc.height=dh
   tc.getContext("2d").putImageData(img,0,0)
@@ -2627,6 +2664,46 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
       }
       continue
     }
+    // UV Texture — true UV coordinate remap: current canvas is the UV map, samples texture by UV coords
+    if(efx.type==="uv-texture"){
+      var texId2=efx.params&&efx.params.texRefId
+      if(texId2&&cmap){
+        var texCv2=compAny(texId2,cmap,new Map(cache),iC,w,h,new Set(vis))
+        if(texCv2){
+          var uvMapD=ctx.getImageData(0,0,w,h)        // current canvas = UV coordinate map
+          var texSrc=texCv2.getContext("2d").getImageData(0,0,w,h).data  // texture to sample
+          var uvOut=ctx.createImageData(w,h)
+          var wX=efx.params.wrapX||"clamp", wY=efx.params.wrapY||"clamp"
+          var chU2=efx.params.chU||"R", chV2=efx.params.chV||"G"
+          function uvWrap(val,dim,mode){
+            var ix=Math.round(val*(dim-1))
+            if(mode==="repeat") return ((ix%dim)+dim)%dim
+            if(mode==="mirror"){var m=((ix%(dim*2))+dim*2)%(dim*2);return m>=dim?dim*2-1-m:m}
+            return Math.max(0,Math.min(dim-1,ix))
+          }
+          var uvMD=uvMapD.data
+          for(var ty2=0;ty2<h;ty2++) for(var tx2=0;tx2<w;tx2++){
+            var uvIdx2=(ty2*w+tx2)*4
+            var u2,v2
+            if(chU2==="R")      u2=uvMD[uvIdx2]/255
+            else if(chU2==="G") u2=uvMD[uvIdx2+1]/255
+            else if(chU2==="B") u2=uvMD[uvIdx2+2]/255
+            else u2=(.299*uvMD[uvIdx2]+.587*uvMD[uvIdx2+1]+.114*uvMD[uvIdx2+2])/255
+            if(chV2==="R")      v2=uvMD[uvIdx2]/255
+            else if(chV2==="G") v2=uvMD[uvIdx2+1]/255
+            else if(chV2==="B") v2=uvMD[uvIdx2+2]/255
+            else v2=(.299*uvMD[uvIdx2]+.587*uvMD[uvIdx2+1]+.114*uvMD[uvIdx2+2])/255
+            var sx6=uvWrap(u2,w,wX), sy6=uvWrap(v2,h,wY)
+            var si6=(sy6*w+sx6)*4, di6=(ty2*w+tx2)*4
+            uvOut.data[di6]=texSrc[si6];uvOut.data[di6+1]=texSrc[si6+1]
+            uvOut.data[di6+2]=texSrc[si6+2];uvOut.data[di6+3]=texSrc[si6+3]
+          }
+          applyBack(uvMD,uvOut.data,mv,efx.opacity,efx.blendMode||"normal",efx.blendChannels,efx.blendIf)
+          ctx.putImageData(new ImageData(uvMD,w,h),0,0)
+        }
+      }
+      continue
+    }
     // UV Distort — pixel remapping using a separate UV source canvas
     if (efx.type==="uv-distort") {
       var uvSrcId=efx.params&&efx.params.uvRefId
@@ -3170,6 +3247,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       var pixEfxAll=shapeEfxAll.filter(function(e){return e.enabled&&e.domain!=="points"})
       if(pixEfxAll.length>0) applyEfxStk(ctx,pixEfxAll,cmap,cache,iC,w,h,new Set(vis),nodes)
     }
+    else if(n.type==="uv-create")gUVCreate(ctx,n.props,w,h)
     else if(n.type==="gradient")gGrad(ctx,n.props,w,h)
     else if(n.type==="noise")gNoise(ctx,n.props,w,h)
     else if(n.type==="pattern")gPat(ctx,n.props,w,h)
@@ -4272,11 +4350,17 @@ function GradP(props) {
 function NoiseP(props) {
   var p=props.p, up=props.up
   var hasOct=["perlin","fbm","turbulence","simplex","value","marble","wood"].includes(p.nType)
+  var isRGB=p.colorMode==="rgb"
   return (
     <div>
       <Se l="type" v={p.nType} opts={NTYPES} fn={function(v){up(Object.assign({},p,{nType:v}))}}/>
-      <Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>
-      <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
+      <Se l="colour mode" v={p.colorMode||"greyscale"} opts={["greyscale","rgb"]}
+        fn={function(v){up(Object.assign({},p,{colorMode:v}))}}/>
+      {!isRGB&&<Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>}
+      {!isRGB&&<Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>}
+      {isRGB&&<div style={{fontSize:9,color:"var(--mu)",padding:"3px 0 5px",fontFamily:"'IBM Plex Mono',monospace"}}>
+        R/G/B channels are independent noise fields (seed, seed+1000, seed+2000). Use as UV displacement map.
+      </div>}
       <Sl l="scale" v={p.scale} mn={.005} mx={.4} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
       {hasOct&&<Sl l="octaves" v={p.oct||4} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>}
       {["fbm","perlin","simplex","value"].includes(p.nType)&&(
@@ -4315,6 +4399,25 @@ function NoiseP(props) {
       )}
       <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
       <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+    </div>
+  )
+}
+// UV Create props — minimal: the purpose is to be a clean coordinate canvas
+function UVCreateP(props) {
+  var p=props.p, up=props.up
+  return (
+    <div>
+      <div style={{fontSize:9,color:"var(--mu)",padding:"4px 0 8px",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace"}}>
+        Generates a UV coordinate canvas: R=U (x), G=V (y), B=0. Apply Distort/Transform effects to warp the coordinate space, then use uv-texture to sample a texture from it.
+      </div>
+      <Sl l="scale X" v={p.scaleX==null?1:p.scaleX} mn={.1} mx={4} st={.05}
+        fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scaleX:v}))}}/>
+      <Sl l="scale Y" v={p.scaleY==null?1:p.scaleY} mn={.1} mx={4} st={.05}
+        fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scaleY:v}))}}/>
+      <Sl l="offset X" v={p.offX==null?0:p.offX} mn={-1} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
+      <Sl l="offset Y" v={p.offY==null?0:p.offY} mn={-1} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
     </div>
   )
 }
@@ -4565,6 +4668,7 @@ function CreatorProps(props) {
   }
   return (
     <div style={{padding:"12px 12px 4px"}}>
+      {node.type==="uv-create" && <UVCreateP p={node.props} up={up}/>}
       {node.type==="solid"    && <SolidP p={node.props} up={up}/>}
       {node.type==="shape"    && <ShapeP p={node.props} up={up}/>}
       {node.type==="gradient" && <GradP  p={node.props} up={up}/>}
@@ -5237,6 +5341,22 @@ function EfxPrimary(props) {
         fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up({softness:v})}}/>
       <Sl l="centre x" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up({cx:v})}}/>
       <Sl l="centre y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up({cy:v})}}/>
+    </div>)
+  if(efx.type==="uv-texture") return (
+    <div>
+      <div style={{fontSize:9,color:"var(--mu)",padding:"3px 0 6px",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace"}}>
+        Reads the current canvas as UV coordinates and samples the texture at those positions. Put a UV Create node upstream, distort it, then use this to remap the texture.
+      </div>
+      <NRef l="texture" v={p.texRefId} nodes={props.nodes} selfId={props.selfId}
+        iC={props.iC} mode="source" fn={function(v){up({texRefId:v})}}/>
+      <Se l="U channel" v={p.chU||"R"} opts={["R","G","B","luminosity"]}
+        fn={function(v){up({chU:v})}}/>
+      <Se l="V channel" v={p.chV||"G"} opts={["R","G","B","luminosity"]}
+        fn={function(v){up({chV:v})}}/>
+      <Se l="wrap X" v={p.wrapX||"clamp"} opts={["clamp","repeat","mirror"]}
+        fn={function(v){up({wrapX:v})}}/>
+      <Se l="wrap Y" v={p.wrapY||"clamp"} opts={["clamp","repeat","mirror"]}
+        fn={function(v){up({wrapY:v})}}/>
     </div>)
   if(efx.type==="uv-distort") return (
     <div>
@@ -6105,7 +6225,7 @@ var EFX_GROUPS=[
   {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
   {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map","colour"]},
   {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise","duotone"]},
-  {label:"Distort",  items:["wave","twirl","bulge","uv-distort","polar-to-cart","cart-to-polar"]},
+  {label:"Distort",  items:["wave","twirl","bulge","uv-texture","uv-distort","polar-to-cart","cart-to-polar"]},
   {label:"Transform",items:["match","transform"]},
   {label:"Points",   items:["show-points","point-map","source-at-points","attributes","combine","separate","filter","delete"]},
 ]
@@ -7107,7 +7227,7 @@ function AddMenu(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
   var s1standard=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Geometry"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
-  var s1advanced=[{t:"tile",l:"Tile"}]
+  var s1advanced=[{t:"tile",l:"Tile"},{t:"uv-create",l:"UV Create"}]
   var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"},{t:"__div__",l:"Point Context"},{t:"point-comp",l:"Point Comp ◉"}]
   return (
     <div ref={anchorRef} style={{position:"relative"}}>
