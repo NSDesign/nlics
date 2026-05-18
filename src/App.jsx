@@ -2731,6 +2731,11 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
           var uvAmtX=(efx.params.amtX==null?.1:efx.params.amtX)
           var uvAmtY=(efx.params.amtY==null?.1:efx.params.amtY)
           var uvChX=efx.params.chX||"R", uvChY=efx.params.chY||"G"
+          // Radial mode params — centre and strength
+          var uvCX=(efx.params.cx==null?.5:efx.params.cx)*w
+          var uvCY=(efx.params.cy==null?.5:efx.params.cy)*h
+          var uvRadAmt=(efx.params.radAmt==null?.5:efx.params.radAmt)
+          var uvMaxR=Math.sqrt(uvCX*uvCX+uvCY*uvCY) // rough max radius for normalisation
           // Bilinear sampler — clamps to edges
           function bilerp(d,fw,fh,fx,fy,ci){
             fx=Math.max(0,Math.min(fw-1,fx)); fy=Math.max(0,Math.min(fh-1,fy))
@@ -2752,7 +2757,23 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
             var sx4f,sy4f
             if(uvMode==="absolute"){
               sx4f=uvVal*(w-1); sy4f=uvValY*(h-1)
+            } else if(uvMode==="radial"||uvMode==="radial-in"){
+              // UV source = scalar magnitude. Direction = auto-computed outward/inward from centre.
+              // magnitude: 0=no warp, 1=full warp (scaled by radAmt × min dimension)
+              var mag=uvRead(uvx,uvy,uvChX)  // single channel, B&W works perfectly here
+              var rdx=uvx-uvCX, rdy=uvy-uvCY
+              var rdist=Math.sqrt(rdx*rdx+rdy*rdy)
+              var rnx=rdist>0?rdx/rdist:0, rny=rdist>0?rdy/rdist:0
+              var rscale=mag*uvRadAmt*Math.min(w,h)
+              if(uvMode==="radial-in") rscale=-rscale  // inward = pinch
+              sx4f=uvx+rnx*rscale; sy4f=uvy+rny*rscale
+            } else if(uvMode==="vector"){
+              // Vector displacement: R=0→−, 0.5=neutral, 1→+X; G=same for Y
+              // Correct encoding for when source IS an RGB map (e.g. RGB noise)
+              sx4f=uvx+(uvVal-.5)*uvAmtX*w
+              sy4f=uvy+(uvValY-.5)*uvAmtY*h
             } else {
+              // displacement (default) — same as vector but labelled clearly
               sx4f=uvx+(uvVal-.5)*uvAmtX*w
               sy4f=uvy+(uvValY-.5)*uvAmtY*h
             }
@@ -5387,19 +5408,51 @@ function EfxPrimary(props) {
     <div>
       <NRef l="UV source" v={p.uvRefId} nodes={props.nodes} selfId={props.selfId}
         iC={props.iC} mode="source" fn={function(v){up({uvRefId:v})}}/>
-      <Se l="mode" v={p.mode||"displacement"} opts={["displacement","absolute"]}
+      <Se l="mode" v={p.mode||"displacement"}
+        opts={["displacement","vector","radial","radial-in","absolute"]}
         fn={function(v){up({mode:v})}}/>
-      {(p.mode||"displacement")==="displacement"&&(
+      {(p.mode==="radial"||p.mode==="radial-in")?(
         <div>
+          <div style={{fontSize:9,color:"var(--mu)",padding:"3px 0 5px",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace"}}>
+            UV source = magnitude (B&W works). Direction auto-computed radially from centre.
+            radial = push outward · radial-in = pinch inward.
+          </div>
+          <Se l="channel" v={p.chX||"R"} opts={["R","G","B","luminosity"]}
+            fn={function(v){up({chX:v})}}/>
+          <Sl l="amount" v={p.radAmt==null?.5:p.radAmt} mn={-2} mx={2} st={.001}
+            fmt={function(v){return (v*100).toFixed(2)+"%"}} fn={function(v){up({radAmt:v})}}/>
+          <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01}
+            fmt={function(v){return v.toFixed(2)}} fn={function(v){up({cx:v})}}/>
+          <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01}
+            fmt={function(v){return v.toFixed(2)}} fn={function(v){up({cy:v})}}/>
+        </div>
+      ):(p.mode==="absolute")?(
+        <div>
+          <div style={{fontSize:9,color:"var(--mu)",padding:"3px 0 5px",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace"}}>
+            UV source values treated as direct coordinates (0=start, 1=end).
+          </div>
+          <Se l="X channel" v={p.chX||"R"} opts={["R","G","B","luminosity"]}
+            fn={function(v){up({chX:v})}}/>
+          <Se l="Y channel" v={p.chY||"G"} opts={["R","G","B","luminosity"]}
+            fn={function(v){up({chY:v})}}/>
+        </div>
+      ):(
+        <div>
+          {(p.mode||"displacement")==="vector"&&(
+            <div style={{fontSize:9,color:"var(--mu)",padding:"3px 0 5px",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace"}}>
+              Vector: R=X direction, G=Y direction (0.5=neutral). Use RGB noise for multi-axis warp.
+            </div>
+          )}
           <Sl l="X amount" v={p.amtX==null?.1:p.amtX} mn={-2} mx={2} st={.001}
             fmt={function(v){return (v*100).toFixed(2)+"%"}} fn={function(v){up({amtX:v})}}/>
           <Sl l="Y amount" v={p.amtY==null?.1:p.amtY} mn={-2} mx={2} st={.001}
             fmt={function(v){return (v*100).toFixed(2)+"%"}} fn={function(v){up({amtY:v})}}/>
-        </div>)}
-      <Se l="X channel" v={p.chX||"R"} opts={["R","G","B","luminosity"]}
-        fn={function(v){up({chX:v})}}/>
-      <Se l="Y channel" v={p.chY||"G"} opts={["R","G","B","luminosity"]}
-        fn={function(v){up({chY:v})}}/>
+          <Se l="X channel" v={p.chX||"R"} opts={["R","G","B","luminosity"]}
+            fn={function(v){up({chX:v})}}/>
+          <Se l="Y channel" v={p.chY||"G"} opts={["R","G","B","luminosity"]}
+            fn={function(v){up({chY:v})}}/>
+        </div>
+      )}
     </div>)
   if(efx.type==="polar-to-cart"||efx.type==="cart-to-polar") return (
     <div style={{padding:"8px 0",fontSize:10,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.5}}>
