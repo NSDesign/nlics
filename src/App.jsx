@@ -2676,10 +2676,21 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
           var wX=efx.params.wrapX||"clamp", wY=efx.params.wrapY||"clamp"
           var chU2=efx.params.chU||"R", chV2=efx.params.chV||"G"
           function uvWrap(val,dim,mode){
-            var ix=Math.round(val*(dim-1))
-            if(mode==="repeat") return ((ix%dim)+dim)%dim
-            if(mode==="mirror"){var m=((ix%(dim*2))+dim*2)%(dim*2);return m>=dim?dim*2-1-m:m}
-            return Math.max(0,Math.min(dim-1,ix))
+            // val is already a 0-1 normalised coord; convert to float pixel coord
+            var fx=val*(dim-1)
+            if(mode==="clamp") return Math.max(0,Math.min(dim-1,fx))
+            if(mode==="repeat"){ fx=((fx%dim)+dim)%dim; return fx }
+            // mirror
+            var m=((fx%(dim*2))+dim*2)%(dim*2)
+            return m>=dim?dim*2-1-m:m
+          }
+          function bilerpTex(d,fw,fh,fx,fy,ci){
+            fx=Math.max(0,Math.min(fw-1,fx)); fy=Math.max(0,Math.min(fh-1,fy))
+            var x0=fx|0,y0=fy|0,x1=Math.min(fw-1,x0+1),y1=Math.min(fh-1,y0+1)
+            var tx=fx-x0,ty=fy-y0
+            var i00=(y0*fw+x0)*4+ci,i10=(y0*fw+x1)*4+ci
+            var i01=(y1*fw+x0)*4+ci,i11=(y1*fw+x1)*4+ci
+            return d[i00]*(1-tx)*(1-ty)+d[i10]*tx*(1-ty)+d[i01]*(1-tx)*ty+d[i11]*tx*ty
           }
           var uvMD=uvMapD.data
           for(var ty2=0;ty2<h;ty2++) for(var tx2=0;tx2<w;tx2++){
@@ -2693,10 +2704,12 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
             else if(chV2==="G") v2=uvMD[uvIdx2+1]/255
             else if(chV2==="B") v2=uvMD[uvIdx2+2]/255
             else v2=(.299*uvMD[uvIdx2]+.587*uvMD[uvIdx2+1]+.114*uvMD[uvIdx2+2])/255
-            var sx6=uvWrap(u2,w,wX), sy6=uvWrap(v2,h,wY)
-            var si6=(sy6*w+sx6)*4, di6=(ty2*w+tx2)*4
-            uvOut.data[di6]=texSrc[si6];uvOut.data[di6+1]=texSrc[si6+1]
-            uvOut.data[di6+2]=texSrc[si6+2];uvOut.data[di6+3]=texSrc[si6+3]
+            var sfx=uvWrap(u2,w,wX), sfy=uvWrap(v2,h,wY)
+            var di6=(ty2*w+tx2)*4
+            uvOut.data[di6]  =Math.round(bilerpTex(texSrc,w,h,sfx,sfy,0))
+            uvOut.data[di6+1]=Math.round(bilerpTex(texSrc,w,h,sfx,sfy,1))
+            uvOut.data[di6+2]=Math.round(bilerpTex(texSrc,w,h,sfx,sfy,2))
+            uvOut.data[di6+3]=Math.round(bilerpTex(texSrc,w,h,sfx,sfy,3))
           }
           applyBack(uvMD,uvOut.data,mv,efx.opacity,efx.blendMode||"normal",efx.blendChannels,efx.blendIf)
           ctx.putImageData(new ImageData(uvMD,w,h),0,0)
@@ -2712,30 +2725,42 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
         if(uvCv){
           var uvD=uvCv.getContext("2d").getImageData(0,0,w,h).data
           var srcImg=ctx.getImageData(0,0,w,h)
+          var srcD=srcImg.data
           var outImg2=ctx.createImageData(w,h)
           var uvMode=efx.params.mode||"displacement"
           var uvAmtX=(efx.params.amtX==null?.1:efx.params.amtX)
           var uvAmtY=(efx.params.amtY==null?.1:efx.params.amtY)
           var uvChX=efx.params.chX||"R", uvChY=efx.params.chY||"G"
+          // Bilinear sampler — clamps to edges
+          function bilerp(d,fw,fh,fx,fy,ci){
+            fx=Math.max(0,Math.min(fw-1,fx)); fy=Math.max(0,Math.min(fh-1,fy))
+            var x0=fx|0,y0=fy|0,x1=Math.min(fw-1,x0+1),y1=Math.min(fh-1,y0+1)
+            var tx=fx-x0,ty=fy-y0
+            var i00=(y0*fw+x0)*4+ci,i10=(y0*fw+x1)*4+ci
+            var i01=(y1*fw+x0)*4+ci,i11=(y1*fw+x1)*4+ci
+            return d[i00]*(1-tx)*(1-ty)+d[i10]*tx*(1-ty)+d[i01]*(1-tx)*ty+d[i11]*tx*ty
+          }
           function uvRead(px,py,ch){
-            var idx2=(Math.max(0,Math.min(h-1,py))*w+Math.max(0,Math.min(w-1,px)))*4
+            px=Math.max(0,Math.min(w-1,px)); py=Math.max(0,Math.min(h-1,py))
+            var idx2=(py*w+px)*4
             if(ch==="R")return uvD[idx2]/255;if(ch==="G")return uvD[idx2+1]/255
             if(ch==="B")return uvD[idx2+2]/255
             return(.299*uvD[idx2]+.587*uvD[idx2+1]+.114*uvD[idx2+2])/255
           }
           for(var uvy=0;uvy<h;uvy++) for(var uvx=0;uvx<w;uvx++){
             var uvVal=uvRead(uvx,uvy,uvChX), uvValY=uvRead(uvx,uvy,uvChY)
-            var sx4,sy4
+            var sx4f,sy4f
             if(uvMode==="absolute"){
-              sx4=Math.round(uvVal*w); sy4=Math.round(uvValY*h)
+              sx4f=uvVal*(w-1); sy4f=uvValY*(h-1)
             } else {
-              sx4=Math.round(uvx+(uvVal-.5)*uvAmtX*w)
-              sy4=Math.round(uvy+(uvValY-.5)*uvAmtY*h)
+              sx4f=uvx+(uvVal-.5)*uvAmtX*w
+              sy4f=uvy+(uvValY-.5)*uvAmtY*h
             }
-            sx4=Math.max(0,Math.min(w-1,sx4)); sy4=Math.max(0,Math.min(h-1,sy4))
-            var si4=(sy4*w+sx4)*4, di4=(uvy*w+uvx)*4
-            outImg2.data[di4]=srcImg.data[si4];outImg2.data[di4+1]=srcImg.data[si4+1]
-            outImg2.data[di4+2]=srcImg.data[si4+2];outImg2.data[di4+3]=srcImg.data[si4+3]
+            var di4=(uvy*w+uvx)*4
+            outImg2.data[di4]  =Math.round(bilerp(srcD,w,h,sx4f,sy4f,0))
+            outImg2.data[di4+1]=Math.round(bilerp(srcD,w,h,sx4f,sy4f,1))
+            outImg2.data[di4+2]=Math.round(bilerp(srcD,w,h,sx4f,sy4f,2))
+            outImg2.data[di4+3]=Math.round(bilerp(srcD,w,h,sx4f,sy4f,3))
           }
           var preUv=srcImg.data
           applyBack(preUv,outImg2.data,mv,efx.opacity,efx.blendMode||"normal",efx.blendChannels,efx.blendIf)
@@ -5366,10 +5391,10 @@ function EfxPrimary(props) {
         fn={function(v){up({mode:v})}}/>
       {(p.mode||"displacement")==="displacement"&&(
         <div>
-          <Sl l="X amount" v={p.amtX==null?.1:p.amtX} mn={-1} mx={1} st={.005}
-            fmt={function(v){return (v*100).toFixed(1)+"%"}} fn={function(v){up({amtX:v})}}/>
-          <Sl l="Y amount" v={p.amtY==null?.1:p.amtY} mn={-1} mx={1} st={.005}
-            fmt={function(v){return (v*100).toFixed(1)+"%"}} fn={function(v){up({amtY:v})}}/>
+          <Sl l="X amount" v={p.amtX==null?.1:p.amtX} mn={-2} mx={2} st={.001}
+            fmt={function(v){return (v*100).toFixed(2)+"%"}} fn={function(v){up({amtX:v})}}/>
+          <Sl l="Y amount" v={p.amtY==null?.1:p.amtY} mn={-2} mx={2} st={.001}
+            fmt={function(v){return (v*100).toFixed(2)+"%"}} fn={function(v){up({amtY:v})}}/>
         </div>)}
       <Se l="X channel" v={p.chX||"R"} opts={["R","G","B","luminosity"]}
         fn={function(v){up({chX:v})}}/>
