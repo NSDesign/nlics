@@ -2731,11 +2731,9 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
           var uvAmtX=(efx.params.amtX==null?.1:efx.params.amtX)
           var uvAmtY=(efx.params.amtY==null?.1:efx.params.amtY)
           var uvChX=efx.params.chX||"R", uvChY=efx.params.chY||"G"
-          // Radial mode params — centre and strength
           var uvCX=(efx.params.cx==null?.5:efx.params.cx)*w
           var uvCY=(efx.params.cy==null?.5:efx.params.cy)*h
           var uvRadAmt=(efx.params.radAmt==null?.5:efx.params.radAmt)
-          var uvMaxR=Math.sqrt(uvCX*uvCX+uvCY*uvCY) // rough max radius for normalisation
           // Bilinear sampler — clamps to edges
           function bilerp(d,fw,fh,fx,fy,ci){
             fx=Math.max(0,Math.min(fw-1,fx)); fy=Math.max(0,Math.min(fh-1,fy))
@@ -2745,35 +2743,33 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
             var i01=(y1*fw+x0)*4+ci,i11=(y1*fw+x1)*4+ci
             return d[i00]*(1-tx)*(1-ty)+d[i10]*tx*(1-ty)+d[i01]*(1-tx)*ty+d[i11]*tx*ty
           }
-          function uvRead(px,py,ch){
-            px=Math.max(0,Math.min(w-1,px)); py=Math.max(0,Math.min(h-1,py))
-            var idx2=(py*w+px)*4
-            if(ch==="R")return uvD[idx2]/255;if(ch==="G")return uvD[idx2+1]/255
-            if(ch==="B")return uvD[idx2+2]/255
-            return(.299*uvD[idx2]+.587*uvD[idx2+1]+.114*uvD[idx2+2])/255
+          // Bilinearly interpolated UV source read — smoother than integer lookup,
+          // avoids 8-bit quantization steps being amplified into visible noise
+          function uvReadB(fx,fy,ch){
+            if(ch==="R")      return bilerp(uvD,w,h,fx,fy,0)/255
+            else if(ch==="G") return bilerp(uvD,w,h,fx,fy,1)/255
+            else if(ch==="B") return bilerp(uvD,w,h,fx,fy,2)/255
+            return(.299*bilerp(uvD,w,h,fx,fy,0)
+                  +.587*bilerp(uvD,w,h,fx,fy,1)
+                  +.114*bilerp(uvD,w,h,fx,fy,2))/255
           }
           for(var uvy=0;uvy<h;uvy++) for(var uvx=0;uvx<w;uvx++){
-            var uvVal=uvRead(uvx,uvy,uvChX), uvValY=uvRead(uvx,uvy,uvChY)
+            var uvVal=uvReadB(uvx,uvy,uvChX), uvValY=uvReadB(uvx,uvy,uvChY)
             var sx4f,sy4f
             if(uvMode==="absolute"){
               sx4f=uvVal*(w-1); sy4f=uvValY*(h-1)
-            } else if(uvMode==="radial"||uvMode==="radial-in"){
-              // UV source = scalar magnitude. Direction = auto-computed outward/inward from centre.
-              // magnitude: 0=no warp, 1=full warp (scaled by radAmt × min dimension)
-              var mag=uvRead(uvx,uvy,uvChX)  // single channel, B&W works perfectly here
+            } else if(uvMode==="radial"){
+              // UV source = scalar magnitude. Direction = outward unit vector from centre.
+              // Positive amount = push outward (barrel); negative = pull inward (pinch).
+              var mag=uvReadB(uvx,uvy,uvChX)
               var rdx=uvx-uvCX, rdy=uvy-uvCY
               var rdist=Math.sqrt(rdx*rdx+rdy*rdy)
               var rnx=rdist>0?rdx/rdist:0, rny=rdist>0?rdy/rdist:0
               var rscale=mag*uvRadAmt*Math.min(w,h)
-              if(uvMode==="radial-in") rscale=-rscale  // inward = pinch
               sx4f=uvx+rnx*rscale; sy4f=uvy+rny*rscale
-            } else if(uvMode==="vector"){
-              // Vector displacement: R=0→−, 0.5=neutral, 1→+X; G=same for Y
-              // Correct encoding for when source IS an RGB map (e.g. RGB noise)
-              sx4f=uvx+(uvVal-.5)*uvAmtX*w
-              sy4f=uvy+(uvValY-.5)*uvAmtY*h
             } else {
-              // displacement (default) — same as vector but labelled clearly
+              // displacement (default) — R/G channels drive X/Y independently
+              // With greyscale source R=G so result is identical; with RGB noise R≠G
               sx4f=uvx+(uvVal-.5)*uvAmtX*w
               sy4f=uvy+(uvValY-.5)*uvAmtY*h
             }
@@ -5409,13 +5405,13 @@ function EfxPrimary(props) {
       <NRef l="UV source" v={p.uvRefId} nodes={props.nodes} selfId={props.selfId}
         iC={props.iC} mode="source" fn={function(v){up({uvRefId:v})}}/>
       <Se l="mode" v={p.mode||"displacement"}
-        opts={["displacement","vector","radial","radial-in","absolute"]}
+        opts={["displacement","radial","absolute"]}
         fn={function(v){up({mode:v})}}/>
-      {(p.mode==="radial"||p.mode==="radial-in")?(
+      {(p.mode==="radial")?(
         <div>
           <div style={{fontSize:9,color:"var(--mu)",padding:"3px 0 5px",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace"}}>
-            UV source = magnitude (B&W works). Direction auto-computed radially from centre.
-            radial = push outward · radial-in = pinch inward.
+            UV source = magnitude (B&W works). Direction = radially outward from centre.
+            Positive amount = barrel, negative = pinch.
           </div>
           <Se l="channel" v={p.chX||"R"} opts={["R","G","B","luminosity"]}
             fn={function(v){up({chX:v})}}/>
@@ -5429,7 +5425,7 @@ function EfxPrimary(props) {
       ):(p.mode==="absolute")?(
         <div>
           <div style={{fontSize:9,color:"var(--mu)",padding:"3px 0 5px",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace"}}>
-            UV source values treated as direct coordinates (0=start, 1=end).
+            UV source values used as direct coordinates (R→X, G→Y). 0=start, 1=end of canvas.
           </div>
           <Se l="X channel" v={p.chX||"R"} opts={["R","G","B","luminosity"]}
             fn={function(v){up({chX:v})}}/>
@@ -5438,11 +5434,9 @@ function EfxPrimary(props) {
         </div>
       ):(
         <div>
-          {(p.mode||"displacement")==="vector"&&(
-            <div style={{fontSize:9,color:"var(--mu)",padding:"3px 0 5px",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace"}}>
-              Vector: R=X direction, G=Y direction (0.5=neutral). Use RGB noise for multi-axis warp.
-            </div>
-          )}
+          <div style={{fontSize:9,color:"var(--mu)",padding:"3px 0 5px",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace"}}>
+            R/G channels drive X/Y displacement independently. With greyscale source R=G. With RGB noise R≠G giving true multi-axis warp.
+          </div>
           <Sl l="X amount" v={p.amtX==null?.1:p.amtX} mn={-2} mx={2} st={.001}
             fmt={function(v){return (v*100).toFixed(2)+"%"}} fn={function(v){up({amtX:v})}}/>
           <Sl l="Y amount" v={p.amtY==null?.1:p.amtY} mn={-2} mx={2} st={.001}
