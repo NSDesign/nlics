@@ -79,8 +79,14 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .expr-pill{display:inline-flex;align-items:center;background:var(--sl);border:1px solid var(--bd);border-radius:20px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--tx);padding:0 8px;min-height:28px;gap:2px;flex-shrink:0;}
 .expr-pill.op{color:var(--di);padding:0 2px;background:none;border:none;cursor:pointer;font-size:14px;min-height:28px;}
 .expr-pill.op:hover,.expr-pill.op:active{color:var(--tx);background:none;border:none;}
-.expr-pill.lit{padding:0 4px 0 8px;cursor:default;}
-.expr-pill.lit input{background:none;border:none;color:var(--ac);font-family:'IBM Plex Mono',monospace;font-size:10px;width:40px;outline:none;text-align:center;padding:0;min-height:0;}
+.expr-pill.term{padding:0 4px 0 0;cursor:default;overflow:hidden;}
+.expr-type-badge{background:none;border:none;border-right:1px solid var(--bd);color:var(--mu);font-size:9px;font-family:'IBM Plex Mono',monospace;cursor:pointer;padding:0 6px;min-height:0;height:28px;line-height:1;display:inline-flex;align-items:center;flex-shrink:0;transition:color .1s;}
+.expr-type-badge:hover,.expr-type-badge:active{color:var(--ac);background:none;border-right:1px solid var(--bd);}
+.expr-pill.term .term-body{display:inline-flex;align-items:center;gap:2px;padding:0 2px 0 5px;}
+.expr-pill.term input{background:none;border:none;color:var(--ac);font-family:'IBM Plex Mono',monospace;font-size:10px;width:40px;outline:none;text-align:center;padding:0;min-height:0;}
+.expr-pill.rand-pill .term-body input{width:32px;}
+.rand-sep{color:var(--mu);font-size:9px;padding:0 1px;}
+.ref-tap{color:var(--lv);font-size:9px;cursor:pointer;font-style:italic;}
 .expr-pill.add-btn{color:var(--ac);border-style:dashed;cursor:pointer;padding:0 10px;font-size:14px;}
 .expr-pill.add-btn:hover{background:var(--el);border-color:var(--ac);}
 .expr-pill-rm{color:var(--mu);font-size:10px;margin-left:2px;cursor:pointer;background:none;border:none;padding:0 2px;min-height:0;line-height:1;display:inline-flex;align-items:center;}
@@ -384,14 +390,53 @@ function OpPill(props) {
   )
 }
 
-function LitPill(props) {
-  var ref = useRef(null)
+// TermPill — unified value pill with cycling type badge: # lit | ~ rand | @ ref
+var TERM_TYPES = ['lit','rand','ref']
+var TERM_BADGE = {lit:'#', rand:'~', ref:'@'}
+
+function TermPill(props) {
+  var t = props.token
+  var numRef = useRef(null)
+  var minRef = useRef(null)
+
+  function cycleType(e) {
+    e.stopPropagation()
+    var next = TERM_TYPES[(TERM_TYPES.indexOf(t.type)+1) % TERM_TYPES.length]
+    if(next==='lit')  props.onChange({type:'lit',  value: t.value!=null ? t.value : (t.min!=null ? t.min : 0)})
+    if(next==='rand') props.onChange({type:'rand', min: 0, max: t.value!=null ? Math.max(1,Math.abs(t.value)) : 1, seed:null})
+    if(next==='ref')  props.onChange({type:'ref',  nodeId:null, prop:null})
+  }
+
+  var isRand = t.type==='rand'
   return (
-    <span className="expr-pill lit">
-      <input type="number" value={props.value} step={0.01}
-        onChange={function(e){ var v=parseFloat(e.target.value); if(!isNaN(v)) props.onChange(v) }}
-        onFocus={function(){ if(ref.current) ref.current.select() }}
-        ref={ref}/>
+    <span className={'expr-pill term'+(isRand?' rand-pill':'')}>
+      <button className="expr-type-badge" onClick={cycleType} title="tap to cycle type">
+        {TERM_BADGE[t.type]||'#'}
+      </button>
+      <span className="term-body">
+        {t.type==='lit' && (
+          <input type="number" value={t.value} step={0.01}
+            ref={numRef}
+            onChange={function(e){ var v=parseFloat(e.target.value); if(!isNaN(v)) props.onChange(Object.assign({},t,{value:v})) }}
+            onFocus={function(){ if(numRef.current) numRef.current.select() }}/>
+        )}
+        {t.type==='rand' && (
+          <span style={{display:'inline-flex',alignItems:'center',gap:2}}>
+            <input type="number" value={t.min!=null?t.min:0} step={0.01}
+              ref={minRef}
+              onChange={function(e){ var v=parseFloat(e.target.value); if(!isNaN(v)) props.onChange(Object.assign({},t,{min:v})) }}
+              onFocus={function(){ if(minRef.current) minRef.current.select() }}/>
+            <span className="rand-sep">↔</span>
+            <input type="number" value={t.max!=null?t.max:1} step={0.01}
+              onChange={function(e){ var v=parseFloat(e.target.value); if(!isNaN(v)) props.onChange(Object.assign({},t,{max:v})) }}/>
+          </span>
+        )}
+        {t.type==='ref' && (
+          <span className="ref-tap" onClick={props.onPickRef}>
+            {t.nodeId ? t.nodeId+' · '+t.prop : 'pick…'}
+          </span>
+        )}
+      </span>
       <button className="expr-pill-rm" onClick={props.onRemove} title="remove">×</button>
     </span>
   )
@@ -400,6 +445,7 @@ function LitPill(props) {
 function ExprPillRow(props) {
   var tokens = props.tokens||[]
   function update(i,patch){ props.onChange(tokens.map(function(t,j){return j===i?Object.assign({},t,patch):t})) }
+  function replaceTerm(i,newToken){ props.onChange(tokens.map(function(t,j){return j===i?newToken:t})) }
   function removeTerm(i) {
     var next
     if(i===0) next=tokens.slice(tokens.length>1&&tokens[1].type==='op'?2:1)
@@ -410,10 +456,11 @@ function ExprPillRow(props) {
   return (
     <div className="expr-pill-row">
       {tokens.map(function(t,i){
-        if(t.type==='op')  return <OpPill  key={i} value={t.value} onChange={function(v){update(i,{value:v})}}/>
-        if(t.type==='lit') return <LitPill key={i} value={t.value} onChange={function(v){update(i,{value:v})}} onRemove={function(){removeTerm(i)}}/>
-        // ref pill placeholder — Phase 2
-        return <span key={i} className="expr-pill" style={{color:'var(--lv)',fontSize:9}}>{t.nodeId}·{t.prop}</span>
+        if(t.type==='op') return <OpPill key={i} value={t.value} onChange={function(v){update(i,{value:v})}}/>
+        return <TermPill key={i} token={t}
+          onChange={function(newToken){replaceTerm(i,newToken)}}
+          onRemove={function(){removeTerm(i)}}
+          onPickRef={props.onPickRef ? function(){props.onPickRef(i)} : null}/>
       })}
       <button className="expr-pill add-btn" onClick={addTerm} title="add term">⊕</button>
       {tokens.length>0&&<button className="expr-clear" onClick={function(){props.onChange(null)}}>clear</button>}
@@ -2082,6 +2129,11 @@ function resolveExpr(tokens, nodes, visited) {
       var val=Number(t.value)
       if(acc===null) acc=val
       else if(pendingOp!==null){acc=applyOp(acc,pendingOp,val);pendingOp=null}
+    } else if(t.type==='rand'){
+      var rMin=t.min!=null?t.min:0, rMax=t.max!=null?t.max:1
+      var rVal=t.seed!=null ? rMin+seededRand(t.seed)()*(rMax-rMin) : rMin+Math.random()*(rMax-rMin)
+      if(acc===null) acc=rVal
+      else if(pendingOp!==null){acc=applyOp(acc,pendingOp,rVal);pendingOp=null}
     } else if(t.type==='ref'){
       if(!nmap){if(acc===null)acc=0;pendingOp=null;continue}
       var vst=visited||new Set()
