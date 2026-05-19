@@ -71,6 +71,23 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .prow:last-child{margin-bottom:0;}
 .plbl{color:var(--mu);font-size:10.5px;min-width:72px;text-align:right;flex-shrink:0;line-height:1.3;}
 .pval{color:var(--ac);font-size:10.5px;min-width:38px;text-align:right;font-family:'IBM Plex Mono',monospace;flex-shrink:0;}
+/* ── Expression editor (expVals) ── */
+.expr-icon{width:26px;height:var(--tap-sm);display:inline-flex;align-items:center;justify-content:center;background:none;border:none;font-size:13px;color:var(--mu);cursor:pointer;flex-shrink:0;border-radius:4px;font-family:'IBM Plex Mono',monospace;padding:0;transition:color .12s;}
+.expr-icon.active{color:var(--lv);}
+.expr-icon:hover,.expr-icon:active{color:var(--tx);background:none;border:none;}
+.expr-pill-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:3px 8px 7px 84px;}
+.expr-pill{display:inline-flex;align-items:center;background:var(--sl);border:1px solid var(--bd);border-radius:20px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--tx);padding:0 8px;min-height:28px;gap:2px;flex-shrink:0;}
+.expr-pill.op{color:var(--di);padding:0 2px;background:none;border:none;cursor:pointer;font-size:14px;min-height:28px;}
+.expr-pill.op:hover,.expr-pill.op:active{color:var(--tx);background:none;border:none;}
+.expr-pill.lit{padding:0 4px 0 8px;cursor:default;}
+.expr-pill.lit input{background:none;border:none;color:var(--ac);font-family:'IBM Plex Mono',monospace;font-size:10px;width:40px;outline:none;text-align:center;padding:0;min-height:0;}
+.expr-pill.add-btn{color:var(--ac);border-style:dashed;cursor:pointer;padding:0 10px;font-size:14px;}
+.expr-pill.add-btn:hover{background:var(--el);border-color:var(--ac);}
+.expr-pill-rm{color:var(--mu);font-size:10px;margin-left:2px;cursor:pointer;background:none;border:none;padding:0 2px;min-height:0;line-height:1;display:inline-flex;align-items:center;}
+.expr-pill-rm:hover,.expr-pill-rm:active{color:var(--dng);background:none;border:none;}
+.expr-clear{font-size:9px;color:var(--mu);background:none;border:none;cursor:pointer;padding:0 4px;min-height:0;font-family:'IBM Plex Mono',monospace;}
+.expr-clear:hover,.expr-clear:active{color:var(--dng);background:none;border:none;}
+.expr-locked input[type=range]{opacity:.3;pointer-events:none;}
 .breadcrumb{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;overflow-x:auto;white-space:nowrap;}
 .bc-item{font-size:10px;color:var(--di);font-family:'IBM Plex Mono',monospace;cursor:pointer;text-decoration:underline;text-underline-offset:3px;white-space:nowrap;flex-shrink:0;}
 .blend-if-slider .noUi-target{background:var(--bg);border:1px solid var(--bd);border-radius:3px;box-shadow:none;height:8px;}
@@ -343,6 +360,93 @@ function BlendIfSlider(props) {
   )
 }
 var COMMUTATIVE_MODES = {add:1,multiply:1,screen:1,difference:1,exclusion:1,darken:1,lighten:1}
+
+// ── ExprEditor: expression value system (expVals) UI components ──────────────
+
+function ExprEditorIcon(props) {
+  return (
+    <button className={'expr-icon'+(props.active?' active':'')}
+      onClick={props.onToggle}
+      title={props.active?'expression active':'add expression'}>⊛</button>
+  )
+}
+
+var EXPR_OPS      = ['+','-','*','/','^']
+var EXPR_OP_LABEL = {'+':'+', '-':'−', '*':'×', '/':'÷', '^':'^'}
+
+function OpPill(props) {
+  var idx = EXPR_OPS.indexOf(props.value)
+  function cycle(e) { e.stopPropagation(); props.onChange(EXPR_OPS[(idx+1)%EXPR_OPS.length]) }
+  return (
+    <button className="expr-pill op" onClick={cycle} title="tap to cycle operator">
+      {EXPR_OP_LABEL[props.value]||props.value}
+    </button>
+  )
+}
+
+function LitPill(props) {
+  var ref = useRef(null)
+  return (
+    <span className="expr-pill lit">
+      <input type="number" value={props.value} step={0.01}
+        onChange={function(e){ var v=parseFloat(e.target.value); if(!isNaN(v)) props.onChange(v) }}
+        onFocus={function(){ if(ref.current) ref.current.select() }}
+        ref={ref}/>
+      <button className="expr-pill-rm" onClick={props.onRemove} title="remove">×</button>
+    </span>
+  )
+}
+
+function ExprPillRow(props) {
+  var tokens = props.tokens||[]
+  function update(i,patch){ props.onChange(tokens.map(function(t,j){return j===i?Object.assign({},t,patch):t})) }
+  function removeTerm(i) {
+    var next
+    if(i===0) next=tokens.slice(tokens.length>1&&tokens[1].type==='op'?2:1)
+    else next=tokens.filter(function(_,j){return j!==i&&j!==i-1})
+    props.onChange(next.length>0?next:null)
+  }
+  function addTerm() { props.onChange(tokens.concat([{type:'op',value:'+'},{type:'lit',value:0}])) }
+  return (
+    <div className="expr-pill-row">
+      {tokens.map(function(t,i){
+        if(t.type==='op')  return <OpPill  key={i} value={t.value} onChange={function(v){update(i,{value:v})}}/>
+        if(t.type==='lit') return <LitPill key={i} value={t.value} onChange={function(v){update(i,{value:v})}} onRemove={function(){removeTerm(i)}}/>
+        // ref pill placeholder — Phase 2
+        return <span key={i} className="expr-pill" style={{color:'var(--lv)',fontSize:9}}>{t.nodeId}·{t.prop}</span>
+      })}
+      <button className="expr-pill add-btn" onClick={addTerm} title="add term">⊕</button>
+      {tokens.length>0&&<button className="expr-clear" onClick={function(){props.onChange(null)}}>clear</button>}
+    </div>
+  )
+}
+
+// ExprEditor — wraps a single Sl child, injecting expr icon + pill row.
+// Props: paramKey, tokens (array|null), nodes, selfId, onExprChange(tokens|null)
+function ExprEditor(props) {
+  var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
+  var tokens=props.tokens&&props.tokens.length>0?props.tokens:null
+  var hasExpr=!!tokens
+  var result=hasExpr?resolveExpr(tokens,props.nodes||[],null):null
+
+  function handleChange(newTokens){
+    var t=newTokens&&newTokens.length>0?newTokens:null
+    props.onExprChange(t)
+    if(!t) setOpen(false)
+  }
+  function toggleOpen(){ if(!open&&!tokens) handleChange([{type:'lit',value:0}]); setOpen(function(o){return !o}) }
+
+  var icon=<ExprEditorIcon active={hasExpr} open={open} onToggle={toggleOpen}/>
+  var child=React.Children.only(props.children)
+  var enhanced=React.cloneElement(child,{exprActive:hasExpr,exprResult:result,exprIcon:icon})
+
+  return (
+    <div>
+      {enhanced}
+      {open&&<ExprPillRow tokens={tokens||[{type:'lit',value:0}]} onChange={handleChange}/>}
+    </div>
+  )
+}
 
 // RandRow: wraps a slider with optional randomise controls
 // props: enabled, onToggle, rangeBipolar, onRangeBipolar, scale, onScale, offset, onOffset, amount, onAmount, seed, onSeed
@@ -1955,6 +2059,112 @@ function applyRand(base, rnd, enabled, rangeScale, rangeBipolar, amount, offset)
   if(rangeBipolar) r = (r * 2 - 1)  // -1 to 1
   return base + (r + (offset||0)) * (rangeScale||0.5) * (amount==null?1:amount)
 }
+
+// ── expVals — expression value resolution engine ──────────────────────────────
+// resolveExpr: walks a token array [ {type,value/nodeId/prop}, … ] and returns
+// a number, or null on error / cycle / missing ref.
+function resolveExpr(tokens, nodes, visited) {
+  if(!tokens||tokens.length===0) return null
+  var nmap=null
+  if(nodes&&nodes.length>0) nmap=nodes instanceof Map?nodes:new Map(nodes.map(function(n){return [n.id,n]}))
+  var acc=null, pendingOp=null
+  function applyOp(a,op,b){
+    if(op==='+') return a+b
+    if(op==='-') return a-b
+    if(op==='*') return a*b
+    if(op==='/') return b===0?0:a/b
+    if(op==='^') return Math.pow(a,b)
+    return b
+  }
+  for(var i=0;i<tokens.length;i++){
+    var t=tokens[i]
+    if(t.type==='lit'){
+      var val=Number(t.value)
+      if(acc===null) acc=val
+      else if(pendingOp!==null){acc=applyOp(acc,pendingOp,val);pendingOp=null}
+    } else if(t.type==='ref'){
+      if(!nmap){if(acc===null)acc=0;pendingOp=null;continue}
+      var vst=visited||new Set()
+      var key=t.nodeId+':'+t.prop
+      if(vst.has(key)||vst.size>=8) return null
+      var nd=nmap.get(t.nodeId)
+      if(!nd) return null
+      var parts=t.prop.split('.'),raw=nd
+      for(var pi=0;pi<parts.length;pi++) raw=raw?raw[parts[pi]]:null
+      if(raw==null||typeof raw!=='number') return null
+      // check nested expression on this prop
+      var lastKey=parts[parts.length-1]
+      var container=parts.length>1?nd[parts[0]]:nd
+      var nestedExpr=container?container[lastKey+'_expr']:null
+      if(nestedExpr&&nestedExpr.length>0){
+        var nv2=new Set(vst);nv2.add(key)
+        raw=resolveExpr(nestedExpr,nodes,nv2)
+        if(raw===null) return null
+      }
+      if(acc===null) acc=raw
+      else if(pendingOp!==null){acc=applyOp(acc,pendingOp,raw);pendingOp=null}
+    } else if(t.type==='op'){
+      pendingOp=t.value
+    }
+  }
+  if(acc===null||!isFinite(acc)) return null
+  return acc
+}
+
+// resolveParams: returns a new props/params object with all _expr keys resolved.
+// Fast-exits if no _expr keys present. Call at the top of each renderer.
+function resolveParams(p, nodes, nodeId) {
+  var ks=Object.keys(p),hasExpr=false
+  for(var i=0;i<ks.length;i++){var k=ks[i];if(k.length>5&&k.slice(-5)==='_expr'&&p[k]&&p[k].length>0){hasExpr=true;break}}
+  if(!hasExpr) return p
+  var out=Object.assign({},p)
+  for(var j=0;j<ks.length;j++){
+    var k2=ks[j]
+    if(k2.length>5&&k2.slice(-5)==='_expr'&&p[k2]&&p[k2].length>0){
+      var baseKey=k2.slice(0,-5)
+      var visited=new Set(nodeId?[nodeId+':'+baseKey]:[])
+      var val=resolveExpr(p[k2],nodes,visited)
+      if(val!==null) out[baseKey]=val
+    }
+  }
+  return out
+}
+
+// EXPR_PROPS: referenceable numeric props per node type (Phase 1: shape + tile).
+var EXPR_PROPS = {
+  shape: [
+    {key:'props.x',       label:'x'},
+    {key:'props.y',       label:'y'},
+    {key:'props.sz',      label:'size'},
+    {key:'props.rot',     label:'rotation'},
+    {key:'props.strokeW', label:'stroke width'},
+    {key:'props.pts',     label:'points'},
+    {key:'props.innerR',  label:'inner radius'},
+    {key:'props.alpha',   label:'opacity'},
+  ],
+  tile: [
+    {key:'props.cols',      label:'columns'},
+    {key:'props.rows',      label:'rows'},
+    {key:'props.scale',     label:'scale'},
+    {key:'props.rotation',  label:'rotation'},
+    {key:'props.opacity',   label:'opacity'},
+    {key:'props.offX',      label:'offset X'},
+    {key:'props.offY',      label:'offset Y'},
+    {key:'props.gapX',      label:'gap X'},
+    {key:'props.gapY',      label:'gap Y'},
+    {key:'props.stagger',   label:'stagger'},
+    {key:'props.flipXProb', label:'flip X prob'},
+    {key:'props.flipYProb', label:'flip Y prob'},
+    {key:'props.seed',      label:'seed'},
+    {key:'props.rRotAmt',   label:'rand rot amount'},
+    {key:'props.rScaleAmt', label:'rand scale amount'},
+    {key:'props.rOpAmt',    label:'rand opacity amount'},
+    {key:'props.rOxAmt',    label:'rand nudge X amount'},
+    {key:'props.rOyAmt',    label:'rand nudge Y amount'},
+  ],
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function gImg(ctx,p,iC,w,h) {
   var url=p.url||"",fit=p.fit||"contain",alpha=p.alpha==null?1:p.alpha
   ctx.save();ctx.globalAlpha=alpha
@@ -3284,16 +3494,16 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       // Write modified _points back so gShape reads them via ctx.canvas._points
       ctx.canvas._points=cv._points
       ctx.clearRect(0,0,w,h)
-      gShape(ctx,n.props,w,h)
+      gShape(ctx,resolveParams(n.props,cmap,n.id),w,h)
       // Apply pixel-domain effects
       var pixEfxAll=shapeEfxAll.filter(function(e){return e.enabled&&e.domain!=="points"})
       if(pixEfxAll.length>0) applyEfxStk(ctx,pixEfxAll,cmap,cache,iC,w,h,new Set(vis),nodes)
     }
     else if(n.type==="uv-create")gUVCreate(ctx,n.props,w,h)
-    else if(n.type==="gradient")gGrad(ctx,n.props,w,h)
-    else if(n.type==="noise")gNoise(ctx,n.props,w,h)
-    else if(n.type==="pattern")gPat(ctx,n.props,w,h)
-    else if(n.type==="tile")gTile(ctx,n.props,cmap,cache,iC,w,h,vis)
+    else if(n.type==="gradient")gGrad(ctx,resolveParams(n.props,cmap,n.id),w,h)
+    else if(n.type==="noise")gNoise(ctx,resolveParams(n.props,cmap,n.id),w,h)
+    else if(n.type==="pattern")gPat(ctx,resolveParams(n.props,cmap,n.id),w,h)
+    else if(n.type==="tile")gTile(ctx,resolveParams(n.props,cmap,n.id),cmap,cache,iC,w,h,vis)
     else if(n.type==="grid"||n.type==="spiral"||n.type==="polar-grid"||n.type==="phyllotaxis"||n.type==="scatter"){
       // Route standalone geo nodes through same pre-pass+re-render as shape+shapeType nodes
       var gFn2={"grid":gGrid,"spiral":gSpiral,"polar-grid":gPolarGrid,"phyllotaxis":gPhyllotaxis,"scatter":gScatter}[n.type]
@@ -3698,12 +3908,19 @@ function PR(props) {
   )
 }
 function Sl(props) {
+  var locked = !!props.exprActive
   var disp = props.fmt ? props.fmt(props.v) : (props.st < 1 ? Number(props.v).toFixed(2) : Math.round(props.v))
+  var shown = locked
+    ? (props.exprResult!=null ? (props.fmt?props.fmt(props.exprResult):(props.st<1?Number(props.exprResult).toFixed(2):Math.round(props.exprResult))) : '—')
+    : disp
+  var trackVal = locked ? (props.exprResult!=null?props.exprResult:props.v) : props.v
   return (
-    <PR l={props.l}>
-      <input type="range" min={props.mn} max={props.mx} step={props.st||.01} value={props.v}
-        onChange={function(e){ props.fn(parseFloat(e.target.value)) }} style={{flex:1}}/>
-      <span className="pval">{disp}</span>
+    <PR l={props.l} className={locked?'expr-locked':''}>
+      <input type="range" min={props.mn} max={props.mx} step={props.st||.01} value={trackVal}
+        onChange={locked?function(){}:function(e){ props.fn(parseFloat(e.target.value)) }}
+        readOnly={locked} style={{flex:1}}/>
+      <span className="pval" style={locked?{color:'var(--mu)'}:{}}>{shown}</span>
+      {props.exprIcon||null}
     </PR>
   )
 }
@@ -4134,17 +4351,25 @@ function computeAllAttrs(nodes,selfId,sourceId){
 }
 
 function ShapeP(props) {
-  var p=props.p, up=props.up, s=p.shapeType
+  var p=props.p, up=props.up, s=p.shapeType, nodes=props.nodes||[], selfId=props.selfId
   var isPointGeo = GEO_POINT_TYPES.includes(s)
   var rm = p.renderMode||"smooth"
+  // ExprEditor factory for shape props
+  function ex(paramKey, child) {
+    return <ExprEditor paramKey={paramKey} tokens={p[paramKey+'_expr']||null}
+      nodes={nodes} selfId={selfId}
+      onExprChange={function(t){var o={};o[paramKey+'_expr']=t;up(Object.assign({},p,o))}}>
+      {child}
+    </ExprEditor>
+  }
   return (
     <div>
       <Se l="type" v={s} opts={SHAPES} fn={function(v){up(Object.assign({},p,{shapeType:v}))}}/>
       <Se l="render" v={rm} opts={isPointGeo?["points"]:["smooth","faceted","points"]}
         fn={function(v){up(Object.assign({},p,{renderMode:v}))}}/>
-      {!isPointGeo&&<Sl l="x" v={p.x||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x:v}))}}/>}
-      {!isPointGeo&&<Sl l="y" v={p.y||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y:v}))}}/>}
-      {!isPointGeo&&<Sl l="size" v={p.sz||.6} mn={.05} mx={1.8} st={.01} fn={function(v){up(Object.assign({},p,{sz:v}))}}/>}
+      {!isPointGeo&&ex('x',     <Sl l="x"    v={p.x||.5}   mn={0}   mx={1}   st={.01} fn={function(v){up(Object.assign({},p,{x:v}))}}/>)}
+      {!isPointGeo&&ex('y',     <Sl l="y"    v={p.y||.5}   mn={0}   mx={1}   st={.01} fn={function(v){up(Object.assign({},p,{y:v}))}}/>)}
+      {!isPointGeo&&ex('sz',    <Sl l="size" v={p.sz||.6}  mn={.05} mx={1.8} st={.01} fn={function(v){up(Object.assign({},p,{sz:v}))}}/>)}
       {(s==="ellipse") && (
         <div>
           <Sl l="x radius" v={p.rx==null?1:p.rx} mn={.1} mx={3} st={.01} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>
@@ -4157,7 +4382,7 @@ function ShapeP(props) {
           <Sl l="size y" v={p.ry==null?1:p.ry} mn={0.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>
         </div>
       )}
-      {!isPointGeo&&<Sl l="rotation" v={p.rot||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rot:v}))}}/>}
+      {!isPointGeo&&ex("rot",<Sl l="rotation" v={p.rot||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rot:v}))}}/>)}
       {s==="star" && (
         <div>
           <Sl l="points" v={p.pts} mn={3} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pts:v}))}}/>
@@ -4259,7 +4484,7 @@ function ShapeP(props) {
       {!isPointGeo&&<Sl l="fill op" v={p.fillOpacity==null?1:p.fillOpacity} mn={0} mx={1} st={.01}
         fmt={function(v){return Math.round(v*100)+"%"}}
         fn={function(v){up(Object.assign({},p,{fillOpacity:v}))}}/>}
-      {!isPointGeo&&<Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>}
+      {!isPointGeo&&ex("strokeW",<Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>)}
       {!isPointGeo&&p.strokeW>0 && (
         <div>
           <Co l="stroke" v={p.stroke} fn={function(v){up(Object.assign({},p,{stroke:v}))}}/>
@@ -4268,9 +4493,9 @@ function ShapeP(props) {
             fn={function(v){up(Object.assign({},p,{strokeOpacity:v}))}}/>
         </div>
       )}
-      {!isPointGeo&&<Sl l="opacity" v={p.opacity==null?(p.alpha==null?1:p.alpha):p.opacity} mn={0} mx={1} st={.01}
+      {!isPointGeo&&ex("opacity",<Sl l="opacity" v={p.opacity==null?(p.alpha==null?1:p.alpha):p.opacity} mn={0} mx={1} st={.01}
         fmt={function(v){return Math.round(v*100)+"%"}}
-        fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>}
+        fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>)}
     </div>
   )
 }
@@ -4570,6 +4795,14 @@ function PatP(props) {
 // ── Tile pattern UI ───────────────────────────────────────────────────────────
 function TileP(props) {
   var p=props.p, up=props.up, nodes=props.nodes, selfId=props.selfId, iC=props.iC
+  // ExprEditor factory for tile props
+  function ex(paramKey, child) {
+    return <ExprEditor paramKey={paramKey} tokens={p[paramKey+'_expr']||null}
+      nodes={nodes} selfId={selfId}
+      onExprChange={function(t){var o={};o[paramKey+'_expr']=t;up(Object.assign({},p,o))}}>
+      {child}
+    </ExprEditor>
+  }
   // RandRow factory for per-tile params
   function tr(enK,baseK,scK,biK,amtK,offK,seedK){
     return {
@@ -4587,13 +4820,13 @@ function TileP(props) {
       <NRef l="source" v={p.refId} nodes={nodes} selfId={selfId} iC={iC}
         fn={function(v){up(Object.assign({},p,{refId:v}))}}/>
       {/* Grid */}
-      <Sl l="columns" v={p.cols||4} mn={1} mx={32} st={1}
-        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>
-      <Sl l="rows" v={p.rows||4} mn={1} mx={32} st={1}
-        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>
+      {ex("cols",   <Sl l="columns" v={p.cols||4} mn={1} mx={32} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>)}
+      {ex("rows",   <Sl l="rows" v={p.rows||4} mn={1} mx={32} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>)}
       {/* Layout */}
-      <Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01}
-        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>
+      {ex("stagger",<Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>)}
       {(p.stagger||0)>0&&(
         <div>
           <Se l="stagger axis" v={p.staggerAxis||"row"} opts={["row","col"]}
@@ -4602,10 +4835,10 @@ function TileP(props) {
             fn={function(v){up(Object.assign({},p,{staggerParity:v}))}}/>
         </div>
       )}
-      <Sl l="offset X" v={p.offX||0} mn={-1} mx={1} st={.01}
-        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
-      <Sl l="offset Y" v={p.offY||0} mn={-1} mx={1} st={.01}
-        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
+      {ex("offX",<Sl l="offset X" v={p.offX||0} mn={-1} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>)}
+      {ex("offY",<Sl l="offset Y" v={p.offY||0} mn={-1} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>)}
       <PR l="gap mode">
         {[["spacing","spread"],["inset","shrink"]].map(function(m){
           return <button key={m[0]} className={(p.gapMode||"spacing")===m[0]?"ac":"ghost"}
@@ -4613,22 +4846,22 @@ function TileP(props) {
             style={{flex:1,fontSize:11,minHeight:32}}>{m[1]}</button>
         })}
       </PR>
-      <Sl l="gap X" v={p.gapX||0} mn={0} mx={(p.gapMode||"spacing")==="spacing"?4:.98} st={.01}
-        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapX:v}))}}/>
-      <Sl l="gap Y" v={p.gapY||0} mn={0} mx={(p.gapMode||"spacing")==="spacing"?4:.98} st={.01}
-        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapY:v}))}}/>
+      {ex("gapX",<Sl l="gap X" v={p.gapX||0} mn={0} mx={(p.gapMode||"spacing")==="spacing"?4:.98} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapX:v}))}}/>)}
+      {ex("gapY",<Sl l="gap Y" v={p.gapY||0} mn={0} mx={(p.gapMode||"spacing")==="spacing"?4:.98} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gapY:v}))}}/>)}
       {/* Per-tile base + randomise */}
       <RandRow {...tr("rRotEn","rotation","rRotSc","rRotBi","rRotAmt","rRotOff","rRotSeed")}>
-        <Sl l="rotation" v={p.rotation||0} mn={-180} mx={180} st={1}
-          fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rotation:v}))}}/>
+        {ex("rotation",<Sl l="rotation" v={p.rotation||0} mn={-180} mx={180} st={1}
+          fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rotation:v}))}}/>)}
       </RandRow>
       <RandRow {...tr("rScaleEn","scale","rScaleSc","rScaleBi","rScaleAmt","rScaleOff","rScaleSeed")}>
-        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.05} mx={3} st={.01}
-          fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        {ex("scale",<Sl l="scale" v={p.scale==null?1:p.scale} mn={.05} mx={3} st={.01}
+          fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
       </RandRow>
       <RandRow {...tr("rOpEn","opacity","rOpSc","rOpBi","rOpAmt","rOpOff","rOpSeed")}>
-        <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
-          fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
+        {ex("opacity",<Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
+          fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>)}
       </RandRow>
       {/* Random position nudge per tile — base is always 0 (cell centre) */}
       <RandRow {...tr("rOxEn","rOxBase","rOxSc","rOxBi","rOxAmt","rOxOff","rOxSeed")}>
@@ -4644,18 +4877,18 @@ function TileP(props) {
         </div>
       </RandRow>
       {/* Flip probabilities */}
-      <Sl l="flip X prob" v={p.flipXProb||0} mn={0} mx={1} st={.01}
-        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{flipXProb:v}))}}/>
-      <Sl l="flip Y prob" v={p.flipYProb||0} mn={0} mx={1} st={.01}
-        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{flipYProb:v}))}}/>
+      {ex("flipXProb",<Sl l="flip X prob" v={p.flipXProb||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{flipXProb:v}))}}/>)}
+      {ex("flipYProb",<Sl l="flip Y prob" v={p.flipYProb||0} mn={0} mx={1} st={.01}
+        fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{flipYProb:v}))}}/>)}
       {/* Wrap + background */}
       <Se l="wrap" v={p.wrap||"clamp"} opts={["clamp","repeat","mirror"]}
         fn={function(v){up(Object.assign({},p,{wrap:v}))}}/>
       <Co l="bg colour" v={p.bgColor||"#000000"} fn={function(v){up(Object.assign({},p,{bgColor:v}))}}/>
       <Sl l="bg opacity" v={p.bgOpacity||0} mn={0} mx={1} st={.01}
         fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{bgOpacity:v}))}}/>
-      <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1}
-        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
+      {ex("seed",<Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1}
+        fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>)}
     </div>
   )
 }
@@ -4712,7 +4945,7 @@ function CreatorProps(props) {
     <div style={{padding:"12px 12px 4px"}}>
       {node.type==="uv-create" && <UVCreateP p={node.props} up={up}/>}
       {node.type==="solid"    && <SolidP p={node.props} up={up}/>}
-      {node.type==="shape"    && <ShapeP p={node.props} up={up}/>}
+      {node.type==="shape"    && <ShapeP p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
       {node.type==="gradient" && <GradP  p={node.props} up={up}/>}
       {node.type==="noise"    && <NoiseP p={node.props} up={up}/>}
       {node.type==="pattern"  && <PatP   p={node.props} up={up}/>}
