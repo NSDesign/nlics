@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Component } from "react"
+import { useState, useEffect, useRef, Component, cloneElement, Children } from "react"
 import { createPortal } from "react-dom"
 
 
@@ -437,8 +437,8 @@ function ExprEditor(props) {
   function toggleOpen(){ if(!open&&!tokens) handleChange([{type:'lit',value:0}]); setOpen(function(o){return !o}) }
 
   var icon=<ExprEditorIcon active={hasExpr} open={open} onToggle={toggleOpen}/>
-  var child=React.Children.only(props.children)
-  var enhanced=React.cloneElement(child,{exprActive:hasExpr,exprResult:result,exprIcon:icon})
+  var child=Children.only(props.children)
+  var enhanced=cloneElement(child,{exprActive:hasExpr,exprResult:result,exprIcon:icon})
 
   return (
     <div>
