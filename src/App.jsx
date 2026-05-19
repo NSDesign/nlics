@@ -94,6 +94,27 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .expr-clear{font-size:9px;color:var(--mu);background:none;border:none;cursor:pointer;padding:0 4px;min-height:0;font-family:'IBM Plex Mono',monospace;}
 .expr-clear:hover,.expr-clear:active{color:var(--dng);background:none;border:none;}
 .expr-locked input[type=range]{opacity:.3;pointer-events:none;}
+/* ── Ref picker sheet ── */
+.rp-scrim{position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.55);display:flex;flex-direction:column;justify-content:flex-end;}
+.rp-sheet{background:var(--pn);border-radius:18px 18px 0 0;max-height:78vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -8px 40px rgba(0,0,0,.7);}
+.rp-grip{width:40px;height:4px;background:var(--bd);border-radius:2px;margin:10px auto 0;flex-shrink:0;}
+.rp-hdr{display:flex;align-items:center;gap:8px;padding:10px 16px 10px;border-bottom:1px solid var(--bd);flex-shrink:0;}
+.rp-hdr-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--tx);flex:1;}
+.rp-hdr-sub{font-size:10px;color:var(--mu);font-family:'IBM Plex Mono',monospace;}
+.rp-back{background:none;border:none;color:var(--ac);font-size:11px;font-family:'IBM Plex Mono',monospace;cursor:pointer;padding:0 4px;min-height:0;}
+.rp-back:hover{color:var(--tx);background:none;border:none;}
+.rp-scroll{flex:1;overflow-y:auto;padding:8px 0 32px;}
+.rp-section-lbl{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.12em;padding:10px 16px 4px;font-family:'IBM Plex Mono',monospace;}
+.rp-row{display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;border-bottom:1px solid rgba(37,37,80,.6);transition:background .08s;}
+.rp-row:hover,.rp-row:active{background:var(--sf);}
+.rp-row.self{border-left:3px solid var(--ac);}
+.rp-row-name{flex:1;font-size:12px;color:var(--tx);font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rp-row-type{font-size:9px;color:var(--mu);background:var(--el);border:1px solid var(--bd);border-radius:10px;padding:2px 7px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;}
+.rp-prop-row{display:flex;align-items:center;padding:12px 16px;cursor:pointer;border-bottom:1px solid rgba(37,37,80,.6);transition:background .08s;gap:10px;}
+.rp-prop-row:hover,.rp-prop-row:active{background:var(--sf);}
+.rp-prop-lbl{flex:1;font-size:12px;color:var(--tx);font-family:'IBM Plex Mono',monospace;}
+.rp-prop-val{font-size:10px;color:var(--ac);font-family:'IBM Plex Mono',monospace;flex-shrink:0;}
+.rp-empty{padding:24px 16px;font-size:11px;color:var(--mu);font-family:'IBM Plex Mono',monospace;text-align:center;}
 .breadcrumb{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;overflow-x:auto;white-space:nowrap;}
 .bc-item{font-size:10px;color:var(--di);font-family:'IBM Plex Mono',monospace;cursor:pointer;text-decoration:underline;text-underline-offset:3px;white-space:nowrap;flex-shrink:0;}
 .blend-if-slider .noUi-target{background:var(--bg);border:1px solid var(--bd);border-radius:3px;box-shadow:none;height:8px;}
@@ -369,6 +390,118 @@ var COMMUTATIVE_MODES = {add:1,multiply:1,screen:1,difference:1,exclusion:1,dark
 
 // ── ExprEditor: expression value system (expVals) UI components ──────────────
 
+// Display labels for node types in ref picker
+var NODE_TYPE_LABEL = {
+  solid:'solid', shape:'shape', gradient:'gradient', noise:'noise',
+  pattern:'pattern', tile:'tile', image:'image', 'uv-create':'UV',
+  layers:'layers', blender:'blender', stack:function(n){return n.stackType||'stack'},
+  promoted:'tap', 'point-comp':'points', 'uv-distort':'UV distort',
+}
+function nodeTypeLabel(n) {
+  var v = NODE_TYPE_LABEL[n.type]
+  if(!v) return n.type
+  return typeof v==='function' ? v(n) : v
+}
+
+// Get current numeric value for a prop path from a node
+function getNodePropVal(node, propKey) {
+  // propKey is like "props.sz" or "props.cols"
+  var parts = propKey.split('.')
+  var cur = node
+  for(var i=0;i<parts.length;i++) cur = cur ? cur[parts[i]] : null
+  if(cur == null || typeof cur !== 'number') return null
+  return cur
+}
+
+// RefPickerSheet — two-step bottom sheet: node list → property list
+function RefPickerSheet(props) {
+  // props: open, nodes, selfId, onPick(nodeId, propKey), onClose
+  var stepSt=useState(0); var step=stepSt[0], setStep=stepSt[1]
+  var selSt=useState(null); var sel=selSt[0], setSel=selSt[1]
+
+  useEffect(function(){ if(!props.open){setStep(0);setSel(null)} },[props.open])
+
+  if(!props.open) return null
+
+  var nodes = props.nodes||[]
+  var selfNode = nodes.find(function(n){return n.id===props.selfId})
+  var otherCreators = nodes.filter(function(n){return n.section===1&&n.id!==props.selfId})
+  var otherComps = nodes.filter(function(n){return n.section===2&&n.id!==props.selfId})
+
+  function pickNode(node){ setSel(node); setStep(1) }
+  function pickProp(propKey){ props.onPick(sel.id, propKey); props.onClose() }
+
+  var selType = sel ? sel.type : null
+  var selProps = sel ? (EXPR_PROPS[selType]||[]) : []
+
+  function NodeRow(p) {
+    return (
+      <div className={'rp-row'+(p.isSelf?' self':'')} onClick={function(){pickNode(p.node)}}>
+        <span className="rp-row-name">{p.node.name||p.node.id}</span>
+        <span className="rp-row-type">{nodeTypeLabel(p.node)}</span>
+      </div>
+    )
+  }
+
+  return createPortal(
+    <div className="rp-scrim" onClick={props.onClose}>
+      <div className="rp-sheet" onClick={function(e){e.stopPropagation()}}>
+        <div className="rp-grip"/>
+        <div className="rp-hdr">
+          {step===1&&<button className="rp-back" onClick={function(){setStep(0);setSel(null)}}>← back</button>}
+          <span className="rp-hdr-title">
+            {step===0 ? 'Select item' : (sel.name||sel.id)}
+          </span>
+          {step===1&&<span className="rp-hdr-sub">{nodeTypeLabel(sel)}</span>}
+          <button className="rp-back" onClick={props.onClose}>✕</button>
+        </div>
+        <div className="rp-scroll">
+          {step===0&&(
+            <div>
+              {selfNode&&(
+                <div>
+                  <div className="rp-section-lbl">This item</div>
+                  <NodeRow node={selfNode} isSelf={true}/>
+                </div>
+              )}
+              {otherCreators.length>0&&(
+                <div>
+                  <div className="rp-section-lbl">Pixel creators</div>
+                  {otherCreators.map(function(n){return <NodeRow key={n.id} node={n}/>})}
+                </div>
+              )}
+              {otherComps.length>0&&(
+                <div>
+                  <div className="rp-section-lbl">Compositors</div>
+                  {otherComps.map(function(n){return <NodeRow key={n.id} node={n}/>})}
+                </div>
+              )}
+            </div>
+          )}
+          {step===1&&(
+            <div>
+              {selProps.length===0&&(
+                <div className="rp-empty">No registered properties for this item type yet.</div>
+              )}
+              {selProps.map(function(ep){
+                var cur = getNodePropVal(sel, ep.key)
+                var curStr = cur!=null ? (Number.isInteger(cur)?cur:Number(cur).toFixed(2)) : '—'
+                return (
+                  <div key={ep.key} className="rp-prop-row" onClick={function(){pickProp(ep.key)}}>
+                    <span className="rp-prop-lbl">{ep.label}</span>
+                    <span className="rp-prop-val">{curStr}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 function ExprEditorIcon(props) {
   return (
     <button className={'expr-icon'+(props.active?' active':'')}
@@ -472,6 +605,7 @@ function ExprPillRow(props) {
 // Props: paramKey, tokens (array|null), nodes, selfId, onExprChange(tokens|null)
 function ExprEditor(props) {
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
+  var pickerIdxSt=useState(null); var pickerIdx=pickerIdxSt[0], setPickerIdx=pickerIdxSt[1]
   var tokens=props.tokens&&props.tokens.length>0?props.tokens:null
   var hasExpr=!!tokens
   var result=hasExpr?resolveExpr(tokens,props.nodes||[],null):null
@@ -482,6 +616,16 @@ function ExprEditor(props) {
     if(!t) setOpen(false)
   }
   function toggleOpen(){ if(!open&&!tokens) handleChange([{type:'lit',value:0}]); setOpen(function(o){return !o}) }
+  function openPicker(tokenIdx){ setPickerIdx(tokenIdx) }
+  function closePicker(){ setPickerIdx(null) }
+  function onPick(nodeId, propKey){
+    var toks = tokens||[{type:'lit',value:0}]
+    var next = toks.map(function(t,i){
+      return i===pickerIdx ? {type:'ref',nodeId:nodeId,prop:propKey} : t
+    })
+    handleChange(next)
+    closePicker()
+  }
 
   var icon=<ExprEditorIcon active={hasExpr} open={open} onToggle={toggleOpen}/>
   var child=Children.only(props.children)
@@ -490,7 +634,8 @@ function ExprEditor(props) {
   return (
     <div>
       {enhanced}
-      {open&&<ExprPillRow tokens={tokens||[{type:'lit',value:0}]} onChange={handleChange}/>}
+      {open&&<ExprPillRow tokens={tokens||[{type:'lit',value:0}]} onChange={handleChange} onPickRef={openPicker}/>}
+      <RefPickerSheet open={pickerIdx!==null} nodes={props.nodes||[]} selfId={props.selfId} onPick={onPick} onClose={closePicker}/>
     </div>
   )
 }
