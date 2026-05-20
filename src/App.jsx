@@ -1202,6 +1202,23 @@ function octSimplex(x,y,oct,lac,gain,s) {
   for(var i=0;i<oct;i++){v+=simplex2(x*f,y*f,s+i)*a;a*=gain;f*=lac}
   return Math.max(0,Math.min(1,v+.5))
 }
+// ── True value noise — bilinear interpolation of random grid values ─────────
+// Distinct from simplex/perlin: blocky→smooth character, no gradient artifacts
+function valueNoise2(x,y,s){
+  var ix=Math.floor(x),iy=Math.floor(y)
+  var fx=x-ix,fy=y-iy
+  fx=fx*fx*(3-2*fx); fy=fy*fy*(3-2*fy)  // smoothstep
+  function rv(gx,gy){ return seededRand(((gx*1619+gy*31337+(s|0)*6971)>>>0))() }
+  var v00=rv(ix,iy),v10=rv(ix+1,iy),v01=rv(ix,iy+1),v11=rv(ix+1,iy+1)
+  return v00*(1-fx)*(1-fy)+v10*fx*(1-fy)+v01*(1-fx)*fy+v11*fx*fy
+}
+function octValue(x,y,oct,lac,gain,s){
+  lac=lac||2.08;gain=gain||.5
+  var v=0,a=.5,f=1
+  for(var i=0;i<oct;i++){v+=valueNoise2(x*f,y*f,s+i*997)*a;a*=gain;f*=lac}
+  return Math.max(0,Math.min(1,v+.25))
+}
+
 // ── Marble — sinusoidal bands + turbulence ────────────────────────────────────
 function marble(x,y,oct,s,freq,turb) {
   var t=turbulence(x,y,oct,s)
@@ -2024,7 +2041,7 @@ function gNoise(ctx,p,w,h) {
       case "simplex":    v=octSimplex(sx,sy,oct,lac,gain,seed); break
       case "marble":     v=marble(sx,sy,oct,seed,mFreq,mTurb); break
       case "wood":       v=wood(sx,sy,oct,seed,mFreq,mTurb); break
-      case "value":      v=octSimplex(sx,sy,oct,lac,gain,seed+777); break
+      case "value":      v=octValue(sx,sy,oct,lac,gain,seed); break
       case "crystal":    v=crystal(sx,sy,seed,p.wJitter,p.crystalMode||"f2f1"); break
       case "phasor":     v=phasor(sx,sy,seed,p.pFreq,p.pAngle,p.pBandwidth,oct); break
       case "white":      v=whiteNoise(px,py,seed,grainSize); break
@@ -2037,12 +2054,18 @@ function gNoise(ctx,p,w,h) {
       var sx2=sx,sy2=sy
       function nv(s){
         switch(nType){
-          case "perlin":    return octN(sx2,sy2,oct,s,lac,gain)
-          case "fbm":       return fbm(sx2,sy2,oct,lac,gain,s)
-          case "simplex":   return octSimplex(sx2,sy2,oct,lac,gain,s)
-          case "value":     return octSimplex(sx2,sy2,oct,lac,gain,s+777)
-          case "white":     return whiteNoise(px,py,s,grainSize)
-          default:          return octN(sx2,sy2,oct,s,lac,gain)
+          case "perlin":     return octN(sx2,sy2,oct,s,lac,gain)
+          case "fbm":        return fbm(sx2,sy2,oct,lac,gain,s)
+          case "turbulence": return turbulence(sx2,sy2,oct,s)
+          case "worley":     { var _w=worley(sx2,sy2,s,wJitter); return wMode==="f2"?1-_w:wMode==="f2f1"?crystal(sx2,sy2,s,wJitter,"f2f1"):_w }
+          case "simplex":    return octSimplex(sx2,sy2,oct,lac,gain,s)
+          case "value":      return octValue(sx2,sy2,oct,lac,gain,s)
+          case "marble":     return marble(sx2,sy2,oct,s,mFreq,mTurb)
+          case "wood":       return wood(sx2,sy2,oct,s,mFreq,mTurb)
+          case "crystal":    return crystal(sx2,sy2,s,p.wJitter,p.crystalMode||"f2f1")
+          case "phasor":     return phasor(sx2,sy2,s,p.pFreq,p.pAngle,p.pBandwidth,oct)
+          case "white":      return whiteNoise(px,py,s,grainSize)
+          default:           return octN(sx2,sy2,oct,s,lac,gain)
         }
       }
       var vr=Math.max(0,Math.min(1,nv(seed)))
