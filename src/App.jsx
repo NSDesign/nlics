@@ -1202,21 +1202,23 @@ function octSimplex(x,y,oct,lac,gain,s) {
   for(var i=0;i<oct;i++){v+=simplex2(x*f,y*f,s+i)*a;a*=gain;f*=lac}
   return Math.max(0,Math.min(1,v+.5))
 }
-// ── True value noise — bilinear interpolation of random grid values ─────────
-// Distinct from simplex/perlin: blocky→smooth character, no gradient artifacts
+// ── True value noise — bilinear interpolation of random grid scalars ─────────
+// Uses vh hash (same as perlin) but quintic smoothstep for rounder, pillowy
+// character. Lower default lacunarity (1.7) gives softer multi-scale structure.
 function valueNoise2(x,y,s){
   var ix=Math.floor(x),iy=Math.floor(y)
-  var fx=x-ix,fy=y-iy
-  fx=fx*fx*(3-2*fx); fy=fy*fy*(3-2*fy)  // smoothstep
-  function rv(gx,gy){ return seededRand(((gx*1619+gy*31337+(s|0)*6971)>>>0))() }
-  var v00=rv(ix,iy),v10=rv(ix+1,iy),v01=rv(ix,iy+1),v11=rv(ix+1,iy+1)
+  var fx=x-ix, fy=y-iy
+  // Quintic smoothstep: zero first + second derivative at 0/1 → no gradient seams
+  fx=fx*fx*fx*(fx*(fx*6-15)+10); fy=fy*fy*fy*(fy*(fy*6-15)+10)
+  var v00=vh(ix,   iy,   s), v10=vh(ix+1, iy,   s)
+  var v01=vh(ix,   iy+1, s), v11=vh(ix+1, iy+1, s)
   return v00*(1-fx)*(1-fy)+v10*fx*(1-fy)+v01*(1-fx)*fy+v11*fx*fy
 }
 function octValue(x,y,oct,lac,gain,s){
-  lac=lac||2.08;gain=gain||.5
-  var v=0,a=.5,f=1
-  for(var i=0;i<oct;i++){v+=valueNoise2(x*f,y*f,s+i*997)*a;a*=gain;f*=lac}
-  return Math.max(0,Math.min(1,v+.25))
+  lac=lac||1.7; gain=gain||.55
+  var v=0,a=.5,f=1,m=0
+  for(var i=0;i<oct;i++){v+=valueNoise2(x*f,y*f,s+i*997)*a;m+=a;a*=gain;f*=lac}
+  return Math.max(0,Math.min(1,v/m))
 }
 
 // ── Marble — sinusoidal bands + turbulence ────────────────────────────────────
