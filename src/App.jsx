@@ -18,6 +18,11 @@ const CSS_MOBILE = `
 ::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px;}
 input[type=range]{-webkit-appearance:none;width:100%;height:3px;background:var(--bd);border-radius:2px;outline:none;cursor:pointer;}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--ac);cursor:pointer;box-shadow:0 2px 8px rgba(36,204,168,.35);}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--ac);cursor:pointer;border:none;}
+.expr-ref input[type=range]::-webkit-slider-thumb{background:var(--lv);box-shadow:0 2px 8px rgba(176,96,240,.4);}
+.expr-ref input[type=range]::-moz-range-thumb{background:var(--lv);}
+.expr-val input[type=range]::-webkit-slider-thumb{background:var(--bg);box-shadow:0 0 0 2.5px rgba(176,96,240,.8),0 2px 6px rgba(0,0,0,.4);}
+.expr-val input[type=range]::-moz-range-thumb{background:var(--bg);border:2.5px solid rgba(176,96,240,.8);}
 select,input[type=text]{background:var(--el);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:12px;outline:none;width:100%;min-height:var(--tap-sm);}
 select:focus,input[type=text]:focus{border-color:var(--ac);}
 select{cursor:pointer;}
@@ -94,6 +99,8 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .expr-clear{font-size:9px;color:var(--mu);background:none;border:none;cursor:pointer;padding:0 4px;min-height:0;font-family:'IBM Plex Mono',monospace;}
 .expr-clear:hover,.expr-clear:active{color:var(--dng);background:none;border:none;}
 .expr-locked input[type=range]{opacity:.3;pointer-events:none;}
+.expr-ref.expr-locked input[type=range]::-webkit-slider-thumb{background:var(--lv);opacity:.35;}
+.expr-val.expr-locked input[type=range]::-webkit-slider-thumb{background:var(--bg);box-shadow:0 0 0 2.5px rgba(176,96,240,.5);}
 /* ── Ref picker sheet ── */
 .rp-scrim{position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.55);display:flex;flex-direction:column;justify-content:flex-end;}
 .rp-sheet{background:var(--pn);border-radius:18px 18px 0 0;max-height:78vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -8px 40px rgba(0,0,0,.7);}
@@ -464,6 +471,9 @@ function RefPickerSheet(props) {
                   <NodeRow node={selfNode} isSelf={true}/>
                 </div>
               )}
+              {!selfNode&&nodes.length===0&&(
+                <div className="rp-empty">No items in the scene yet.</div>
+              )}
               {otherCreators.length>0&&(
                 <div>
                   <div className="rp-section-lbl">Pixel creators</div>
@@ -484,11 +494,16 @@ function RefPickerSheet(props) {
                 <div className="rp-empty">No registered properties for this item type yet.</div>
               )}
               {selProps.map(function(ep){
+                // Prevent direct self-ref: same node + same prop key
+                var isSelfProp = sel.id===props.selfId && ep.key===props.selfPropKey
                 var cur = getNodePropVal(sel, ep.key)
                 var curStr = cur!=null ? (Number.isInteger(cur)?cur:Number(cur).toFixed(2)) : '—'
                 return (
-                  <div key={ep.key} className="rp-prop-row" onClick={function(){pickProp(ep.key)}}>
-                    <span className="rp-prop-lbl">{ep.label}</span>
+                  <div key={ep.key}
+                    className={'rp-prop-row'+(isSelfProp?' rp-prop-disabled':'')}
+                    onClick={isSelfProp?null:function(){pickProp(ep.key)}}
+                    style={isSelfProp?{opacity:.35,cursor:'not-allowed'}:{}}>
+                    <span className="rp-prop-lbl">{ep.label}{isSelfProp?' (self)':''}</span>
                     <span className="rp-prop-val">{curStr}</span>
                   </div>
                 )
@@ -557,7 +572,7 @@ function TermPill(props) {
     e.stopPropagation()
     var next = TERM_TYPES[(TERM_TYPES.indexOf(t.type)+1) % TERM_TYPES.length]
     if(next==='lit')  props.onChange({type:'lit',  value: t.value!=null ? t.value : (t.min!=null ? t.min : 0)})
-    if(next==='rand') props.onChange({type:'rand', min: 0, max: t.value!=null ? Math.max(1,Math.abs(t.value)) : 1, seed:null})
+    if(next==='rand') props.onChange({type:'rand', domain:'0-1', amount:1, offset:0, scale:1, min:0, max:t.value!=null?Math.max(1,Math.abs(t.value)):1, seedType:'free', seed:1})
     if(next==='ref')  props.onChange({type:'ref',  nodeId:null, prop:null})
   }
 
@@ -596,85 +611,108 @@ function TermPill(props) {
   )
 }
 
-// RandSettingsSheet — bottom sheet for editing rand token min/max/seed
+// RandSettingsSheet — full RandRow-style rand token editor
 function RandSettingsSheet(props) {
-  // props: open, token, onChange(newToken), onClose
-  var t = props.token || {type:'rand', min:0, max:1, seed:null}
-  var seedMode = t.seed!=null ? 'fixed' : 'free'
+  var t = props.token || {type:'rand',domain:'0-1',amount:1,offset:0,scale:1,min:0,max:1,seedType:'free',seed:1}
   if(!props.open) return null
+  var domain = t.domain||'0-1'
+  var seedType = t.seedType||'free'
+  var niStyle = {width:80,background:'var(--el)',border:'1px solid var(--bd)',borderRadius:6,
+    color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:12,textAlign:'right',
+    padding:'6px 10px',outline:'none'}
+  function up(patch){ props.onChange(Object.assign({},t,patch)) }
+  function Row(p){ return (
+    <div className="rp-prop-row" style={{cursor:'default'}}>
+      <div style={{flex:1}}>
+        <div className="rp-prop-lbl">{p.label}</div>
+        {p.desc&&<div style={{fontSize:9,color:'var(--mu)',fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>{p.desc}</div>}
+      </div>
+      {p.children}
+    </div>
+  )}
+  function ToggleRow(p){ return (
+    <div className="rp-prop-row" style={{cursor:'default'}}>
+      <div style={{flex:1}}>
+        <div className="rp-prop-lbl">{p.label}</div>
+        {p.desc&&<div style={{fontSize:9,color:'var(--mu)',fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>{p.desc}</div>}
+      </div>
+      <div style={{display:'flex',gap:6}}>
+        {p.options.map(function(opt){
+          var on=p.value===opt.v
+          return <button key={opt.v} onClick={function(){p.onChange(opt.v)}}
+            style={{padding:'5px 12px',fontSize:10,borderRadius:20,cursor:'pointer',
+              fontFamily:"'IBM Plex Mono',monospace",
+              background:on?'var(--sl)':'none',color:on?'var(--tx)':'var(--mu)',
+              border:'1px solid '+(on?'var(--lv)':'var(--bd)')}}>
+            {opt.l}
+          </button>
+        })}
+      </div>
+    </div>
+  )}
   return createPortal(
     <div className="rp-scrim" onClick={props.onClose}>
       <div className="rp-sheet" onClick={function(e){e.stopPropagation()}}>
         <div className="rp-grip"/>
         <div className="rp-hdr">
-          <span className="rp-hdr-title">Random range</span>
+          <span className="rp-hdr-title">Random</span>
+          <span className="rp-hdr-sub" style={{color:'var(--lv)'}}>~ per-render value</span>
           <button className="rp-back" onClick={props.onClose}>✕</button>
         </div>
-        <div className="rp-scroll" style={{padding:'12px 16px 40px'}}>
-          {/* Min */}
-          <div className="rp-prop-row" style={{cursor:'default'}}>
-            <span className="rp-prop-lbl">min</span>
-            <NumInput value={t.min!=null?t.min:0}
-              onChange={function(v){ props.onChange(Object.assign({},t,{min:v})) }}
-              style={{width:80,background:'var(--el)',border:'1px solid var(--bd)',borderRadius:6,
-                color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:12,
-                textAlign:'right',padding:'6px 10px',outline:'none'}}/>
-          </div>
-          {/* Max */}
-          <div className="rp-prop-row" style={{cursor:'default'}}>
-            <span className="rp-prop-lbl">max</span>
-            <NumInput value={t.max!=null?t.max:1}
-              onChange={function(v){ props.onChange(Object.assign({},t,{max:v})) }}
-              style={{width:80,background:'var(--el)',border:'1px solid var(--bd)',borderRadius:6,
-                color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:12,
-                textAlign:'right',padding:'6px 10px',outline:'none'}}/>
-          </div>
-          {/* Seed mode */}
-          <div className="rp-prop-row" style={{cursor:'default',alignItems:'flex-start',paddingTop:14}}>
-            <span className="rp-prop-lbl">seed</span>
-            <div style={{display:'flex',flexDirection:'column',gap:8,alignItems:'flex-end'}}>
-              <div style={{display:'flex',gap:6}}>
-                {['free','fixed'].map(function(m){
-                  var on=seedMode===m
-                  return <button key={m} onClick={function(){
-                      props.onChange(Object.assign({},t,{seed:m==='fixed'?(t.seed!=null?t.seed:1):null}))
-                    }}
-                    style={{padding:'5px 14px',fontSize:10,borderRadius:20,cursor:'pointer',
-                      fontFamily:"'IBM Plex Mono',monospace",
-                      background:on?'var(--sl)':'none',
-                      color:on?'var(--tx)':'var(--mu)',
-                      border:'1px solid '+(on?'var(--ac)':'var(--bd)')}}>
-                    {m==='free'?'∞ free':'🔒 fixed'}
-                  </button>
-                })}
-              </div>
-              {seedMode==='fixed'&&(
-                <NumInput value={t.seed!=null?t.seed:1}
-                  onChange={function(v){ props.onChange(Object.assign({},t,{seed:Math.round(v)||1})) }}
-                  style={{width:80,background:'var(--el)',border:'1px solid var(--bd)',borderRadius:6,
-                    color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:12,
-                    textAlign:'right',padding:'6px 10px',outline:'none'}}/>
-              )}
-              <span style={{fontSize:9,color:'var(--mu)',fontFamily:"'IBM Plex Mono',monospace",textAlign:'right',lineHeight:1.4}}>
-                {seedMode==='free'?'New value each render':'Same value every render'}
-              </span>
-            </div>
-          </div>
-          {/* Presets */}
-          <div style={{marginTop:16,borderTop:'1px solid var(--bd)',paddingTop:12}}>
-            <div className="rp-section-lbl" style={{padding:'0 0 8px'}}>Presets</div>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {[['0 → 1','0','1'],['−1 → 1','−1','1'],['0 → 360','0','360'],['−180 → 180','−180','180']].map(function(pr){
-                return <button key={pr[0]} onClick={function(){
-                    props.onChange(Object.assign({},t,{min:parseFloat(pr[1]),max:parseFloat(pr[2])}))
-                  }}
-                  style={{padding:'5px 12px',fontSize:10,borderRadius:20,cursor:'pointer',
-                    fontFamily:"'IBM Plex Mono',monospace",background:'var(--el)',
-                    color:'var(--di)',border:'1px solid var(--bd)'}}>
-                  {pr[0]}
-                </button>
-              })}
-            </div>
+        <div className="rp-scroll" style={{padding:'4px 16px 48px'}}>
+          <ToggleRow label="domain"
+            desc={domain==='0-1'?'Unipolar: output 0 to 1':'Bipolar: output −1 to 1'}
+            value={domain}
+            options={[{v:'0-1',l:'0→1'},{v:'-1-1',l:'−1→1'}]}
+            onChange={function(v){up({domain:v})}}/>
+          <Row label="amount" desc="Overall multiplier on the random output">
+            <NumInput value={t.amount!=null?t.amount:1} onChange={function(v){up({amount:v})}} style={niStyle}/>
+          </Row>
+          <Row label="offset" desc="Constant added before scaling">
+            <NumInput value={t.offset!=null?t.offset:0} onChange={function(v){up({offset:v})}} style={niStyle}/>
+          </Row>
+          <Row label="scale" desc="Range scale applied after offset">
+            <NumInput value={t.scale!=null?t.scale:1} onChange={function(v){up({scale:v})}} style={niStyle}/>
+          </Row>
+          <div style={{borderTop:'1px solid var(--bd)',margin:'4px 0'}}/>
+          <div className="rp-section-lbl" style={{padding:'8px 0 0'}}>Range (output clamp)</div>
+          <Row label="min">
+            <NumInput value={t.min!=null?t.min:(domain==='-1-1'?-1:0)} onChange={function(v){up({min:v})}} style={niStyle}/>
+          </Row>
+          <Row label="max">
+            <NumInput value={t.max!=null?t.max:1} onChange={function(v){up({max:v})}} style={niStyle}/>
+          </Row>
+          <div style={{borderTop:'1px solid var(--bd)',margin:'4px 0'}}/>
+          <div className="rp-section-lbl" style={{padding:'8px 0 0'}}>Seed</div>
+          <ToggleRow label="seed type"
+            desc={seedType==='free'?'New random value each render':'Reproducible: same value every render'}
+            value={seedType}
+            options={[{v:'free',l:'∞ free'},{v:'locked',l:'🔒 fixed'}]}
+            onChange={function(v){up({seedType:v})}}/>
+          {seedType==='locked'&&(
+            <Row label="seed value">
+              <NumInput value={t.seed!=null?t.seed:1}
+                onChange={function(v){up({seed:Math.max(1,Math.round(Math.abs(v)))||1})}}
+                style={niStyle}/>
+            </Row>
+          )}
+          <div style={{borderTop:'1px solid var(--bd)',margin:'12px 0 8px'}}/>
+          <div className="rp-section-lbl" style={{padding:'0 0 8px'}}>Presets</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {[
+              {l:'0→1',    p:{domain:'0-1', min:0,   max:1,   amount:1,offset:0,scale:1}},
+              {l:'−1→1',   p:{domain:'-1-1',min:-1,  max:1,   amount:1,offset:0,scale:1}},
+              {l:'0→360°', p:{domain:'0-1', min:0,   max:360, amount:360,offset:0,scale:1}},
+              {l:'±180°',  p:{domain:'-1-1',min:-180,max:180, amount:180,offset:0,scale:1}},
+              {l:'0→100%', p:{domain:'0-1', min:0,   max:1,   amount:1,offset:0,scale:1}},
+            ].map(function(pr){
+              return <button key={pr.l} onClick={function(){up(pr.p)}}
+                style={{padding:'5px 12px',fontSize:10,borderRadius:20,cursor:'pointer',
+                  fontFamily:"'IBM Plex Mono',monospace",background:'var(--el)',
+                  color:'var(--di)',border:'1px solid var(--bd)'}}>
+                {pr.l}
+              </button>
+            })}
           </div>
         </div>
       </div>
@@ -745,9 +783,12 @@ function ExprEditor(props) {
     handleChange(next)
   }
 
+  var exprType = hasExpr
+    ? (tokens.some(function(t){return t.type==='ref'&&t.nodeId}) ? 'ref' : 'val')
+    : null
   var icon=<ExprEditorIcon active={hasExpr} open={open} onToggle={toggleOpen}/>
   var child=Children.only(props.children)
-  var enhanced=cloneElement(child,{exprActive:hasExpr,exprResult:result,exprIcon:icon})
+  var enhanced=cloneElement(child,{exprActive:hasExpr,exprResult:result,exprIcon:icon,exprType:exprType})
   var randToken = randIdx!=null && tokens ? tokens[randIdx] : null
 
   return (
@@ -755,7 +796,7 @@ function ExprEditor(props) {
       {enhanced}
       {open&&<ExprPillRow tokens={tokens||[{type:'lit',value:0}]} onChange={handleChange}
         onPickRef={openPicker} onRandSettings={openRand}/>}
-      <RefPickerSheet open={pickerIdx!==null} nodes={props.nodes||[]} selfId={props.selfId} onPick={onPick} onClose={closePicker}/>
+      <RefPickerSheet open={pickerIdx!==null} nodes={props.nodes||[]} selfId={props.selfId} selfPropKey={"props."+props.paramKey} onPick={onPick} onClose={closePicker}/>
       <RandSettingsSheet open={randIdx!==null} token={randToken} onChange={onRandChange} onClose={closeRand}/>
     </div>
   )
@@ -2396,8 +2437,14 @@ function resolveExpr(tokens, nodes, visited) {
       if(acc===null) acc=val
       else if(pendingOp!==null){acc=applyOp(acc,pendingOp,val);pendingOp=null}
     } else if(t.type==='rand'){
-      var rMin=t.min!=null?t.min:0, rMax=t.max!=null?t.max:1
-      var rVal=t.seed!=null ? rMin+seededRand(t.seed)()*(rMax-rMin) : rMin+Math.random()*(rMax-rMin)
+      // Full RandRow-style formula: domain → amount → offset → scale → range clamp
+      var rBipolar = t.domain==='-1-1'
+      var rRaw = t.seedType==='locked' ? seededRand(t.seed!=null?t.seed:1)() : Math.random()
+      if(rBipolar) rRaw = rRaw*2-1
+      var rVal = (rRaw + (t.offset||0)) * (t.scale!=null?t.scale:1) * (t.amount!=null?t.amount:1)
+      var rLo = t.min!=null ? t.min : (rBipolar?-1:0)
+      var rHi = t.max!=null ? t.max : 1
+      rVal = Math.min(rHi, Math.max(rLo, rVal))
       if(acc===null) acc=rVal
       else if(pendingOp!==null){acc=applyOp(acc,pendingOp,rVal);pendingOp=null}
     } else if(t.type==='ref'){
@@ -3812,16 +3859,16 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       // Write modified _points back so gShape reads them via ctx.canvas._points
       ctx.canvas._points=cv._points
       ctx.clearRect(0,0,w,h)
-      gShape(ctx,resolveParams(n.props,cmap,n.id),w,h)
+      gShape(ctx,resolveParams(n.props,nodes,n.id),w,h)
       // Apply pixel-domain effects
       var pixEfxAll=shapeEfxAll.filter(function(e){return e.enabled&&e.domain!=="points"})
       if(pixEfxAll.length>0) applyEfxStk(ctx,pixEfxAll,cmap,cache,iC,w,h,new Set(vis),nodes)
     }
     else if(n.type==="uv-create")gUVCreate(ctx,n.props,w,h)
-    else if(n.type==="gradient")gGrad(ctx,resolveParams(n.props,cmap,n.id),w,h)
-    else if(n.type==="noise")gNoise(ctx,resolveParams(n.props,cmap,n.id),w,h)
-    else if(n.type==="pattern")gPat(ctx,resolveParams(n.props,cmap,n.id),w,h)
-    else if(n.type==="tile")gTile(ctx,resolveParams(n.props,cmap,n.id),cmap,cache,iC,w,h,vis)
+    else if(n.type==="gradient")gGrad(ctx,resolveParams(n.props,nodes,n.id),w,h)
+    else if(n.type==="noise")gNoise(ctx,resolveParams(n.props,nodes,n.id),w,h)
+    else if(n.type==="pattern")gPat(ctx,resolveParams(n.props,nodes,n.id),w,h)
+    else if(n.type==="tile")gTile(ctx,resolveParams(n.props,nodes,n.id),cmap,cache,iC,w,h,vis)
     else if(n.type==="grid"||n.type==="spiral"||n.type==="polar-grid"||n.type==="phyllotaxis"||n.type==="scatter"){
       // Route standalone geo nodes through same pre-pass+re-render as shape+shapeType nodes
       var gFn2={"grid":gGrid,"spiral":gSpiral,"polar-grid":gPolarGrid,"phyllotaxis":gPhyllotaxis,"scatter":gScatter}[n.type]
@@ -4233,7 +4280,7 @@ function Sl(props) {
     : disp
   var trackVal = locked ? (props.exprResult!=null?props.exprResult:props.v) : props.v
   return (
-    <PR l={props.l} className={locked?'expr-locked':''}>
+    <PR l={props.l} className={(locked?'expr-locked ':'')+(props.exprType?'expr-'+props.exprType:'')}>
       <input type="range" min={props.mn} max={props.mx} step={props.st||.01} value={trackVal}
         onChange={locked?function(){}:function(e){ props.fn(parseFloat(e.target.value)) }}
         readOnly={locked} style={{flex:1}}/>
