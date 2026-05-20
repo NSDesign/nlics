@@ -2107,7 +2107,14 @@ function gPat(ctx,p,w,h) {
 // ── Tile pattern engine ──────────────────────────────────────────────────────
 // Renders a source node and stamps it in a grid with per-cell randomisation.
 // Takes cmap/cache/iC/vis for source resolution — dispatched specially from compAny.
-function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
+// Module-level tile cell rand — mirrors gTile's local cellRnd but takes masterSeed explicitly.
+// Used by resolveExpr when context.col/row are available.
+function tileCellRnd(col, row, ch, propertySeed, masterSeed) {
+  var ps = propertySeed||0, ms = masterSeed||1
+  return seededRand(ms*13 + ps*997 + col*1009 + row*100003 + ch*7)
+}
+
+function gTile(ctx,p,cmap,cache,iC,w,h,vis,origProps,extNodes,extNodeId) {
   var refId=p.refId
   var cols=Math.max(1,Math.round(p.cols||4))
   var rows=Math.max(1,Math.round(p.rows||4))
@@ -2190,12 +2197,17 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis) {
   // a tile that bleeds off the right edge stamps a copy on the left, filling the gap.
   for(var row=0;row<rows;row++){
     for(var col=0;col<cols;col++){
+      // Re-resolve expVals rand expressions with cell context (col/row/masterSeed)
+      var pCell = origProps ? resolveParams(origProps, extNodes, extNodeId, {col:col,row:row,masterSeed:masterSeed}) : p
+      var cellBaseRot     = pCell.rotation!=null     ? pCell.rotation     : baseRot
+      var cellBaseScale   = pCell.scale!=null         ? pCell.scale         : baseScale
+      var cellBaseOpacity = pCell.opacity!=null       ? pCell.opacity       : baseOpacity
 
       // Per-cell RNG using source coordinates
-      var cRot  =rv2(cellRnd(col,row,0,p.rRotSeed),  p.rRotEn,  baseRot,   p.rRotSc,  p.rRotBi,  p.rRotAmt,  p.rRotOff)
-      var cScale=rv2(cellRnd(col,row,1,p.rScaleSeed),p.rScaleEn,baseScale, p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
+      var cRot  =rv2(cellRnd(col,row,0,p.rRotSeed),  p.rRotEn,  cellBaseRot,   p.rRotSc,  p.rRotBi,  p.rRotAmt,  p.rRotOff)
+      var cScale=rv2(cellRnd(col,row,1,p.rScaleSeed),p.rScaleEn,cellBaseScale, p.rScaleSc,p.rScaleBi,p.rScaleAmt,p.rScaleOff)
       // Opacity: unipolar (0,1) range reduces from base (negateUni=true) so it always darkens
-      var cOpacity=Math.max(0,Math.min(1,rv2(cellRnd(col,row,2,p.rOpSeed),p.rOpEn,baseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff,true)))
+      var cOpacity=Math.max(0,Math.min(1,rv2(cellRnd(col,row,2,p.rOpSeed),p.rOpEn,cellBaseOpacity,p.rOpSc,p.rOpBi,p.rOpAmt,p.rOpOff,true)))
       var cOX=rv2(cellRnd(col,row,3,p.rOxSeed),p.rOxEn,0,p.rOxSc,p.rOxBi,p.rOxAmt,p.rOxOff)*tileW
       var cOY=rv2(cellRnd(col,row,4,p.rOySeed),p.rOyEn,0,p.rOySc,p.rOyBi,p.rOyAmt,p.rOyOff)*tileH
       var doFlipX=flipXP>0&&cellRnd(col,row,5)()<flipXP
@@ -2417,7 +2429,7 @@ function applyRand(base, rnd, enabled, rangeScale, rangeBipolar, amount, offset)
 // ── expVals — expression value resolution engine ──────────────────────────────
 // resolveExpr: walks a token array [ {type,value/nodeId/prop}, … ] and returns
 // a number, or null on error / cycle / missing ref.
-function resolveExpr(tokens, nodes, visited) {
+function resolveExpr(tokens, nodes, visited, context) {
   if(!tokens||tokens.length===0) return null
   var nmap=null
   if(nodes&&nodes.length>0) nmap=nodes instanceof Map?nodes:new Map(nodes.map(function(n){return [n.id,n]}))
@@ -2439,7 +2451,15 @@ function resolveExpr(tokens, nodes, visited) {
     } else if(t.type==='rand'){
       // Full RandRow-style formula: domain → amount → offset → scale → range clamp
       var rBipolar = t.domain==='-1-1'
-      var rRaw = t.seedType==='locked' ? seededRand(t.seed!=null?t.seed:1)() : Math.random()
+      var rSeed = t.seed!=null ? t.seed : 1
+      // Context-aware seeding: tile cell (col/row) or point index, else simple rand
+      var rRaw
+      if(context && context.col!=null && context.row!=null)
+        rRaw = tileCellRnd(context.col, context.row, 0, rSeed, context.masterSeed||1)()
+      else if(context && context.pointIndex!=null)
+        rRaw = seededRand((context.pointIndex*2999 + rSeed) >>> 0)()
+      else
+        rRaw = t.seedType==='locked' ? seededRand(rSeed)() : Math.random()
       if(rBipolar) rRaw = rRaw*2-1
       var rVal = (rRaw + (t.offset||0)) * (t.scale!=null?t.scale:1) * (t.amount!=null?t.amount:1)
       var rLo = t.min!=null ? t.min : (rBipolar?-1:0)
@@ -2463,7 +2483,7 @@ function resolveExpr(tokens, nodes, visited) {
       var nestedExpr=container?container[lastKey+'_expr']:null
       if(nestedExpr&&nestedExpr.length>0){
         var nv2=new Set(vst);nv2.add(key)
-        raw=resolveExpr(nestedExpr,nodes,nv2)
+        raw=resolveExpr(nestedExpr,nodes,nv2,context)
         if(raw===null) return null
       }
       if(acc===null) acc=raw
@@ -2478,7 +2498,7 @@ function resolveExpr(tokens, nodes, visited) {
 
 // resolveParams: returns a new props/params object with all _expr keys resolved.
 // Fast-exits if no _expr keys present. Call at the top of each renderer.
-function resolveParams(p, nodes, nodeId) {
+function resolveParams(p, nodes, nodeId, context) {
   var ks=Object.keys(p),hasExpr=false
   for(var i=0;i<ks.length;i++){var k=ks[i];if(k.length>5&&k.slice(-5)==='_expr'&&p[k]&&p[k].length>0){hasExpr=true;break}}
   if(!hasExpr) return p
@@ -2488,7 +2508,7 @@ function resolveParams(p, nodes, nodeId) {
     if(k2.length>5&&k2.slice(-5)==='_expr'&&p[k2]&&p[k2].length>0){
       var baseKey=k2.slice(0,-5)
       var visited=new Set(nodeId?[nodeId+':'+baseKey]:[])
-      var val=resolveExpr(p[k2],nodes,visited)
+      var val=resolveExpr(p[k2],nodes,visited,context)
       if(val!==null) out[baseKey]=val
     }
   }
@@ -3868,7 +3888,7 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
     else if(n.type==="gradient")gGrad(ctx,resolveParams(n.props,nodes,n.id),w,h)
     else if(n.type==="noise")gNoise(ctx,resolveParams(n.props,nodes,n.id),w,h)
     else if(n.type==="pattern")gPat(ctx,resolveParams(n.props,nodes,n.id),w,h)
-    else if(n.type==="tile")gTile(ctx,resolveParams(n.props,nodes,n.id),cmap,cache,iC,w,h,vis)
+    else if(n.type==="tile")gTile(ctx,resolveParams(n.props,nodes,n.id,null),cmap,cache,iC,w,h,vis,n.props,nodes,n.id)
     else if(n.type==="grid"||n.type==="spiral"||n.type==="polar-grid"||n.type==="phyllotaxis"||n.type==="scatter"){
       // Route standalone geo nodes through same pre-pass+re-render as shape+shapeType nodes
       var gFn2={"grid":gGrid,"spiral":gSpiral,"polar-grid":gPolarGrid,"phyllotaxis":gPhyllotaxis,"scatter":gScatter}[n.type]
