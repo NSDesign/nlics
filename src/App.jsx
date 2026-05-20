@@ -546,9 +546,10 @@ var TERM_BADGE = {lit:'#', rand:'~', ref:'@'}
 function NumInput(props) {
   var raw = useState(String(props.value!=null?props.value:0))
   var str = raw[0], setStr = raw[1]
-  // Sync external value changes (e.g. type cycle) but not while user is mid-edit
+  var editing = useRef(false)
   var prev = useRef(props.value)
-  if(props.value !== prev.current && parseFloat(str) !== props.value) {
+  // Sync external value only when not actively editing
+  if(!editing.current && props.value !== prev.current) {
     prev.current = props.value
     setStr(String(props.value!=null?props.value:0))
   }
@@ -558,9 +559,13 @@ function NumInput(props) {
   }
   return (
     <input type="text" inputMode="decimal" value={str} style={props.style}
-      onChange={function(e){ setStr(e.target.value); commit(e.target.value) }}
-      onFocus={function(e){ e.target.select() }}
-      onBlur={function(){ commit(str); setStr(String(props.value!=null?props.value:0)) }}
+      onChange={function(e){ setStr(e.target.value) }}
+      onFocus={function(e){ editing.current=true; e.target.select() }}
+      onBlur={function(){ editing.current=false; commit(str); setStr(String(prev.current)) }}
+      onKeyDown={function(e){
+        if(e.key==='Enter'){ commit(str); e.target.blur() }
+        if(e.key==='Escape'){ editing.current=false; setStr(String(prev.current)); e.target.blur() }
+      }}
     />
   )
 }
@@ -612,25 +617,30 @@ function TermPill(props) {
 }
 
 // RandSettingsSheet — full RandRow-style rand token editor
-function RandSettingsSheet(props) {
-  var t = props.token || {type:'rand',domain:'0-1',amount:1,offset:0,scale:1,min:0,max:1,seedType:'free',seed:1}
-  if(!props.open) return null
-  var domain = t.domain||'0-1'
-  var seedType = t.seedType||'free'
-  var niStyle = {width:80,background:'var(--el)',border:'1px solid var(--bd)',borderRadius:6,
-    color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:12,textAlign:'right',
-    padding:'6px 10px',outline:'none'}
-  function up(patch){ props.onChange(Object.assign({},t,patch)) }
-  function Row(p){ return (
-    <div className="rp-prop-row" style={{cursor:'default'}}>
-      <div style={{flex:1}}>
-        <div className="rp-prop-lbl">{p.label}</div>
-        {p.desc&&<div style={{fontSize:9,color:'var(--mu)',fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>{p.desc}</div>}
+// RandSettingsSheet sub-components defined at module level (prevents remount-on-render)
+function RssRow(p) {
+  return (
+    <div className="rp-prop-row" style={{cursor:'default',flexDirection:'column',alignItems:'stretch',gap:4,paddingBottom:10}}>
+      <div style={{display:'flex',alignItems:'center'}}>
+        <div style={{flex:1}}>
+          <span className="rp-prop-lbl">{p.label}</span>
+          {p.desc&&<span style={{fontSize:9,color:'var(--mu)',fontFamily:"'IBM Plex Mono',monospace",marginLeft:6}}>{p.desc}</span>}
+        </div>
+        <NumInput value={p.value} onChange={p.onChange}
+          style={{width:58,background:'var(--el)',border:'1px solid var(--bd)',borderRadius:6,
+            color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:11,
+            textAlign:'right',padding:'4px 8px',outline:'none'}}/>
       </div>
-      {p.children}
+      {p.slMin!=null&&(
+        <input type="range" min={p.slMin} max={p.slMax} step={p.slStep||0.01} value={p.value}
+          onChange={function(e){p.onChange(parseFloat(e.target.value))}}
+          style={{width:'100%',marginTop:2}}/>
+      )}
     </div>
-  )}
-  function ToggleRow(p){ return (
+  )
+}
+function RssToggle(p) {
+  return (
     <div className="rp-prop-row" style={{cursor:'default'}}>
       <div style={{flex:1}}>
         <div className="rp-prop-lbl">{p.label}</div>
@@ -649,7 +659,15 @@ function RandSettingsSheet(props) {
         })}
       </div>
     </div>
-  )}
+  )
+}
+
+function RandSettingsSheet(props) {
+  var t = props.token || {type:'rand',domain:'0-1',amount:1,offset:0,scale:1,min:0,max:1,seedType:'free',seed:1}
+  if(!props.open) return null
+  var domain = t.domain||'0-1'
+  var seedType = t.seedType||'free'
+  function up(patch){ props.onChange(Object.assign({},t,patch)) }
   return createPortal(
     <div className="rp-scrim" onClick={props.onClose}>
       <div className="rp-sheet" onClick={function(e){e.stopPropagation()}}>
@@ -660,41 +678,40 @@ function RandSettingsSheet(props) {
           <button className="rp-back" onClick={props.onClose}>✕</button>
         </div>
         <div className="rp-scroll" style={{padding:'4px 16px 48px'}}>
-          <ToggleRow label="domain"
-            desc={domain==='0-1'?'Unipolar: output 0 to 1':'Bipolar: output −1 to 1'}
+          <RssToggle label="domain"
+            desc={domain==='0-1'?'Unipolar 0→1':'Bipolar −1→1'}
             value={domain}
             options={[{v:'0-1',l:'0→1'},{v:'-1-1',l:'−1→1'}]}
             onChange={function(v){up({domain:v})}}/>
-          <Row label="amount" desc="Overall multiplier on the random output">
-            <NumInput value={t.amount!=null?t.amount:1} onChange={function(v){up({amount:v})}} style={niStyle}/>
-          </Row>
-          <Row label="offset" desc="Constant added before scaling">
-            <NumInput value={t.offset!=null?t.offset:0} onChange={function(v){up({offset:v})}} style={niStyle}/>
-          </Row>
-          <Row label="scale" desc="Range scale applied after offset">
-            <NumInput value={t.scale!=null?t.scale:1} onChange={function(v){up({scale:v})}} style={niStyle}/>
-          </Row>
+          <RssRow label="amount" desc="multiplier"
+            value={t.amount!=null?t.amount:1} onChange={function(v){up({amount:v})}}
+            slMin={0} slMax={5} slStep={0.01}/>
+          <RssRow label="offset" desc="added pre-scale"
+            value={t.offset!=null?t.offset:0} onChange={function(v){up({offset:v})}}
+            slMin={-2} slMax={2} slStep={0.01}/>
+          <RssRow label="scale" desc="range scale"
+            value={t.scale!=null?t.scale:1} onChange={function(v){up({scale:v})}}
+            slMin={0} slMax={3} slStep={0.01}/>
           <div style={{borderTop:'1px solid var(--bd)',margin:'4px 0'}}/>
-          <div className="rp-section-lbl" style={{padding:'8px 0 0'}}>Range (output clamp)</div>
-          <Row label="min">
-            <NumInput value={t.min!=null?t.min:(domain==='-1-1'?-1:0)} onChange={function(v){up({min:v})}} style={niStyle}/>
-          </Row>
-          <Row label="max">
-            <NumInput value={t.max!=null?t.max:1} onChange={function(v){up({max:v})}} style={niStyle}/>
-          </Row>
+          <div className="rp-section-lbl" style={{padding:'8px 0 0'}}>Output clamp</div>
+          <RssRow label="min"
+            value={t.min!=null?t.min:(domain==='-1-1'?-1:0)} onChange={function(v){up({min:v})}}
+            slMin={domain==='-1-1'?-360:-360} slMax={360} slStep={0.01}/>
+          <RssRow label="max"
+            value={t.max!=null?t.max:1} onChange={function(v){up({max:v})}}
+            slMin={domain==='-1-1'?-360:-360} slMax={360} slStep={0.01}/>
           <div style={{borderTop:'1px solid var(--bd)',margin:'4px 0'}}/>
           <div className="rp-section-lbl" style={{padding:'8px 0 0'}}>Seed</div>
-          <ToggleRow label="seed type"
-            desc={seedType==='free'?'New random value each render':'Reproducible: same value every render'}
+          <RssToggle label="seed type"
+            desc={seedType==='free'?'New value each render':'Same value every render'}
             value={seedType}
             options={[{v:'free',l:'∞ free'},{v:'locked',l:'🔒 fixed'}]}
             onChange={function(v){up({seedType:v})}}/>
           {seedType==='locked'&&(
-            <Row label="seed value">
-              <NumInput value={t.seed!=null?t.seed:1}
-                onChange={function(v){up({seed:Math.max(1,Math.round(Math.abs(v)))||1})}}
-                style={niStyle}/>
-            </Row>
+            <RssRow label="seed value"
+              value={t.seed!=null?t.seed:1}
+              onChange={function(v){up({seed:Math.max(1,Math.round(Math.abs(v)))||1})}}
+              slMin={1} slMax={9999} slStep={1}/>
           )}
           <div style={{borderTop:'1px solid var(--bd)',margin:'12px 0 8px'}}/>
           <div className="rp-section-lbl" style={{padding:'0 0 8px'}}>Presets</div>
