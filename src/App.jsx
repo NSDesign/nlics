@@ -2171,7 +2171,7 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis,origProps,extNodes,extNodeId) {
   var srcCv=null
   if(refId&&cmap){
     var sW2=Math.round(stampW*2), sH2=Math.round(stampH*2)
-    var rawHi=compAny(refId,cmap,cache,iC,sW2,sH2,new Set(vis||[]))
+    var rawHi=compAny(refId,cmap,cache,iC,sW2,sH2,new Set(vis||[]),extNodes||[])
     if(rawHi){
       // Downscale to stamp size for SSAA quality
       var sCV=document.createElement("canvas"); sCV.width=Math.round(stampW); sCV.height=Math.round(stampH)
@@ -2414,6 +2414,7 @@ function gScatter(ctx,p,w,h) {
 }
 
 // Seeded pseudo-random for reproducible jitter/variation. LCG — fast, good enough.
+var _renderNodes = [] // Set before each render pass; used as fallback in compAny
 function seededRand(seed) {
   var s = (seed * 1664525 + 1013904223) & 0xFFFFFFFF
   return function() { s = (s * 1664525 + 1013904223) & 0xFFFFFFFF; return (s >>> 0) / 0xFFFFFFFF }
@@ -2718,7 +2719,7 @@ function applyBack(pre,post,mv,opacity,mode,blendChannels,blendIf) {
     if(!ch||ch.A) pre[i+3]=Math.round(pre[i+3]*(1-m)+post[i+3]*m)
   }
 }
-function compMasks(stack,cmap,cache,iC,w,h,vis) {
+function compMasks(stack,cmap,cache,iC,w,h,vis,nodes) {
   var out=new Float32Array(w*h).fill(1),any=false
   // Bottom-to-top iteration: last in list applied first, first in list applied last
   for(var mi=stack.length-1;mi>=0;mi--){
@@ -3121,7 +3122,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
       if(ctx.canvas&&ctx.canvas._points){
         // For uv-distort in pt mode: pre-render UV source and attach to efx
         if(efx.type==="uv-distort"&&efx.params&&efx.params.uvRefId&&cmap){
-          efx._uvCanvas=compAny(efx.params.uvRefId,cmap,new Map(),iC,w,h,new Set(vis))||null
+          efx._uvCanvas=compAny(efx.params.uvRefId,cmap,new Map(),iC,w,h,new Set(vis),nodesList||[])||null
         }
         ctx.canvas._points=applyEfxToPoints(ctx.canvas._points,efx,w,h)
       }
@@ -3157,7 +3158,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
           var satTH=satTW
           var satRendered=satSrcs.map(function(s){
             if(!s.refId)return null
-            var sc=compAny(s.refId,cmap,new Map(cache),iC,satTW*2,satTH*2,new Set(vis))
+            var sc=compAny(s.refId,cmap,new Map(cache),iC,satTW*2,satTH*2,new Set(vis),nodesList||[])
             if(!sc)return null
             var sv=document.createElement("canvas");sv.width=satTW;sv.height=satTH
             var sx2=sv.getContext("2d");sx2.imageSmoothingEnabled=true;sx2.imageSmoothingQuality="high"
@@ -3263,7 +3264,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
     if(efx.type==="uv-texture"){
       var texId2=efx.params&&efx.params.texRefId
       if(texId2&&cmap){
-        var texCv2=compAny(texId2,cmap,new Map(cache),iC,w,h,new Set(vis))
+        var texCv2=compAny(texId2,cmap,new Map(cache),iC,w,h,new Set(vis),nodesList||[])
         if(texCv2){
           var uvMapD=ctx.getImageData(0,0,w,h)        // current canvas = UV coordinate map
           var texSrc=texCv2.getContext("2d").getImageData(0,0,w,h).data  // texture to sample
@@ -3316,7 +3317,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
     if (efx.type==="uv-distort") {
       var uvSrcId=efx.params&&efx.params.uvRefId
       if(uvSrcId){
-        var uvCv=compAny(uvSrcId,cmap,new Map(cache),iC,w,h,new Set(vis))
+        var uvCv=compAny(uvSrcId,cmap,new Map(cache),iC,w,h,new Set(vis),nodesList||[])
         if(uvCv){
           var uvD=uvCv.getContext("2d").getImageData(0,0,w,h).data
           var srcImg=ctx.getImageData(0,0,w,h)
@@ -3460,7 +3461,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
     ctx.restore()
   })
 }
-function maskToAlpha(ctx,stack,cmap,cache,iC,w,h,vis) {
+function maskToAlpha(ctx,stack,cmap,cache,iC,w,h,vis,nodes) {
   var mv=compMasks(stack,cmap,cache,iC,w,h,vis);if(!mv)return
   var id=ctx.getImageData(0,0,w,h)
   for(var i=0;i<w*h;i++)id.data[i*4+3]=Math.round(id.data[i*4+3]*mv[i])
@@ -3490,14 +3491,14 @@ function effectiveMatte(sourceCv,maskStack,cmap,cache,iC,w,h,vis){
   }
   return out
 }
-function resolveSlot(slot,cmap,cache,iC,w,h,vis) {
+function resolveSlot(slot,cmap,cache,iC,w,h,vis,nodes) {
   if(!slot||!slot.refId||vis.has(slot.refId))return null
   if(slot.enabled===false)return null
-  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis));if(!base)return null
+  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis),nodes||[]);if(!base)return null
   var cv=clCv(base,w,h),ctx=cv.getContext("2d")
   if(slot.effectStack&&slot.effectStack.length>0){
     var hadPtEfx=slot.effectStack.some(function(e){return e.enabled&&e.domain==="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
-    applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis),nodes)
+    applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis),nodes||[])
     if(hadPtEfx&&cv._shapeProps&&cv._points&&cv._points.length>0){
       ctx.clearRect(0,0,w,h); gShape(ctx,cv._shapeProps,w,h)
     }
@@ -3508,10 +3509,10 @@ function resolveSlot(slot,cmap,cache,iC,w,h,vis) {
 // Like resolveSlot but WITHOUT applying maskToAlpha — pixels+effects only.
 // Used by blender/layer comp to get source pixels for visual blend while
 // computing matte separately via slotEffectiveMatte.
-function resolveSlotBase(slot,cmap,cache,iC,w,h,vis) {
+function resolveSlotBase(slot,cmap,cache,iC,w,h,vis,nodes) {
   if(!slot||!slot.refId||vis.has(slot.refId))return null
   if(slot.enabled===false)return null
-  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis));if(!base)return null
+  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis),nodes||[]);if(!base)return null
   var cv=clCv(base,w,h),ctx=cv.getContext("2d")
   // Fill opacity: affects source pixels before effects
   if(slot.fillOpacity!=null&&slot.fillOpacity<100){
@@ -3526,7 +3527,7 @@ function resolveSlotBase(slot,cmap,cache,iC,w,h,vis) {
 // Compute effective matte for a slot: source_alpha × maskStack result.
 // Returns Float32Array[w*h]. If no refId, returns null (no contribution).
 // If refId but no maskStack, returns source alpha channel.
-function slotEffectiveMatte(slot,baseCv,cmap,cache,iC,w,h,vis){
+function slotEffectiveMatte(slot,baseCv,cmap,cache,iC,w,h,vis,nodes){
   if(!slot||!slot.refId) return null
   var mv=slot.maskStack&&slot.maskStack.length>0
     ? compMasks(slot.maskStack,cmap,cache,iC,w,h,new Set(vis)) : null
@@ -3598,7 +3599,7 @@ function blendCv(ctx,srcCv,mode,amount,w,h,maskMode,maskAmount,blendChannels,ble
 }
 // Partially evaluate an effect stack up to and including a given effect id.
 // withSub: if true, also apply that effect's own maskStack (for promoted taps that include the masked result).
-function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
+function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis,nodes) {
   // Find the index of afterId in the stack (display order top-to-bottom)
   var afterIdx=-1; for(var fi=0;fi<stack.length;fi++){if(stack[fi].id===afterId){afterIdx=fi;break}}
   // Iterate bottom-to-top, stopping at afterIdx (inclusive)
@@ -3619,12 +3620,12 @@ function applyEfxStkUpTo(ctx,stack,afterId,withSub,cmap,cache,iC,w,h,vis) {
 }
 // Partially evaluate a mask stack up to and including a given mask id.
 // Returns the Float32Array of mask values at that point.
-function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
+function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis,nodes){
   var out=new Float32Array(w*h).fill(1),any=false
   var afterIdx=-1; for(var fi=0;fi<stack.length;fi++){if(stack[fi].id===afterId){afterIdx=fi;break}}
   for(var mi=stack.length-1;mi>=(afterIdx>=0?afterIdx:0);mi--){
     var mk=stack[mi];if(mk.enabled===false||!mk.refId||vis.has(mk.refId))continue
-    var cv=compAny(mk.refId,cmap,cache,iC,w,h,new Set(vis));if(!cv)continue;any=true
+    var cv=compAny(mk.refId,cmap,cache,iC,w,h,new Set(vis),nodes||[]);if(!cv)continue;any=true
     var useSub = withSub || mk.id!==afterId
     var chU=mk.channel||"luminosity"
     if(useSub&&mk.effectStack&&mk.effectStack.length>0){
@@ -3669,7 +3670,7 @@ function compMasksUpTo(stack,afterId,withSub,cmap,cache,iC,w,h,vis){
 }
 // Resolve a tap path for a promoted node — partially evaluates the chain
 // and returns the canvas state at the exact promoted point.
-function compPromoted(n,cmap,cache,iC,w,h,vis){
+function compPromoted(n,cmap,cache,iC,w,h,vis,nodes){
   var tp=n.tapPath; if(!tp||!tp.nodeId||vis.has(tp.nodeId))return null
   var srcNode=cmap.get(tp.nodeId); if(!srcNode||!srcNode.enabled)return null
 
@@ -3696,7 +3697,7 @@ function compPromoted(n,cmap,cache,iC,w,h,vis){
 
   // Output stacks — tap into the node's outEfx or outMask after full composition
   else if(slotKey==="outEfx"||slotKey==="outMask"){
-    var baseOut=compAny(tp.nodeId,cmap,cache,iC,w,h,new Set(vis))
+    var baseOut=compAny(tp.nodeId,cmap,cache,iC,w,h,new Set(vis),nodes||[])
     if(!baseOut)return null
     var cv=clCv(baseOut,w,h),ctx=cv.getContext("2d")
     if(slotKey==="outEfx"&&srcNode.outEfx&&srcNode.outEfx.length>0){
@@ -3711,7 +3712,7 @@ function compPromoted(n,cmap,cache,iC,w,h,vis){
   if(!slot||!slot.refId||vis.has(slot.refId))return null
 
   // ── Resolve base source and partially apply the stack ────────────────────
-  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis));if(!base)return null
+  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis),nodes||[]);if(!base)return null
   var cv2=clCv(base,w,h),ctx2=cv2.getContext("2d")
   if(tp.stackType==="effect"&&slot.effectStack&&slot.effectStack.length>0){
     applyEfxStkUpTo(ctx2,slot.effectStack,tp.afterId,tp.withSub,cmap,cache,iC,w,h,new Set(vis))
@@ -3730,13 +3731,13 @@ function compPromoted(n,cmap,cache,iC,w,h,vis){
   return cv2
 }
 
-function compPointComp(n,cmap,cache,iC,w,h,vis) {
+function compPointComp(n,cmap,cache,iC,w,h,vis,nodes) {
   var cv=mkCv(w,h), ctx=cv.getContext("2d")
   // ── 1. Single source (refId direct on node; legacy fallback: sources[0]) ─
   var pts=[]
   var srcId=n.refId||(n.sources&&n.sources[0]&&n.sources[0].refId)
   if(srcId&&!vis.has(srcId)){
-    var srcCv=compAny(srcId,cmap,cache,iC,w,h,new Set(vis))
+    var srcCv=compAny(srcId,cmap,cache,iC,w,h,new Set(vis),nodes||[])
     if(srcCv&&srcCv._points&&srcCv._points.length){
       pts=srcCv._points.map(function(p){return Object.assign({},p)})
       var srcIso=n.isolate||(n.sources&&n.sources[0]&&n.sources[0].isolate)||[]
@@ -3845,7 +3846,8 @@ function compPointComp(n,cmap,cache,iC,w,h,vis) {
   return cv
 }
 
-function compAny(id,cmap,cache,iC,w,h,vis) {
+function compAny(id,cmap,cache,iC,w,h,vis,nodes) {
+  if(!nodes) nodes=_renderNodes
   if(!vis)vis=new Set()
   if(cache.has(id))return cache.get(id)
   if(vis.has(id))return null
@@ -3879,10 +3881,10 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
       // Write modified _points back so gShape reads them via ctx.canvas._points
       ctx.canvas._points=cv._points
       ctx.clearRect(0,0,w,h)
-      gShape(ctx,resolveParams(n.props,nodes,n.id),w,h)
+      gShape(ctx,resolveParams(n.props,nodes,n.id,null),w,h)
       // Apply pixel-domain effects
       var pixEfxAll=shapeEfxAll.filter(function(e){return e.enabled&&e.domain!=="points"})
-      if(pixEfxAll.length>0) applyEfxStk(ctx,pixEfxAll,cmap,cache,iC,w,h,new Set(vis),nodes)
+      if(pixEfxAll.length>0) applyEfxStk(ctx,pixEfxAll,cmap,cache,iC,w,h,new Set(vis),nodes||[])
     }
     else if(n.type==="uv-create")gUVCreate(ctx,n.props,w,h)
     else if(n.type==="gradient")gGrad(ctx,resolveParams(n.props,nodes,n.id),w,h)
@@ -4041,8 +4043,8 @@ function compAny(id,cmap,cache,iC,w,h,vis) {
   var cv2=mkCv(w,h),ctx2=cv2.getContext("2d")
   var cAb=resolveSlotBase(n.inputA,cmap,cache,iC,w,h,new Set(vis))
   var cBb=resolveSlotBase(n.inputB,cmap,cache,iC,w,h,new Set(vis))
-  var mA=slotEffectiveMatte(n.inputA,cAb,cmap,cache,iC,w,h,new Set(vis))
-  var mB=slotEffectiveMatte(n.inputB,cBb,cmap,cache,iC,w,h,new Set(vis))
+  var mA=slotEffectiveMatte(n.inputA,cAb,cmap,cache,iC,w,h,new Set(vis),nodes||[])
+  var mB=slotEffectiveMatte(n.inputB,cBb,cmap,cache,iC,w,h,new Set(vis),nodes||[])
   // Apply mattes to pixel alpha for visual compositing
   function applyMatte(baseCv, matte){
     if(!baseCv) return null
@@ -4093,6 +4095,7 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
   try {
     var ctx=canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height)
     var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
+    _renderNodes=nodes
     var w=canvas.width,h=canvas.height
     if(dispSlot){
       // Display a specific input slot — pixels or mask
@@ -4165,8 +4168,8 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
           // For blender: compute combined matte same as engine (both inputs combined)
           var dispCvA=mn.inputA&&mn.inputA.refId?compAny(mn.inputA.refId,cmap,new Map(),iC,w,h,new Set()):null
           var dispCvB=mn.inputB&&mn.inputB.refId?compAny(mn.inputB.refId,cmap,new Map(),iC,w,h,new Set()):null
-          var dispMA=dispCvA?slotEffectiveMatte(mn.inputA,dispCvA,cmap,new Map(),iC,w,h,new Set()):null
-          var dispMB=dispCvB?slotEffectiveMatte(mn.inputB,dispCvB,cmap,new Map(),iC,w,h,new Set()):null
+          var dispMA=dispCvA?slotEffectiveMatte(mn.inputA,dispCvA,cmap,new Map(),iC,w,h,new Set(),[]):null
+          var dispMB=dispCvB?slotEffectiveMatte(mn.inputB,dispCvB,cmap,new Map(),iC,w,h,new Set(),[]):null
           if(dispMA||dispMB){
             var dispMf=(mn.maskAmount==null?100:mn.maskAmount)/100
             var dispMblend=ALPHA_BM[mn.maskMode||"add"]||ALPHA_BM["add"]
@@ -4237,7 +4240,7 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
         // §1 creators: show intrinsic alpha channel as matte
         // (shape fillOpacity, gradient alpha stops, image transparency, etc.)
         if(!em2&&mn.section===1){
-          var pcCv=compAny(dispId,cmap,new Map(),iC,w,h,new Set())
+          var pcCv=compAny(dispId,cmap,new Map(),iC,w,h,new Set(),nodes||[])
           if(pcCv){
             var pcId=pcCv.getContext("2d").getImageData(0,0,w,h)
             em2=new Float32Array(w*h)
