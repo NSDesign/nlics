@@ -527,10 +527,31 @@ function OpPill(props) {
 var TERM_TYPES = ['lit','rand','ref']
 var TERM_BADGE = {lit:'#', rand:'~', ref:'@'}
 
+// NumInput: controlled-like input that preserves intermediate typed states (e.g. "-", "0.")
+function NumInput(props) {
+  var raw = useState(String(props.value!=null?props.value:0))
+  var str = raw[0], setStr = raw[1]
+  // Sync external value changes (e.g. type cycle) but not while user is mid-edit
+  var prev = useRef(props.value)
+  if(props.value !== prev.current && parseFloat(str) !== props.value) {
+    prev.current = props.value
+    setStr(String(props.value!=null?props.value:0))
+  }
+  function commit(s) {
+    var v = parseFloat(s)
+    if(!isNaN(v) && isFinite(v)) { prev.current = v; props.onChange(v) }
+  }
+  return (
+    <input type="text" inputMode="decimal" value={str} style={props.style}
+      onChange={function(e){ setStr(e.target.value); commit(e.target.value) }}
+      onFocus={function(e){ e.target.select() }}
+      onBlur={function(){ commit(str); setStr(String(props.value!=null?props.value:0)) }}
+    />
+  )
+}
+
 function TermPill(props) {
   var t = props.token
-  var numRef = useRef(null)
-  var minRef = useRef(null)
 
   function cycleType(e) {
     e.stopPropagation()
@@ -548,20 +569,20 @@ function TermPill(props) {
       </button>
       <span className="term-body">
         {t.type==='lit' && (
-          <input type="number" value={t.value} step={0.01}
-            ref={numRef}
-            onChange={function(e){ var v=parseFloat(e.target.value); if(!isNaN(v)) props.onChange(Object.assign({},t,{value:v})) }}
-            onFocus={function(){ if(numRef.current) numRef.current.select() }}/>
+          <NumInput value={t.value!=null?t.value:0}
+            onChange={function(v){ props.onChange(Object.assign({},t,{value:v})) }}/>
         )}
         {t.type==='rand' && (
-          <span style={{display:'inline-flex',alignItems:'center',gap:2}}>
-            <input type="number" value={t.min!=null?t.min:0} step={0.01}
-              ref={minRef}
-              onChange={function(e){ var v=parseFloat(e.target.value); if(!isNaN(v)) props.onChange(Object.assign({},t,{min:v})) }}
-              onFocus={function(){ if(minRef.current) minRef.current.select() }}/>
+          <span className="rand-tap" onClick={props.onRandSettings} title="tap to edit range &amp; seed"
+            style={{display:'inline-flex',alignItems:'center',gap:2,cursor:'pointer'}}>
+            <span style={{color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:10}}>
+              {(t.min!=null?t.min:0).toFixed(2)}
+            </span>
             <span className="rand-sep">↔</span>
-            <input type="number" value={t.max!=null?t.max:1} step={0.01}
-              onChange={function(e){ var v=parseFloat(e.target.value); if(!isNaN(v)) props.onChange(Object.assign({},t,{max:v})) }}/>
+            <span style={{color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:10}}>
+              {(t.max!=null?t.max:1).toFixed(2)}
+            </span>
+            {t.seed!=null&&<span style={{fontSize:8,color:'var(--mu)',marginLeft:2}}>🔒</span>}
           </span>
         )}
         {t.type==='ref' && (
@@ -572,6 +593,93 @@ function TermPill(props) {
       </span>
       <button className="expr-pill-rm" onClick={props.onRemove} title="remove">×</button>
     </span>
+  )
+}
+
+// RandSettingsSheet — bottom sheet for editing rand token min/max/seed
+function RandSettingsSheet(props) {
+  // props: open, token, onChange(newToken), onClose
+  var t = props.token || {type:'rand', min:0, max:1, seed:null}
+  var seedMode = t.seed!=null ? 'fixed' : 'free'
+  if(!props.open) return null
+  return createPortal(
+    <div className="rp-scrim" onClick={props.onClose}>
+      <div className="rp-sheet" onClick={function(e){e.stopPropagation()}}>
+        <div className="rp-grip"/>
+        <div className="rp-hdr">
+          <span className="rp-hdr-title">Random range</span>
+          <button className="rp-back" onClick={props.onClose}>✕</button>
+        </div>
+        <div className="rp-scroll" style={{padding:'12px 16px 40px'}}>
+          {/* Min */}
+          <div className="rp-prop-row" style={{cursor:'default'}}>
+            <span className="rp-prop-lbl">min</span>
+            <NumInput value={t.min!=null?t.min:0}
+              onChange={function(v){ props.onChange(Object.assign({},t,{min:v})) }}
+              style={{width:80,background:'var(--el)',border:'1px solid var(--bd)',borderRadius:6,
+                color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:12,
+                textAlign:'right',padding:'6px 10px',outline:'none'}}/>
+          </div>
+          {/* Max */}
+          <div className="rp-prop-row" style={{cursor:'default'}}>
+            <span className="rp-prop-lbl">max</span>
+            <NumInput value={t.max!=null?t.max:1}
+              onChange={function(v){ props.onChange(Object.assign({},t,{max:v})) }}
+              style={{width:80,background:'var(--el)',border:'1px solid var(--bd)',borderRadius:6,
+                color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:12,
+                textAlign:'right',padding:'6px 10px',outline:'none'}}/>
+          </div>
+          {/* Seed mode */}
+          <div className="rp-prop-row" style={{cursor:'default',alignItems:'flex-start',paddingTop:14}}>
+            <span className="rp-prop-lbl">seed</span>
+            <div style={{display:'flex',flexDirection:'column',gap:8,alignItems:'flex-end'}}>
+              <div style={{display:'flex',gap:6}}>
+                {['free','fixed'].map(function(m){
+                  var on=seedMode===m
+                  return <button key={m} onClick={function(){
+                      props.onChange(Object.assign({},t,{seed:m==='fixed'?(t.seed!=null?t.seed:1):null}))
+                    }}
+                    style={{padding:'5px 14px',fontSize:10,borderRadius:20,cursor:'pointer',
+                      fontFamily:"'IBM Plex Mono',monospace",
+                      background:on?'var(--sl)':'none',
+                      color:on?'var(--tx)':'var(--mu)',
+                      border:'1px solid '+(on?'var(--ac)':'var(--bd)')}}>
+                    {m==='free'?'∞ free':'🔒 fixed'}
+                  </button>
+                })}
+              </div>
+              {seedMode==='fixed'&&(
+                <NumInput value={t.seed!=null?t.seed:1}
+                  onChange={function(v){ props.onChange(Object.assign({},t,{seed:Math.round(v)||1})) }}
+                  style={{width:80,background:'var(--el)',border:'1px solid var(--bd)',borderRadius:6,
+                    color:'var(--ac)',fontFamily:"'IBM Plex Mono',monospace",fontSize:12,
+                    textAlign:'right',padding:'6px 10px',outline:'none'}}/>
+              )}
+              <span style={{fontSize:9,color:'var(--mu)',fontFamily:"'IBM Plex Mono',monospace",textAlign:'right',lineHeight:1.4}}>
+                {seedMode==='free'?'New value each render':'Same value every render'}
+              </span>
+            </div>
+          </div>
+          {/* Presets */}
+          <div style={{marginTop:16,borderTop:'1px solid var(--bd)',paddingTop:12}}>
+            <div className="rp-section-lbl" style={{padding:'0 0 8px'}}>Presets</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {[['0 → 1','0','1'],['−1 → 1','−1','1'],['0 → 360','0','360'],['−180 → 180','−180','180']].map(function(pr){
+                return <button key={pr[0]} onClick={function(){
+                    props.onChange(Object.assign({},t,{min:parseFloat(pr[1]),max:parseFloat(pr[2])}))
+                  }}
+                  style={{padding:'5px 12px',fontSize:10,borderRadius:20,cursor:'pointer',
+                    fontFamily:"'IBM Plex Mono',monospace",background:'var(--el)',
+                    color:'var(--di)',border:'1px solid var(--bd)'}}>
+                  {pr[0]}
+                </button>
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }
 
@@ -593,7 +701,8 @@ function ExprPillRow(props) {
         return <TermPill key={i} token={t}
           onChange={function(newToken){replaceTerm(i,newToken)}}
           onRemove={function(){removeTerm(i)}}
-          onPickRef={props.onPickRef ? function(){props.onPickRef(i)} : null}/>
+          onPickRef={props.onPickRef ? function(){props.onPickRef(i)} : null}
+          onRandSettings={props.onRandSettings ? function(){props.onRandSettings(i)} : null}/>
       })}
       <button className="expr-pill add-btn" onClick={addTerm} title="add term">⊕</button>
       {tokens.length>0&&<button className="expr-clear" onClick={function(){props.onChange(null)}}>clear</button>}
@@ -627,15 +736,27 @@ function ExprEditor(props) {
     closePicker()
   }
 
+  var randIdxSt=useState(null); var randIdx=randIdxSt[0], setRandIdx=randIdxSt[1]
+  function openRand(tokenIdx){ setRandIdx(tokenIdx) }
+  function closeRand(){ setRandIdx(null) }
+  function onRandChange(newToken){
+    var toks = tokens||[]
+    var next = toks.map(function(t,i){ return i===randIdx ? newToken : t })
+    handleChange(next)
+  }
+
   var icon=<ExprEditorIcon active={hasExpr} open={open} onToggle={toggleOpen}/>
   var child=Children.only(props.children)
   var enhanced=cloneElement(child,{exprActive:hasExpr,exprResult:result,exprIcon:icon})
+  var randToken = randIdx!=null && tokens ? tokens[randIdx] : null
 
   return (
     <div>
       {enhanced}
-      {open&&<ExprPillRow tokens={tokens||[{type:'lit',value:0}]} onChange={handleChange} onPickRef={openPicker}/>}
+      {open&&<ExprPillRow tokens={tokens||[{type:'lit',value:0}]} onChange={handleChange}
+        onPickRef={openPicker} onRandSettings={openRand}/>}
       <RefPickerSheet open={pickerIdx!==null} nodes={props.nodes||[]} selfId={props.selfId} onPick={onPick} onClose={closePicker}/>
+      <RandSettingsSheet open={randIdx!==null} token={randToken} onChange={onRandChange} onClose={closeRand}/>
     </div>
   )
 }
@@ -9354,7 +9475,9 @@ function App() {
       var recent=recentProj.filter(function(r){return r.name!==projName}).slice(0,9)
       recent.unshift(entry)
       setRecentProj(recent)
-      try{localStorage.setItem("nlics:recent",JSON.stringify(recent))}catch(e){}
+      // Store metadata only — omit .data to stay within localStorage quota
+      var recentMeta=recent.map(function(r){return {name:r.name,savedAt:r.savedAt,nodeCount:r.nodeCount,_legacy:r._legacy}})
+      try{localStorage.setItem("nlics:recent",JSON.stringify(recentMeta))}catch(e){}
       // Optionally set as default startup project
       if(setDefault) {
         try{localStorage.setItem("nlics:default-project",data);localStorage.setItem("nlics:default-project-name",projName)}catch(e){}
@@ -9398,7 +9521,9 @@ function App() {
     var recent=recentProj.filter(function(r){return r.name!==(data.name||"Untitled")}).slice(0,9)
     recent.unshift(entry)
     setRecentProj(recent)
-    try{localStorage.setItem("nlics:recent",JSON.stringify(recent))}catch(e){}
+    // Store metadata only — omit .data to stay within localStorage quota
+    var recentMeta=recent.map(function(r){return {name:r.name,savedAt:r.savedAt,nodeCount:r.nodeCount,_legacy:r._legacy}})
+    try{localStorage.setItem("nlics:recent",JSON.stringify(recentMeta))}catch(e){}
   }
   function loadProject(file) {
     if(!file){console.warn("loadProject: no file");return}
