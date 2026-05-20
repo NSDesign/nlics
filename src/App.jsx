@@ -2545,6 +2545,44 @@ var EXPR_PROPS = {
     {key:'props.innerR',  label:'inner radius'},
     {key:'props.alpha',   label:'opacity'},
   ],
+  solid: [
+    {key:'props.alpha',     label:'opacity'},
+  ],
+  gradient: [
+    {key:'props.angle',     label:'angle'},
+    {key:'props.cx',        label:'centre x'},
+    {key:'props.cy',        label:'centre y'},
+    {key:'props.r',         label:'radius'},
+    {key:'props.sa',        label:'start angle'},
+    {key:'props.alpha',     label:'opacity'},
+  ],
+  noise: [
+    {key:'props.scale',     label:'scale'},
+    {key:'props.oct',       label:'octaves'},
+    {key:'props.lac',       label:'lacunarity'},
+    {key:'props.gain',      label:'gain'},
+    {key:'props.seed',      label:'seed'},
+    {key:'props.pFreq',     label:'frequency'},
+    {key:'props.pAngle',    label:'angle'},
+    {key:'props.pBandwidth',label:'bandwidth'},
+    {key:'props.mFreq',     label:'freq'},
+    {key:'props.mTurb',     label:'turbulence'},
+    {key:'props.wJitter',   label:'jitter'},
+    {key:'props.alpha',     label:'opacity'},
+  ],
+  pattern: [
+    {key:'props.scale',     label:'scale'},
+    {key:'props.angle',     label:'angle'},
+    {key:'props.sw',        label:'stripe width'},
+    {key:'props.dr',        label:'dot radius'},
+    {key:'props.ds',        label:'dot spacing'},
+    {key:'props.a1',        label:'opacity 1'},
+    {key:'props.a2',        label:'opacity 2'},
+    {key:'props.alpha',     label:'opacity'},
+  ],
+  image: [
+    {key:'props.alpha',     label:'opacity'},
+  ],
   tile: [
     {key:'props.cols',      label:'columns'},
     {key:'props.rows',      label:'rows'},
@@ -4693,11 +4731,13 @@ function TabBar(props) {
 
 /* ─── CREATOR PROP PANELS ─────────────────────────────── */
 function SolidP(props) {
-  var p=props.p, up=props.up
+  var p=props.p, up=props.up, nodes=props.nodes||[], selfId=props.selfId
+  function ex(k,child){return <ExprEditor paramKey={k} tokens={p[k+'_expr']||null} nodes={nodes} selfId={selfId}
+    onExprChange={function(t){var o={};o[k+'_expr']=t;up(Object.assign({},p,o))}}>{child}</ExprEditor>}
   return (
     <div>
       <Co l="colour" v={p.color} fn={function(v){up(Object.assign({},p,{color:v}))}}/>
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      {ex('alpha',<Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>)}
     </div>
   )
 }
@@ -4905,7 +4945,9 @@ function ShapeP(props) {
   )
 }
 function GradP(props) {
-  var p=props.p, up=props.up
+  var p=props.p, up=props.up, nodes=props.nodes||[], selfId=props.selfId
+  function ex(k,child){return <ExprEditor paramKey={k} tokens={p[k+'_expr']||null} nodes={nodes} selfId={selfId}
+    onExprChange={function(t){var o={};o[k+'_expr']=t;up(Object.assign({},p,o))}}>{child}</ExprEditor>}
   // Migrate legacy c1/s1/c2/s2 to stops on first render via gradStops helper
   var stops=gradStops(p).slice().sort(function(a,b){return a.pos-b.pos})
   function setStops(ns){up(Object.assign({},p,{stops:ns,c1:undefined,s1:undefined,c2:undefined,s2:undefined}))}
@@ -4975,16 +5017,16 @@ function GradP(props) {
         })}
       </div>
       <button className="ac" style={{width:"100%",marginBottom:8}} onClick={addStop}>+ stop</button>
-      {p.gType==="linear" && <Sl l="angle" v={p.angle||90} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>}
+      {p.gType==="linear" && ex('angle',<Sl l="angle" v={p.angle||90} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>)}
       {(p.gType==="radial"||p.gType==="conic") && (
         <div>
-          <Sl l="centre x" v={p.cx||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
-          <Sl l="centre y" v={p.cy||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+          {ex('cx',<Sl l="centre x" v={p.cx||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>)}
+          {ex('cy',<Sl l="centre y" v={p.cy||.5} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>)}
         </div>
       )}
-      {p.gType==="radial" && <Sl l="radius" v={p.r||.7} mn={.01} mx={2.5} st={.01} fn={function(v){up(Object.assign({},p,{r:v}))}}/>}
-      {p.gType==="conic" && <Sl l="start" v={p.sa||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{sa:v}))}}/>}
-      <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      {p.gType==="radial" && ex('r',<Sl l="radius" v={p.r||.7} mn={.01} mx={2.5} st={.01} fn={function(v){up(Object.assign({},p,{r:v}))}}/>)}
+      {p.gType==="conic" && ex('sa',<Sl l="start" v={p.sa||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{sa:v}))}}/>)}
+      {ex('alpha',<Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>)}
       {/* ── Gradient utilities ── */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>
         <button onClick={function(){
@@ -5020,7 +5062,9 @@ function GradP(props) {
   )
 }
 function NoiseP(props) {
-  var p=props.p, up=props.up
+  var p=props.p, up=props.up, nodes=props.nodes||[], selfId=props.selfId
+  function ex(k,child){return <ExprEditor paramKey={k} tokens={p[k+'_expr']||null} nodes={nodes} selfId={selfId}
+    onExprChange={function(t){var o={};o[k+'_expr']=t;up(Object.assign({},p,o))}}>{child}</ExprEditor>}
   var hasOct=["perlin","fbm","turbulence","simplex","value","marble","wood"].includes(p.nType)
   var isRGB=p.colorMode==="rgb"
   return (
@@ -5033,8 +5077,8 @@ function NoiseP(props) {
       {isRGB&&<div style={{fontSize:9,color:"var(--mu)",padding:"3px 0 5px",fontFamily:"'IBM Plex Mono',monospace"}}>
         R/G/B channels are independent noise fields (seed, seed+1000, seed+2000). Use as UV displacement map.
       </div>}
-      <Sl l="scale" v={p.scale} mn={.005} mx={.4} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
-      {hasOct&&<Sl l="octaves" v={p.oct||4} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>}
+      {ex('scale',<Sl l="scale" v={p.scale} mn={.005} mx={.4} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
+      {hasOct&&ex('oct',<Sl l="octaves" v={p.oct||4} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>)}
       {["fbm","perlin","simplex","value"].includes(p.nType)&&(
         <div>
           <Sl l="lacunarity" v={p.lac||2} mn={1} mx={4} st={.1} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{lac:v}))}}/>
@@ -5069,8 +5113,8 @@ function NoiseP(props) {
           <Sl l="turbulence" v={p.mTurb||2} mn={0} mx={10} st={.1} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{mTurb:v}))}}/>
         </div>
       )}
-      <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
-      <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      {ex('seed',<Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>)}
+      {ex('alpha',<Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>)}
     </div>
   )
 }
@@ -5173,26 +5217,26 @@ function ScatterP(props) {
   </PointCreatorBase>)
 }
 function PatP(props) {
-  var p=props.p, up=props.up
+  var p=props.p, up=props.up, nodes=props.nodes||[], selfId=props.selfId
+  function ex(k,child){return <ExprEditor paramKey={k} tokens={p[k+'_expr']||null} nodes={nodes} selfId={selfId}
+    onExprChange={function(t){var o={};o[k+'_expr']=t;up(Object.assign({},p,o))}}>{child}</ExprEditor>}
   return (
     <div>
       <Se l="type" v={p.pType} opts={PTYPES} fn={function(v){up(Object.assign({},p,{pType:v}))}}/>
       <Co l="colour 1" v={p.c1} fn={function(v){up(Object.assign({},p,{c1:v}))}}/>
-      <Sl l="opacity 1" v={p.a1==null?1:p.a1} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a1:v}))}}/>
+      {ex('a1',<Sl l="opacity 1" v={p.a1==null?1:p.a1} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a1:v}))}}/>)}
       <Co l="colour 2" v={p.c2} fn={function(v){up(Object.assign({},p,{c2:v}))}}/>
-      <Sl l="opacity 2" v={p.a2==null?1:p.a2} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a2:v}))}}/>
-      <Sl l="scale" v={p.scale||.1} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
-      <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>
-      {p.pType==="stripes" && (
-        <Sl l="width" v={p.sw||.1} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{sw:v}))}}/>
-      )}
+      {ex('a2',<Sl l="opacity 2" v={p.a2==null?1:p.a2} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{a2:v}))}}/>)}
+      {ex('scale',<Sl l="scale" v={p.scale||.1} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
+      {ex('angle',<Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{angle:v}))}}/>)}
+      {p.pType==="stripes" && ex('sw',<Sl l="width" v={p.sw||.1} mn={.01} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{sw:v}))}}/>)}
       {p.pType==="dots" && (
         <div>
-          <Sl l="dot r" v={p.dr||.03} mn={.005} mx={.2} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{dr:v}))}}/>
-          <Sl l="spacing" v={p.ds||.1} mn={.02} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{ds:v}))}}/>
+          {ex('dr',<Sl l="dot r" v={p.dr||.03} mn={.005} mx={.2} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{dr:v}))}}/>)}
+          {ex('ds',<Sl l="spacing" v={p.ds||.1} mn={.02} mx={.5} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{ds:v}))}}/>)}
         </div>
       )}
-      <Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      {ex('alpha',<Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>)}
     </div>
   )
 }
@@ -5298,7 +5342,9 @@ function TileP(props) {
   )
 }
 function ImgP(props) {
-  var p=props.p, up=props.up, onLoad=props.onLoad
+  var p=props.p, up=props.up, onLoad=props.onLoad, nodes=props.nodes||[], selfId=props.selfId
+  function ex(k,child){return <ExprEditor paramKey={k} tokens={p[k+'_expr']||null} nodes={nodes} selfId={selfId}
+    onExprChange={function(t){var o={};o[k+'_expr']=t;up(Object.assign({},p,o))}}>{child}</ExprEditor>}
   var fileRef=useRef(null)
   function loadBlob(file){
     if(!file)return
@@ -5324,7 +5370,7 @@ function ImgP(props) {
         </div>
       )}
       <Se l="fit" v={p.fit} opts={["contain","cover","fill"]} fn={function(v){up(Object.assign({},p,{fit:v}))}}/>
-      <Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>
+      {ex('alpha',<Sl l="alpha" v={p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>)}
     </div>
   )
 }
@@ -5349,18 +5395,18 @@ function CreatorProps(props) {
   return (
     <div style={{padding:"12px 12px 4px"}}>
       {node.type==="uv-create" && <UVCreateP p={node.props} up={up}/>}
-      {node.type==="solid"    && <SolidP p={node.props} up={up}/>}
+      {node.type==="solid"    && <SolidP p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
       {node.type==="shape"    && <ShapeP p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
-      {node.type==="gradient" && <GradP  p={node.props} up={up}/>}
-      {node.type==="noise"    && <NoiseP p={node.props} up={up}/>}
-      {node.type==="pattern"  && <PatP   p={node.props} up={up}/>}
+      {node.type==="gradient" && <GradP  p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
+      {node.type==="noise"    && <NoiseP p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
+      {node.type==="pattern"  && <PatP   p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
       {node.type==="tile"     && <TileP  p={node.props} up={up} nodes={props.nodes} selfId={node.id} iC={props.iC}/>}
       {node.type==="grid"        && <GridP       p={node.props} up={up}/>}
       {node.type==="spiral"      && <SpiralP     p={node.props} up={up}/>}
       {node.type==="polar-grid"  && <PolarGridP  p={node.props} up={up}/>}
       {node.type==="phyllotaxis" && <PhyllotaxisP p={node.props} up={up}/>}
       {node.type==="scatter"     && <ScatterP    p={node.props} up={up}/>}
-      {node.type==="image"    && <ImgP   p={node.props} up={up} onLoad={onLoad}/>}
+      {node.type==="image"    && <ImgP   p={node.props} up={up} nodes={props.nodes} selfId={node.id} onLoad={onLoad}/>}
       {/* Save-as-default row */}
       <div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid var(--bd)",alignItems:"center"}}>
         <button className="ghost" style={{flex:1,fontSize:10,padding:"6px 10px"}}
