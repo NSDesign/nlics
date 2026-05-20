@@ -4042,14 +4042,17 @@ function compAny(id,cmap,cache,iC,w,h,vis,nodes) {
       blendCv(lctx,lCv,lyr.blendMode||"normal",lyr.opacity==null?100:lyr.opacity,w,h,null,null,lyr.blendChannels,lyr.blendIf)
 
       // Accumulate matte using layer's maskMode
+      // Weight by layer opacity — a layer at 0% opacity contributes 0 to the matte,
+      // preventing the alpha override from writing 255 onto transparent blended pixels.
       var lmf=(lyr.maskAmount==null?100:lyr.maskAmount)/100
+      var lOpW=(lyr.opacity==null?100:lyr.opacity)/100
       var lmblend=ALPHA_BM[lyr.maskMode||"add"]||ALPHA_BM["add"]
       var lyrMv=lyrMatte||(function(){
         // No explicit mask — use source alpha
         var ld=lBase.getContext("2d").getImageData(0,0,w,h).data
         var m=new Float32Array(w*h); for(var x=0;x<w*h;x++) m[x]=ld[x*4+3]/255; return m
       })()
-      for(var lri=0;lri<w*h;lri++) runMatte[lri]=lmblend(runMatte[lri],lyrMv[lri],lmf)
+      for(var lri=0;lri<w*h;lri++) runMatte[lri]=lmblend(runMatte[lri],lyrMv[lri]*lOpW,lmf)
     }
     // Override alpha with accumulated matte
     var lOutImg=lctx.getImageData(0,0,w,h)
@@ -7321,6 +7324,7 @@ function BlenderProps(props) {
   // All hooks must be declared before any early return to satisfy Rules of Hooks
   var outTabSt=useState("effects"); var outTab=outTabSt[0], setOutTab=outTabSt[1]
   var blendTabSt=useState("pixels"); var blendTab=blendTabSt[0], setBlendTab=blendTabSt[1]
+  var isPoint = (node.context||"pixel")==="point"
   // Layout mode state — MUST be declared here, not below the conditional early
   // return. Previous placement caused React error #300 (changing hook count)
   // whenever the drill-down was entered/exited.
