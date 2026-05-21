@@ -1375,7 +1375,7 @@ function pxFn(d,w,h,t,p) {
       var norm=(li-inB)/Math.max(1,inW-inB)
       norm=Math.max(0,Math.min(1,norm))
       if(bzCv){
-        var bpx=bzCv.p1x||.33,bpy=bzCv.p1y||.33,bqx=bzCv.p2x||.67,bqy=bzCv.p2y||.67
+        var bpx=bzCv.p1x==null?.33:bzCv.p1x,bpy=bzCv.p1y==null?.33:bzCv.p1y,bqx=bzCv.p2x==null?.67:bzCv.p2x,bqy=bzCv.p2y==null?.67:bzCv.p2y
         var lo2=0,hi2=1
         var bzXf=function(t2){return 3*bpx*t2*(1-t2)*(1-t2)+3*bqx*t2*t2*(1-t2)+t2*t2*t2}
         var bzYf=function(t2){return 3*bpy*t2*(1-t2)*(1-t2)+3*bqy*t2*t2*(1-t2)+t2*t2*t2}
@@ -1427,7 +1427,7 @@ function pxFn(d,w,h,t,p) {
     // Directional (motion) blur — samples pixels along an angle.
     // mode: "box" (equal weights, hard motion trail) | "gaussian" (soft falloff)
     var ang = ((p.angle||0) * Math.PI / 180)
-    var dist = Math.max(1, Math.round(p.distance||20))
+    var dist = Math.max(1, Math.round(p.distance==null?20:p.distance))
     var spread = p.spread || "both"
     var dbMode = p.mode||"box"
     var cos = Math.cos(ang), sin = Math.sin(ang)
@@ -1499,7 +1499,7 @@ function pxFn(d,w,h,t,p) {
   } else if (t==="chromatic-ab") {
     // Split RGB channels and offset them by distance along angle
     var caD=p.distance==null?6:p.distance
-    var caAng=((p.angle||45)*Math.PI/180)
+    var caAng=((p.angle==null?45:p.angle)*Math.PI/180)
     var caDx=Math.round(Math.cos(caAng)*caD), caDy=Math.round(Math.sin(caAng)*caD)
     var caOrig=new Uint8ClampedArray(d)
     function caSample(px,py,ch){
@@ -1514,7 +1514,7 @@ function pxFn(d,w,h,t,p) {
     }
   } else if (t==="glow") {
     // Bloom: extract pixels above threshold, blur heavily, screen over original
-    var glR=Math.max(1,Math.round(p.radius||12))
+    var glR=Math.max(1,Math.round(p.radius==null?12:p.radius))
     var glStr=(p.strength==null?60:p.strength)/100
     var glThr=p.threshold==null?120:p.threshold
     var glOrig=new Uint8ClampedArray(d)
@@ -1587,7 +1587,7 @@ function pxFn(d,w,h,t,p) {
       d[i]=edV; d[i+1]=edV; d[i+2]=edV
     }
   } else if (t==="pixelate") {
-    var pxSz=Math.max(2,Math.round(p.size||8))
+    var pxSz=Math.max(2,Math.round(p.size==null?8:p.size))
     var pxOrig=new Uint8ClampedArray(d)
     for(i=0;i<d.length;i+=4){
       var pxX=(i/4)%w, pxY=Math.floor((i/4)/w)
@@ -1612,9 +1612,9 @@ function pxFn(d,w,h,t,p) {
     // Sinusoidal pixel displacement with optional per-param randomisation
     var wRnd=seededRand(p.rSeed||1)
     function wRv(v,en,sc,bi,amt,off){if(!en)return v;var r=wRnd();if(bi!==false)r=r*2-1;return v+(r+(off||0))*(sc||.5)*(amt==null?1:amt)}
-    var wAmp=wRv(p.amplitude||0.05,p.rAmpEn,p.rAmpSc,p.rAmpBi,p.rAmpAmt,p.rAmpOff)*Math.max(w,h)
-    var wFreqX=wRv(p.freqX||3,p.rFxEn,p.rFxSc,p.rFxBi,p.rFxAmt,p.rFxOff)
-    var wFreqY=wRv(p.freqY||3,p.rFyEn,p.rFySc,p.rFyBi,p.rFyAmt,p.rFyOff)
+    var wAmp=wRv(p.amplitude==null?0.05:p.amplitude,p.rAmpEn,p.rAmpSc,p.rAmpBi,p.rAmpAmt,p.rAmpOff)*Math.max(w,h)
+    var wFreqX=wRv(p.freqX==null?3:p.freqX,p.rFxEn,p.rFxSc,p.rFxBi,p.rFxAmt,p.rFxOff)
+    var wFreqY=wRv(p.freqY==null?3:p.freqY,p.rFyEn,p.rFySc,p.rFyBi,p.rFyAmt,p.rFyOff)
     var wPhaseX=p.phaseX||0, wPhaseY=p.phaseY||0
     var orig=new Uint8ClampedArray(d)
     for(i=0;i<w*h;i++){
@@ -1627,7 +1627,7 @@ function pxFn(d,w,h,t,p) {
     }
   } else if (t==="twirl") {
     // Rotate pixels around centre; angle decreases with distance; softness feathers the edge
-    var tAngle=(p.angle||180)*Math.PI/180, tRadius=(p.radius||0.5)*Math.min(w,h)*0.5
+    var tAngle=(p.angle==null?180:p.angle)*Math.PI/180, tRadius=(p.radius==null?0.5:p.radius)*Math.min(w,h)*0.5
     var tSoftPx=p.softness==null?.3:p.softness
     var tcx=p.cx!=null?p.cx*w:w/2, tcy=p.cy!=null?p.cy*h:h/2
     var orig2=new Uint8ClampedArray(d)
@@ -1648,7 +1648,7 @@ function pxFn(d,w,h,t,p) {
     }
   } else if (t==="bulge") {
     // Radial bulge/pinch; softness feathers the displacement at the radius boundary
-    var bStrength=p.strength||0.5, bRadius=(p.radius||0.7)*Math.min(w,h)*0.5
+    var bStrength=p.strength==null?0.5:p.strength, bRadius=(p.radius==null?0.7:p.radius)*Math.min(w,h)*0.5
     var bSoftPx=p.softness==null?.3:p.softness
     var bcx=p.cx!=null?p.cx*w:w/2, bcy=p.cy!=null?p.cy*h:h/2
     var orig3=new Uint8ClampedArray(d)
@@ -1670,7 +1670,7 @@ function pxFn(d,w,h,t,p) {
     }
   } else if (t==="solarise") {
     // Invert pixels above threshold — classic solarisation/sabattier effect
-    var solT=(p.threshold||0.5)*255
+    var solT=(p.threshold==null?0.5:p.threshold)*255
     for(i=0;i<d.length;i+=4){
       var lum=.299*d[i]+.587*d[i+1]+.114*d[i+2]
       if(lum>solT){d[i]=255-d[i];d[i+1]=255-d[i+1];d[i+2]=255-d[i+2]}
@@ -3091,7 +3091,7 @@ function applyEfxToPoints(pts,efx,w,h) {
         // Bezier curve remap: applied after mode produces tV (0-1), before outMin/outMax scaling
         // m.curve={p1x,p1y,p2x,p2y} — cubic bezier from (0,0) to (1,1)
         if(m.curveEnabled&&m.curve){
-          var cp=m.curve,p1x=cp.p1x||.33,p1y=cp.p1y||.33,p2x=cp.p2x||.67,p2y=cp.p2y||.67
+          var cp=m.curve,p1x=cp.p1x==null?.33:cp.p1x,p1y=cp.p1y==null?.33:cp.p1y,p2x=cp.p2x==null?.67:cp.p2x,p2y=cp.p2y==null?.67:cp.p2y
           var bx=function(t2){return 3*p1x*t2*(1-t2)*(1-t2)+3*p2x*t2*t2*(1-t2)+t2*t2*t2}
           var by=function(t2){return 3*p1y*t2*(1-t2)*(1-t2)+3*p2y*t2*t2*(1-t2)+t2*t2*t2}
           var lo=0,hi=1
@@ -5715,9 +5715,9 @@ function EfxPrimary(props) {
       <BezierCurveEditor curve={curveParms} label="tone curve"
         onChange={function(c){up({curve:c})}}/>
       <div style={{borderTop:"1px solid var(--bd)",marginTop:6,paddingTop:6}}>
-        <Sl l="in black"  v={p.inBlack||0}                    mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inBlack:v})}}/>
+        <Sl l="in black"  v={p.inBlack==null?0:p.inBlack}     mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inBlack:v})}}/>
         <Sl l="in white"  v={p.inWhite==null?255:p.inWhite}   mn={1}   mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({inWhite:v})}}/>
-        <Sl l="out black" v={p.outBlack||0}                   mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outBlack:v})}}/>
+        <Sl l="out black" v={p.outBlack==null?0:p.outBlack}   mn={0}   mx={254} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outBlack:v})}}/>
         <Sl l="out white" v={p.outWhite==null?255:p.outWhite} mn={1}   mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({outWhite:v})}}/>
       </div>
     </div>
