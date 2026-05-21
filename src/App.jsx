@@ -7015,7 +7015,7 @@ function EfxCard(props) {
 var EFX_GROUPS=[
   {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
   {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map","colour"]},
-  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","emboss","edge-detect","solarise","duotone"]},
+  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","bevel","emboss","edge-detect","solarise","duotone"]},
   {label:"Distort",  items:["wave","twirl","bulge","uv-texture","uv-distort","polar-to-cart","cart-to-polar"]},
   {label:"Transform",items:["match","transform"]},
   {label:"Points",   items:["show-points","point-map","source-at-points","attributes","combine","separate","filter","delete"]},
@@ -8356,6 +8356,7 @@ function LayerCard(props) {
             basePath={{slotKey:"layers["+li+"].effectStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
+            onExtract={props.onExtract ? function(){props.onExtract({slot:"layers["+li+"].effectStack",slotObj:{effectStack:lyr.effectStack||[]},kind:"effect",owner:props.owner})} : null}
             onChange={function(es){props.onChange({effectStack:es})}}/>
         </div>
       )}
@@ -8368,6 +8369,7 @@ function LayerCard(props) {
             basePath={{slotKey:"layers["+li+"].maskStack", steps:[]}}
             onNavigate={props.onNavigate}
             onPromote={props.onPromote}
+            onExtract={props.onExtract ? function(){props.onExtract({slot:"layers["+li+"].maskStack",slotObj:{maskStack:lyr.maskStack||[]},kind:"mask",owner:props.owner})} : null}
             onChange={function(ms){props.onChange({maskStack:ms})}}/>
         </div>
       )}
@@ -8581,6 +8583,8 @@ function LayerCompProps(props) {
               nodes={nodes} selfId={node.id} iC={props.iC}
               navPush={navPush} onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
+              onExtract={props.onExtract||null}
+              owner={node}
               onMove={function(dir){moveLayer(li,dir)}}
               onDel={function(){delLayer(li)}}
               onChange={function(patch){updLayer(li,patch)}}/>
@@ -8610,6 +8614,7 @@ function LayerCompProps(props) {
               basePath={{slotKey:"outEfx", steps:[]}}
               onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
+              onExtract={props.onExtract ? function(){props.onExtract({slot:"outEfx",slotObj:{effectStack:node.outEfx||[]},kind:"effect",owner:node})} : null}
               onChange={function(es){onChange(Object.assign({},node,{outEfx:es}))}}/>
           </div>
         )}
@@ -8618,6 +8623,7 @@ function LayerCompProps(props) {
             <MaskStackPanel stack={node.outMask||[]} nodes={nodes} selfId={node.id} navPush={navPush} iC={props.iC}
               basePath={{slotKey:"outMask", steps:[]}}
               onNavigate={props.onNavigate}
+              onExtract={props.onExtract ? function(){props.onExtract({slot:"outMask",slotObj:{maskStack:node.outMask||[]},kind:"mask",owner:node})} : null}
               onChange={function(ms){onChange(Object.assign({},node,{outMask:ms}))}}/>
           </div>
         )}
