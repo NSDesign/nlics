@@ -1202,6 +1202,46 @@ function octSimplex(x,y,oct,lac,gain,s) {
   for(var i=0;i<oct;i++){v+=simplex2(x*f,y*f,s+i)*a;a*=gain;f*=lac}
   return Math.max(0,Math.min(1,v+.5))
 }
+// ── True Perlin gradient noise ────────────────────────────────────────────────
+// Uses random gradient vectors at grid corners (not scalar values like value noise)
+// Produces characteristic organic flow patterns that are zero at grid crossings
+function gradNoise2(x,y,s){
+  var ix=Math.floor(x),iy=Math.floor(y)
+  var fx=x-ix,fy=y-iy
+  var ux=fx*fx*fx*(fx*(fx*6-15)+10)  // quintic smoothstep
+  var uy=fy*fy*fy*(fy*(fy*6-15)+10)
+  var gxs=[1,-1,0,0,0.7071,-0.7071,0.7071,-0.7071]
+  var gys=[0,0,1,-1,0.7071,0.7071,-0.7071,-0.7071]
+  function gd(gx,gy,dx,dy){var h=(Math.floor(vh(gx,gy,s)*8))&7;return gxs[h]*dx+gys[h]*dy}
+  var n00=gd(ix,  iy,  fx,  fy  ),n10=gd(ix+1,iy,  fx-1,fy  )
+  var n01=gd(ix,  iy+1,fx,  fy-1),n11=gd(ix+1,iy+1,fx-1,fy-1)
+  var nx0=n00+ux*(n10-n00),nx1=n01+ux*(n11-n01)
+  return Math.max(0,Math.min(1,(nx0+uy*(nx1-nx0))*0.72+0.5))
+}
+function octPerlinG(x,y,oct,lac,gain,s){
+  lac=lac||2.0;gain=gain||.5
+  var v=0,a=.5,f=1,m=0
+  for(var i=0;i<oct;i++){v+=gradNoise2(x*f,y*f,s+i*997)*a;m+=a;a*=gain;f*=lac}
+  return Math.max(0,Math.min(1,v/m))
+}
+
+// ── Abs (folded/ridged) octave accumulator — |2n-1| per octave ───────────────
+// Creates sharp ridges/valleys at noise midpoint. Applied per-octave (not to
+// the final sum) to produce the intricate crackle/network pattern.
+// type: "perlin"→gradNoise2, "simplex"→normalised simplex2, "value"→valueNoise2
+function absOct(type,x,y,oct,lac,gain,s){
+  lac=lac||2.0;gain=gain||.5
+  var v=0,a=1,f=1,mx=0
+  for(var i=0;i<oct;i++){
+    var ss=s+i*997,n
+    if(type==="perlin")        n=gradNoise2(x*f,y*f,ss)
+    else if(type==="simplex")  n=Math.max(0,Math.min(1,simplex2(x*f,y*f,ss)*0.5+0.5))
+    else                       n=valueNoise2(x*f,y*f,ss)  // value + fbm
+    v+=Math.abs(2*n-1)*a; mx+=a; a*=gain; f*=lac
+  }
+  return 1-(v/mx)  // invert: sharp dark ridges, bright cells
+}
+
 // ── True value noise — bilinear interpolation of random grid scalars ─────────
 // Uses vh hash (same as perlin) but quintic smoothstep for rounder, pillowy
 // character. Lower default lacunarity (1.7) gives softer multi-scale structure.
@@ -2030,13 +2070,17 @@ function gNoise(ctx,p,w,h) {
   var wMode=p.wMode||"f1"                  // worley mode: f1, f2, f2f1
   var grainSize=p.grainSize||1             // white noise grain size
   var mFreq=p.mFreq||4,mTurb=p.mTurb||2   // marble/wood freq+turb
+  var absMode=!!p.absMode                  // abs/folded mode: |2n-1| per octave
+  var ABS_TYPES=["perlin","simplex","value","fbm"]
   var CA=h2r(c1),CB=h2r(c2)
   var ds=2,dw=Math.ceil(w/ds),dh=Math.ceil(h/ds)
   var img=ctx.createImageData(dw,dh),d=img.data
   for(var py=0;py<dh;py++) for(var px=0;px<dw;px++){
     var sx=px*scale, sy=py*scale, v
-    switch(nType){
-      case "perlin":     v=octN(sx,sy,oct,seed,lac,gain); break
+    if(absMode&&ABS_TYPES.includes(nType)){
+      v=absOct(nType==="fbm"?"value":nType,sx,sy,oct,lac,gain,seed)
+    } else switch(nType){
+      case "perlin":     v=octPerlinG(sx,sy,oct,lac,gain,seed); break
       case "fbm":        v=fbm(sx,sy,oct,lac,gain,seed); break
       case "turbulence": v=turbulence(sx,sy,oct,seed); break
       case "worley":     { var wF1=worley(sx,sy,seed,wJitter); v=wMode==="f2"?1-wF1:wMode==="f2f1"?crystal(sx,sy,seed,wJitter,"f2f1"):wF1; break }
@@ -2056,12 +2100,12 @@ function gNoise(ctx,p,w,h) {
       var sx2=sx,sy2=sy
       function nv(s){
         switch(nType){
-          case "perlin":     return octN(sx2,sy2,oct,s,lac,gain)
-          case "fbm":        return fbm(sx2,sy2,oct,lac,gain,s)
+          case "perlin":     return absMode?absOct("perlin",sx2,sy2,oct,lac,gain,s):octPerlinG(sx2,sy2,oct,lac,gain,s)
+          case "fbm":        return absMode?absOct("value",sx2,sy2,oct,lac,gain,s):fbm(sx2,sy2,oct,lac,gain,s)
           case "turbulence": return turbulence(sx2,sy2,oct,s)
           case "worley":     { var _w=worley(sx2,sy2,s,wJitter); return wMode==="f2"?1-_w:wMode==="f2f1"?crystal(sx2,sy2,s,wJitter,"f2f1"):_w }
-          case "simplex":    return octSimplex(sx2,sy2,oct,lac,gain,s)
-          case "value":      return octValue(sx2,sy2,oct,lac,gain,s)
+          case "simplex":    return absMode?absOct("simplex",sx2,sy2,oct,lac,gain,s):octSimplex(sx2,sy2,oct,lac,gain,s)
+          case "value":      return absMode?absOct("value",sx2,sy2,oct,lac,gain,s):octValue(sx2,sy2,oct,lac,gain,s)
           case "marble":     return marble(sx2,sy2,oct,s,mFreq,mTurb)
           case "wood":       return wood(sx2,sy2,oct,s,mFreq,mTurb)
           case "crystal":    return crystal(sx2,sy2,s,p.wJitter,p.crystalMode||"f2f1")
@@ -5073,6 +5117,8 @@ function NoiseP(props) {
   function ex(k,child){return <ExprEditor paramKey={k} tokens={p[k+'_expr']||null} nodes={nodes} selfId={selfId}
     onExprChange={function(t){var o={};o[k+'_expr']=t;up(Object.assign({},p,o))}}>{child}</ExprEditor>}
   var hasOct=["perlin","fbm","turbulence","simplex","value","marble","wood"].includes(p.nType)
+  var hasLacGain=["perlin","fbm","simplex","value"].includes(p.nType)
+  var hasAbs=["perlin","fbm","simplex","value"].includes(p.nType)
   var isRGB=p.colorMode==="rgb"
   return (
     <div>
@@ -5086,11 +5132,19 @@ function NoiseP(props) {
       </div>}
       {ex('scale',<Sl l="scale" v={p.scale} mn={.005} mx={.4} st={.005} fmt={function(v){return v.toFixed(3)}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
       {hasOct&&ex('oct',<Sl l="octaves" v={p.oct||4} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>)}
-      {["fbm","perlin","simplex","value"].includes(p.nType)&&(
+      {hasLacGain&&(
         <div>
-          <Sl l="lacunarity" v={p.lac||2} mn={1} mx={4} st={.1} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{lac:v}))}}/>
-          <Sl l="gain" v={p.gain||.5} mn={.1} mx={.9} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gain:v}))}}/>
+          <Sl l="lacunarity" v={p.lac||2} mn={1} mx={4} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{lac:v}))}}/>
+          <Sl l="gain" v={p.gain||.5} mn={.1} mx={.9} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gain:v}))}}/>
         </div>
+      )}
+      {hasAbs&&(
+        <PR l="abs mode">
+          <button className={"tab"+(p.absMode?" on ac":"")} style={{fontSize:10,padding:"3px 14px"}}
+            onClick={function(){up(Object.assign({},p,{absMode:!p.absMode}))}}>
+            {p.absMode?"on":"off"}
+          </button>
+        </PR>
       )}
       {p.nType==="worley"&&(
         <div>
