@@ -1272,28 +1272,39 @@ function pxFn(d,w,h,t,p) {
   } else if (t==="contrast") {
     f=p.value/100; for(i=0;i<d.length;i+=4){d[i]=Math.min(255,Math.max(0,(d[i]-128)*f+128));d[i+1]=Math.min(255,Math.max(0,(d[i+1]-128)*f+128));d[i+2]=Math.min(255,Math.max(0,(d[i+2]-128)*f+128))}
   } else if (t==="blur") {
-    // Premultiplied alpha box blur with open boundary (out-of-bounds = transparent zero).
-    // Premultiply: avoids colour bleeding from transparent pixels into opaque edges.
-    // Open boundary: out-of-bounds samples are skipped entirely, so edge pixels use a
-    // smaller kernel — prevents the hard bright band that clamping would create.
+    // Separable two-pass blur (horizontal then vertical) with premultiplied alpha
+    // and open boundary (edge pixels use reduced kernel, no border fringing).
+    // mode: "box" (equal weights) | "gaussian" (bell-curve weights, softer falloff)
     var r=Math.max(1,Math.round(p.radius||0))
+    var blurMode=p.mode||"box"
     var x, y, nx, ny, dx, dy, rs, gs, bs, as, wa, n
+    // Build kernel weights
+    var bKernel=[]
+    if(blurMode==="gaussian"){
+      var bSig=r/2.5; var bSum=0
+      for(var bk=-r;bk<=r;bk++){var bw=Math.exp(-(bk*bk)/(2*bSig*bSig));bKernel.push(bw);bSum+=bw}
+      bKernel=bKernel.map(function(bw){return bw/bSum})
+    }
     // Premultiply d in-place
     for(i=0;i<d.length;i+=4){var a255=d[i+3]/255;d[i]=Math.round(d[i]*a255);d[i+1]=Math.round(d[i+1]*a255);d[i+2]=Math.round(d[i+2]*a255)}
     var tmp=new Uint8ClampedArray(d.length)
     // Horizontal pass — open boundary: skip out-of-bounds
     for(y=0;y<h;y++) for(x=0;x<w;x++){
-      rs=gs=bs=as=n=0
-      for(dx=-r;dx<=r;dx++){nx=x+dx;if(nx<0||nx>=w)continue;i=(y*w+nx)*4;rs+=d[i];gs+=d[i+1];bs+=d[i+2];as+=d[i+3];n++}
-      if(n===0)n=1
-      i=(y*w+x)*4;tmp[i]=rs/n;tmp[i+1]=gs/n;tmp[i+2]=bs/n;tmp[i+3]=as/n
+      rs=gs=bs=as=0;wa=0
+      for(dx=-r;dx<=r;dx++){nx=x+dx;if(nx<0||nx>=w)continue;i=(y*w+nx)*4
+        var bkw=blurMode==="gaussian"?bKernel[dx+r]:1
+        rs+=d[i]*bkw;gs+=d[i+1]*bkw;bs+=d[i+2]*bkw;as+=d[i+3]*bkw;wa+=bkw}
+      if(wa===0)wa=1
+      i=(y*w+x)*4;tmp[i]=rs/wa;tmp[i+1]=gs/wa;tmp[i+2]=bs/wa;tmp[i+3]=as/wa
     }
     // Vertical pass — open boundary
     for(y=0;y<h;y++) for(x=0;x<w;x++){
-      rs=gs=bs=as=n=0
-      for(dy=-r;dy<=r;dy++){ny=y+dy;if(ny<0||ny>=h)continue;i=(ny*w+x)*4;rs+=tmp[i];gs+=tmp[i+1];bs+=tmp[i+2];as+=tmp[i+3];n++}
-      if(n===0)n=1
-      i=(y*w+x)*4;d[i]=rs/n;d[i+1]=gs/n;d[i+2]=bs/n;d[i+3]=as/n
+      rs=gs=bs=as=0;wa=0
+      for(dy=-r;dy<=r;dy++){ny=y+dy;if(ny<0||ny>=h)continue;i=(ny*w+x)*4
+        var bkw2=blurMode==="gaussian"?bKernel[dy+r]:1
+        rs+=tmp[i]*bkw2;gs+=tmp[i+1]*bkw2;bs+=tmp[i+2]*bkw2;as+=tmp[i+3]*bkw2;wa+=bkw2}
+      if(wa===0)wa=1
+      i=(y*w+x)*4;d[i]=rs/wa;d[i+1]=gs/wa;d[i+2]=bs/wa;d[i+3]=as/wa
     }
     // Unpremultiply
     for(i=0;i<d.length;i+=4){var a2=d[i+3];if(a2>0){d[i]=Math.min(255,Math.round(d[i]*255/a2));d[i+1]=Math.min(255,Math.round(d[i+1]*255/a2));d[i+2]=Math.min(255,Math.round(d[i+2]*255/a2))}}
@@ -1414,30 +1425,36 @@ function pxFn(d,w,h,t,p) {
     }
   } else if (t==="dir-blur") {
     // Directional (motion) blur — samples pixels along an angle.
-    // angle: 0-360 degrees, distance: pixel length of blur, spread: "forward"|"backward"|"both"
+    // mode: "box" (equal weights, hard motion trail) | "gaussian" (soft falloff)
     var ang = ((p.angle||0) * Math.PI / 180)
     var dist = Math.max(1, Math.round(p.distance||20))
     var spread = p.spread || "both"
+    var dbMode = p.mode||"box"
     var cos = Math.cos(ang), sin = Math.sin(ang)
-    // Build sample offsets along the direction vector
-    var offsets = []
+    // Build sample offsets and weights
+    var offsets=[], dbWeights=[]
+    var dbSig=dist/2.5
     for(var si=1; si<=dist; si++){
-      if(spread==="forward" || spread==="both") offsets.push(si)
-      if(spread==="backward" || spread==="both") offsets.push(-si)
-    }
-    if(offsets.length===0) offsets=[0]
-    var n = offsets.length + 1  // include center pixel
-    var orig = new Uint8ClampedArray(d)  // copy before mutating
-    for(i=0;i<d.length;i+=4){
-      var px = ((i/4) % w), py = Math.floor((i/4) / w)
-      var rs=orig[i], gs=orig[i+1], bs=orig[i+2], as=orig[i+3], cnt=1
-      for(var oi=0;oi<offsets.length;oi++){
-        var nx=Math.round(px + cos*offsets[oi]), ny=Math.round(py + sin*offsets[oi])
-        if(nx<0||nx>=w||ny<0||ny>=h)continue
-        var ni=(ny*w+nx)*4
-        rs+=orig[ni]; gs+=orig[ni+1]; bs+=orig[ni+2]; as+=orig[ni+3]; cnt++
+      if(spread==="forward"||spread==="both"){
+        offsets.push(si)
+        dbWeights.push(dbMode==="gaussian"?Math.exp(-(si*si)/(2*dbSig*dbSig)):1)
       }
-      d[i]=rs/cnt; d[i+1]=gs/cnt; d[i+2]=bs/cnt; d[i+3]=as/cnt
+      if(spread==="backward"||spread==="both"){
+        offsets.push(-si)
+        dbWeights.push(dbMode==="gaussian"?Math.exp(-(si*si)/(2*dbSig*dbSig)):1)
+      }
+    }
+    var orig = new Uint8ClampedArray(d)
+    for(i=0;i<d.length;i+=4){
+      var px=((i/4)%w), py=Math.floor((i/4)/w)
+      var rs=orig[i], gs=orig[i+1], bs=orig[i+2], as=orig[i+3], wa=1
+      for(var oi=0;oi<offsets.length;oi++){
+        var nx=Math.round(px+cos*offsets[oi]), ny=Math.round(py+sin*offsets[oi])
+        if(nx<0||nx>=w||ny<0||ny>=h)continue
+        var ni=(ny*w+nx)*4, dw=dbWeights[oi]
+        rs+=orig[ni]*dw; gs+=orig[ni+1]*dw; bs+=orig[ni+2]*dw; as+=orig[ni+3]*dw; wa+=dw
+      }
+      d[i]=rs/wa; d[i+1]=gs/wa; d[i+2]=bs/wa; d[i+3]=as/wa
     }
   } else if (t==="sharpen") {
     // Unsharp mask: sharpen = original + amount*(original - blurred)
@@ -5678,7 +5695,10 @@ function EfxPrimary(props) {
   function up(np){props.onChange(Object.assign({},efx,{params:Object.assign({},p,np)}))}
   if(efx.type==="brightness") return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
   if(efx.type==="contrast")   return <Sl l="value" v={p.value} mn={0} mx={300} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
-  if(efx.type==="blur")       return <Sl l="radius" v={p.radius} mn={0} mx={60} st={.5} fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up({radius:v})}}/>
+  if(efx.type==="blur")       return <div>
+    <Se l="mode" v={p.mode||"box"} opts={["box","gaussian"]} fn={function(v){up(Object.assign({},p,{mode:v}))}}/>
+    <Sl l="radius" v={p.radius} mn={0} mx={60} st={.5} fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up({radius:v})}}/>
+  </div>
   if(efx.type==="invert")     return <Sl l="amount" v={p.amount} mn={0} mx={100} st={1} fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({amount:v})}}/>
   if(efx.type==="threshold")  return <Sl l="level" v={p.value} mn={0} mx={255} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up({value:v})}}/>
   if(efx.type==="hue-shift")  return <Sl l="angle" v={p.angle} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
@@ -5783,7 +5803,7 @@ function EfxPrimary(props) {
       </PR>
     </div>
   )
-  if(efx.type==="dir-blur") return (
+  if(efx.type==="dir-blur") return (<div><Se l="mode" v={p.mode||"box"} opts={["box","gaussian"]} fn={function(v){up(Object.assign({},p,{mode:v}))}}/><div>
     <div>
       <Sl l="angle" v={p.angle||0} mn={0} mx={360} st={1}
         fmt={function(v){return Math.round(v)+"deg"}}
@@ -5804,7 +5824,7 @@ function EfxPrimary(props) {
         })}
       </PR>
     </div>
-  )
+  </div>)
   if(efx.type==="attributes") {
     var ops=p.ops||[]
     function updOp(i,patch){up({ops:ops.map(function(o,j){return j===i?Object.assign({},o,patch):o})})}
