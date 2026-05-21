@@ -5824,7 +5824,7 @@ function EfxPrimary(props) {
         })}
       </PR>
     </div>
-  </div>)
+  </div></div>)
   if(efx.type==="attributes") {
     var ops=p.ops||[]
     function updOp(i,patch){up({ops:ops.map(function(o,j){return j===i?Object.assign({},o,patch):o})})}
