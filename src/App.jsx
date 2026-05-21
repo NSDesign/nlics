@@ -122,6 +122,26 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .rp-prop-lbl{flex:1;font-size:12px;color:var(--tx);font-family:'IBM Plex Mono',monospace;}
 .rp-prop-val{font-size:10px;color:var(--ac);font-family:'IBM Plex Mono',monospace;flex-shrink:0;}
 .rp-empty{padding:24px 16px;font-size:11px;color:var(--mu);font-family:'IBM Plex Mono',monospace;text-align:center;}
+/* ── Effect picker sheet ── */
+.efx-search-wrap{padding:10px 14px 8px;border-bottom:1px solid var(--bd);flex-shrink:0;}
+.efx-search-inner{position:relative;}
+.efx-search-input{width:100%;padding:9px 12px 9px 34px;background:var(--el);border:1px solid var(--bd);border-radius:10px;color:var(--tx);font-family:'IBM Plex Mono',monospace;font-size:11px;outline:none;transition:border-color .12s;}
+.efx-search-input:focus{border-color:var(--ac);}
+.efx-search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--mu);font-size:13px;pointer-events:none;}
+.efx-search-clear{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--mu);cursor:pointer;font-size:14px;padding:0;min-height:0;line-height:1;}
+.efx-search-clear:hover{color:var(--tx);}
+.efx-grp-card{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--bd);cursor:pointer;transition:background .1s;min-height:var(--tap);}
+.efx-grp-card:hover,.efx-grp-card:active{background:var(--el);}
+.efx-grp-icon{font-size:18px;color:var(--mu);width:26px;text-align:center;flex-shrink:0;}
+.efx-grp-info{flex:1;}
+.efx-grp-name{font-size:12px;color:var(--tx);font-family:'IBM Plex Mono',monospace;}
+.efx-grp-count{font-size:9px;color:var(--mu);margin-top:2px;}
+.efx-grp-arrow{color:var(--mu);font-size:14px;flex-shrink:0;}
+.efx-item-row{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(30,30,74,.6);cursor:pointer;transition:background .1s;min-height:var(--tap);}
+.efx-item-row:hover,.efx-item-row:active{background:var(--el);}
+.efx-item-name{flex:1;font-size:12px;color:var(--tx);font-family:'IBM Plex Mono',monospace;}
+.efx-item-grp-tag{font-size:9px;color:var(--mu);flex-shrink:0;}
+.efx-search-grp-lbl{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em;padding:10px 16px 4px;font-family:'IBM Plex Mono',monospace;}
 .breadcrumb{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;overflow-x:auto;white-space:nowrap;}
 .bc-item{font-size:10px;color:var(--di);font-family:'IBM Plex Mono',monospace;cursor:pointer;text-decoration:underline;text-underline-offset:3px;white-space:nowrap;flex-shrink:0;}
 .blend-if-slider .noUi-target{background:var(--bg);border:1px solid var(--bd);border-radius:3px;box-shadow:none;height:8px;}
@@ -7120,12 +7140,12 @@ function EfxCard(props) {
 
 /* ─── ADD EFFECT MENU ─────────────────────────────────── */
 var EFX_GROUPS=[
-  {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
-  {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map","colour"]},
-  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","bevel","emboss","edge-detect","solarise","duotone","dilate","inflate"]},
-  {label:"Distort",  items:["wave","twirl","bulge","uv-texture","uv-distort","polar-to-cart","cart-to-polar"]},
-  {label:"Transform",items:["match","transform"]},
-  {label:"Points",   items:["show-points","point-map","source-at-points","attributes","combine","separate","filter","delete"]},
+  {label:"Tonal",    icon:"◑", items:["brightness","contrast","exposure","levels","curves","posterize"]},
+  {label:"Colour",   icon:"◈", items:["hue-shift","saturation","vibrance","colour-map","colour"]},
+  {label:"Pixel",    icon:"◻", items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","bevel","emboss","edge-detect","solarise","duotone","dilate","inflate"]},
+  {label:"Distort",  icon:"⌇", items:["wave","twirl","bulge","uv-texture","uv-distort","polar-to-cart","cart-to-polar"]},
+  {label:"Transform",icon:"⊞", items:["match","transform"]},
+  {label:"Points",   icon:"·⃝", items:["show-points","point-map","source-at-points","attributes","combine","separate","filter","delete"]},
 ]
 // Hook: compute a fixed-position rect for a popover relative to an anchor ref.
 // placement: "above" or "below" — menu opens above or below the anchor, whichever fits.
@@ -7158,42 +7178,113 @@ function usePopoverPosition(anchorRef, open, placement) {
   return pos
 }
 
-function AddEfxMenu(props) {
+function AddEfxSheet(props) {
+  // props: onAdd, filterTypes, excludeGroups
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
-  var anchorRef=useRef(null)
-  var menuRef=useRef(null)
-  var pos=usePopoverPosition(anchorRef, open, "above")
-  useEffect(function(){
-    if(!open)return
-    function h(e){
-      if(anchorRef.current&&anchorRef.current.contains(e.target))return
-      if(menuRef.current&&menuRef.current.contains(e.target))return
-      setOpen(false)
-    }
-    document.addEventListener("mousedown",h)
-    return function(){document.removeEventListener("mousedown",h)}
-  },[open])
+  var querySt=useState(""); var query=querySt[0], setQuery=querySt[1]
+  var drillSt=useState(null); var drill=drillSt[0], setDrill=drillSt[1]
+  var inputRef=useRef(null)
+
   var displayGroups=(props.filterTypes
-    ?EFX_GROUPS.map(function(g){var fi=g.items.filter(function(t){return props.filterTypes.includes(t)});return fi.length?{label:g.label,items:fi}:null}).filter(Boolean)
+    ?EFX_GROUPS.map(function(g){var fi=g.items.filter(function(t){return props.filterTypes.includes(t)});return fi.length?Object.assign({},g,{items:fi}):null}).filter(Boolean)
     :EFX_GROUPS
   ).filter(function(g){return !(props.excludeGroups||[]).includes(g.label)})
+
+  var q=query.toLowerCase().trim()
+  var searchResults = q
+    ? displayGroups.flatMap(function(g){
+        return g.items.filter(function(t){return t.includes(q)}).map(function(t){return {type:t,group:g}})
+      })
+    : []
+
+  function openSheet(){ setOpen(true); setQuery(""); setDrill(null) }
+  function close(){ setOpen(false); setQuery(""); setDrill(null) }
+  function pick(t){ props.onAdd(t); close() }
+
+  useEffect(function(){
+    if(open&&inputRef.current) setTimeout(function(){inputRef.current&&inputRef.current.focus()},80)
+  },[open])
+
+  var drillGroup = drill ? displayGroups.find(function(g){return g.label===drill}) : null
+
   return (
-    <div ref={anchorRef} style={{position:"relative",flex:2,minWidth:0}}>
-      <button className="ac" style={{width:"100%",height:"100%"}} onClick={function(){setOpen(!open)}}>+ effect</button>
-      {open&&pos&&createPortal(
-        <div ref={menuRef} className="eff-menu" style={pos}>
-          {displayGroups.map(function(grp){
-            return (
-              <div key={grp.label}>
-                <div className="drop-grp">{grp.label}</div>
-                {grp.items.map(function(t){
-                  return (
-                    <div key={t} className="drop-item" onClick={function(e){e.stopPropagation();props.onAdd(t);setOpen(false)}}>{t}</div>
-                  )
-                })}
+    <div style={{position:"relative",flex:2,minWidth:0}}>
+      <button className="ac" style={{width:"100%",height:"100%"}} onClick={openSheet}>+ effect</button>
+      {open&&createPortal(
+        <div className="rp-scrim" onClick={close}>
+          <div className="rp-sheet" onClick={function(e){e.stopPropagation()}}>
+            <div className="rp-grip"/>
+            {/* Header */}
+            <div className="rp-hdr">
+              {drillGroup&&!q
+                ? <button className="rp-back" onClick={function(){setDrill(null)}}>← back</button>
+                : null}
+              <span className="rp-hdr-title">
+                {q ? "Search results" : drillGroup ? drillGroup.label : "Add effect"}
+              </span>
+              {drillGroup&&!q
+                ? <span className="rp-hdr-sub">{drillGroup.icon} {drillGroup.items.length} effects</span>
+                : null}
+              <button className="rp-back" onClick={close}>✕</button>
+            </div>
+            {/* Search */}
+            <div className="efx-search-wrap">
+              <div className="efx-search-inner">
+                <span className="efx-search-icon">⌕</span>
+                <input ref={inputRef} className="efx-search-input"
+                  placeholder="Search effects…" value={query}
+                  onChange={function(e){setQuery(e.target.value);setDrill(null)}}
+                  autoComplete="off"/>
+                {q&&<button className="efx-search-clear" onClick={function(){setQuery("");setDrill(null)}}>×</button>}
               </div>
-            )
-          })}
+            </div>
+            {/* Content */}
+            <div className="rp-scroll">
+              {/* Search results */}
+              {q&&(
+                <div>
+                  {searchResults.length===0&&<div className="rp-empty">No effects match "{q}"</div>}
+                  {searchResults.map(function(r){
+                    return (
+                      <div key={r.type} className="efx-item-row" onClick={function(){pick(r.type)}}>
+                        <span className="efx-item-name">{r.type}</span>
+                        <span className="efx-item-grp-tag">{r.group.icon} {r.group.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {/* Drill view — items in group */}
+              {!q&&drillGroup&&(
+                <div>
+                  {drillGroup.items.map(function(t){
+                    return (
+                      <div key={t} className="efx-item-row" onClick={function(){pick(t)}}>
+                        <span className="efx-item-name">{t}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {/* Group cards — top level */}
+              {!q&&!drillGroup&&(
+                <div>
+                  {displayGroups.map(function(g){
+                    return (
+                      <div key={g.label} className="efx-grp-card" onClick={function(){setDrill(g.label)}}>
+                        <span className="efx-grp-icon">{g.icon}</span>
+                        <div className="efx-grp-info">
+                          <div className="efx-grp-name">{g.label}</div>
+                          <div className="efx-grp-count">{g.items.length} effects</div>
+                        </div>
+                        <span className="efx-grp-arrow">›</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>,
         document.body
       )}
@@ -7293,7 +7384,7 @@ function EfxStack(props) {
           )
         })()}
         {/* + effect — 2 parts */}
-        <AddEfxMenu onAdd={addEfx} filterTypes={props.filterTypes} excludeGroups={props.excludeGroups}/>
+        <AddEfxSheet onAdd={addEfx} filterTypes={props.filterTypes} excludeGroups={props.excludeGroups}/>
         {/* + stack — 2 parts */}
         <div ref={lkRef} style={{position:"relative",flex:2,minWidth:0}}>
           <button className="ac" style={{width:"100%",height:"100%",fontSize:11}}
