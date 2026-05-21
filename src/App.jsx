@@ -885,7 +885,7 @@ var MBMS   = ["multiply","screen","add","subtract","normal"]
 var MCH    = ["luminosity","R","G","B","A"]
 var SHAPES = ["ellipse","rectangle","rounded-rect","polygon","star","ring","grid","spiral","polar-grid","phyllotaxis","scatter"]
 var GTYPES = ["linear","radial","conic"]
-var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value","crystal","phasor","white"]
+var NTYPES = ["perlin","fbm","turbulence","worley","simplex","marble","wood","value","phasor","white"]
 var PTYPES = ["checkerboard","stripes","dots","diamond"]
 var ECFG   = {
   brightness: ["value",0,300,1,150],
@@ -1125,20 +1125,11 @@ function turbulence(x,y,oct,s) {
   return 1-v/m
 }
 // ── Worley / Cellular noise (F1 — distance to nearest point) ──────────────────
-function worley(x,y,s,jitter) {
-  jitter=jitter==null?1:jitter
-  var ix=Math.floor(x), iy=Math.floor(y), minD=1e9
-  for(var dy=-1;dy<=1;dy++) for(var dx=-1;dx<=1;dx++){
-    var cx=ix+dx, cy=iy+dy
-    var px=cx+vh(cx,cy,s)*jitter, py=cy+vh(cx+31.4,cy+27.8,s)*jitter
-    var d=(x-px)*(x-px)+(y-py)*(y-py)
-    if(d<minD)minD=d
-  }
-  return Math.max(0,Math.min(1,Math.sqrt(minD)))
-}
-// ── Crystal noise — Voronoi F2-F1 (highlights cell borders as bright ridges) ──
-function crystal(x,y,s,jitter,mode) {
-  jitter=jitter==null?1:jitter; mode=mode||"f2f1"
+// ── Worley/Voronoi noise — unified 5×5 F1+F2 search ─────────────────────────
+// 5×5 search radius required for F2/F2-F1 accuracy at high jitter values.
+// Modes: f1, f2, f2f1 (cell borders), f1f2 (product), f2df1 (ratio)
+function worley(x,y,s,jitter,mode) {
+  jitter=jitter==null?1:jitter; mode=mode||"f1"
   var ix=Math.floor(x), iy=Math.floor(y)
   var f1=1e9, f2=1e9
   for(var dy=-2;dy<=2;dy++) for(var dx=-2;dx<=2;dx++){
@@ -1151,7 +1142,7 @@ function crystal(x,y,s,jitter,mode) {
   if(mode==="f2f1") return Math.max(0,Math.min(1,(f2-f1)*2.5))
   if(mode==="f1f2") return Math.max(0,Math.min(1,f1*f2*4))
   if(mode==="f2df1")return Math.max(0,Math.min(1,f1>0?f2/f1*.5:0))
-  return Math.max(0,Math.min(1,f2-f1))
+  return Math.max(0,Math.min(1,f1*1.5))  // f1 default
 }
 // ── Phasor noise — oriented sinusoidal bands (Tricard et al. 2019) ───────────
 // Anisotropic stripe/ripple pattern with controllable frequency and direction
@@ -2083,12 +2074,11 @@ function gNoise(ctx,p,w,h) {
       case "perlin":     v=octPerlinG(sx,sy,oct,lac,gain,seed); break
       case "fbm":        v=fbm(sx,sy,oct,lac,gain,seed); break
       case "turbulence": v=turbulence(sx,sy,oct,seed); break
-      case "worley":     { var wF1=worley(sx,sy,seed,wJitter); v=wMode==="f2"?1-wF1:wMode==="f2f1"?crystal(sx,sy,seed,wJitter,"f2f1"):wF1; break }
+      case "worley":     v=worley(sx,sy,seed,wJitter,wMode); break
       case "simplex":    v=octSimplex(sx,sy,oct,lac,gain,seed); break
       case "marble":     v=marble(sx,sy,oct,seed,mFreq,mTurb); break
       case "wood":       v=wood(sx,sy,oct,seed,mFreq,mTurb); break
       case "value":      v=octValue(sx,sy,oct,lac,gain,seed); break
-      case "crystal":    v=crystal(sx,sy,seed,p.wJitter,p.crystalMode||"f2f1"); break
       case "phasor":     v=phasor(sx,sy,seed,p.pFreq,p.pAngle,p.pBandwidth,oct); break
       case "white":      v=whiteNoise(px,py,seed,grainSize); break
       default:           v=vh(px,py,seed)
@@ -2103,12 +2093,11 @@ function gNoise(ctx,p,w,h) {
           case "perlin":     return absMode?absOct("perlin",sx2,sy2,oct,lac,gain,s):octPerlinG(sx2,sy2,oct,lac,gain,s)
           case "fbm":        return absMode?absOct("value",sx2,sy2,oct,lac,gain,s):fbm(sx2,sy2,oct,lac,gain,s)
           case "turbulence": return turbulence(sx2,sy2,oct,s)
-          case "worley":     { var _w=worley(sx2,sy2,s,wJitter); return wMode==="f2"?1-_w:wMode==="f2f1"?crystal(sx2,sy2,s,wJitter,"f2f1"):_w }
+          case "worley":     return worley(sx2,sy2,s,wJitter,wMode)
           case "simplex":    return absMode?absOct("simplex",sx2,sy2,oct,lac,gain,s):octSimplex(sx2,sy2,oct,lac,gain,s)
           case "value":      return absMode?absOct("value",sx2,sy2,oct,lac,gain,s):octValue(sx2,sy2,oct,lac,gain,s)
           case "marble":     return marble(sx2,sy2,oct,s,mFreq,mTurb)
           case "wood":       return wood(sx2,sy2,oct,s,mFreq,mTurb)
-          case "crystal":    return crystal(sx2,sy2,s,p.wJitter,p.crystalMode||"f2f1")
           case "phasor":     return phasor(sx2,sy2,s,p.pFreq,p.pAngle,p.pBandwidth,oct)
           case "white":      return whiteNoise(px,py,s,grainSize)
           default:           return octN(sx2,sy2,oct,s,lac,gain)
@@ -5148,18 +5137,12 @@ function NoiseP(props) {
       )}
       {p.nType==="worley"&&(
         <div>
-          <Se l="mode" v={p.wMode||"f1"} opts={["f1","f2","f2f1"]} fn={function(v){up(Object.assign({},p,{wMode:v}))}}/>
+          <Se l="mode" v={p.wMode||"f1"} opts={["f1","f2","f2f1","f1f2","f2df1"]} fn={function(v){up(Object.assign({},p,{wMode:v}))}}/>
           <Sl l="jitter" v={p.wJitter==null?1:p.wJitter} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{wJitter:v}))}}/>
         </div>
       )}
       {p.nType==="white"&&(
         <Sl l="grain size" v={p.grainSize||1} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up(Object.assign({},p,{grainSize:v}))}}/>
-      )}
-      {p.nType==="crystal"&&(
-        <div>
-          <Se l="mode" v={p.crystalMode||"f2f1"} opts={["f2f1","f2","f1f2","f2df1"]} fn={function(v){up(Object.assign({},p,{crystalMode:v}))}}/>
-          <Sl l="jitter" v={p.wJitter==null?1:p.wJitter} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{wJitter:v}))}}/>
-        </div>
       )}
       {p.nType==="phasor"&&(
         <div>
