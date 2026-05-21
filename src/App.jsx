@@ -1002,6 +1002,9 @@ function mkEfx(t) {
   if(t==="vignette")     params={strength:80, radius:.65, softness:.45, color:"#000000"}
   if(t==="chromatic-ab") params={distance:6, angle:45, mode:"rgb"}
   if(t==="glow")         params={radius:12, strength:60, threshold:120}
+  if(t==="bevel")        params={angle:135, strength:0.5}
+  if(t==="dilate")       params={radius:5}
+  if(t==="inflate")      params={radius:5, softness:0.8}
   if(t==="emboss")       params={angle:135, strength:100, flat:128}
   if(t==="edge-detect")  params={strength:100, invert:false}
   if(t==="pixelate")     params={size:8}
@@ -1010,7 +1013,7 @@ function mkEfx(t) {
   if(t==="separate")     params={inputSet:"",by:"opacity",threshold:.5,outputA:"",outputB:""}
   if(t==="filter")       params={attr:"opacity",op:">",value:.5}
   if(t==="delete")       params={attr:"opacity",op:"<",value:.1}
-  var ptDomain=["point-map","source-at-points"]; return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[], blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}}, domain:ptDomain.includes(t)?"points":"pixels" }
+  var ptDomain=["point-map","source-at-points","dilate","inflate"]; return { id:uid(), type:t, name:"", enabled:true, params:params, opacity:100, blendMode:"normal", maskStack:[], blendChannels:{R:true,G:true,B:true,A:true}, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}}, domain:ptDomain.includes(t)?"points":"pixels" }
 }
 function mkMask() { return { id:uid(), name:"", refId:null, channel:"luminosity", invert:false, fillOpacity:100, opacity:100, blendMode:"multiply", effectStack:[], enabled:true, blendIf:{thisLayer:{s0:0,s1:0,h1:255,h0:255},underlyingLayer:{s0:0,s1:0,h1:255,h0:255}} } }
 function mkSlot() { return { refId:null, effectStack:[], maskStack:[], fillOpacity:100 } }
@@ -1674,6 +1677,66 @@ function pxFn(d,w,h,t,p) {
     for(i=0;i<d.length;i+=4){
       var lum=.299*d[i]+.587*d[i+1]+.114*d[i+2]
       if(lum>solT){d[i]=255-d[i];d[i+1]=255-d[i+1];d[i+2]=255-d[i+2]}
+    }
+  } else if (t==="bevel") {
+    // Height-field bevel: uses brightness as height map, Sobel gradient → surface normal,
+    // directional light dot product → lift highlights/shadows while preserving colour.
+    var bvAng=(p.angle==null?135:p.angle)*Math.PI/180
+    var bvStr=p.strength==null?0.5:p.strength
+    var bvLx=Math.cos(bvAng),bvLy=Math.sin(bvAng),bvLz=0.5
+    var bvOrig=new Uint8ClampedArray(d)
+    function bvLum(ni2){return(bvOrig[ni2]*.299+bvOrig[ni2+1]*.587+bvOrig[ni2+2]*.114)/255}
+    for(var bvy=0;bvy<h;bvy++) for(var bvx=0;bvx<w;bvx++){
+      var bvpi=(bvy*w+bvx)*4
+      var bvl=bvx>0?(bvy*w+bvx-1)*4:bvpi,bvr=bvx<w-1?(bvy*w+bvx+1)*4:bvpi
+      var bvu=bvy>0?((bvy-1)*w+bvx)*4:bvpi,bvd=bvy<h-1?((bvy+1)*w+bvx)*4:bvpi
+      var bvgx=(bvLum(bvr)-bvLum(bvl))*.5, bvgy=(bvLum(bvd)-bvLum(bvu))*.5
+      var bvdot=Math.max(-1,Math.min(1,bvgx*bvLx+bvgy*bvLy+bvLz))*bvStr
+      d[bvpi]=Math.max(0,Math.min(255,bvOrig[bvpi]+bvdot*255))
+      d[bvpi+1]=Math.max(0,Math.min(255,bvOrig[bvpi+1]+bvdot*255))
+      d[bvpi+2]=Math.max(0,Math.min(255,bvOrig[bvpi+2]+bvdot*255))
+    }
+  } else if (t==="dilate") {
+    // Morphological dilation: max filter over circular neighbourhood.
+    // Expands bright/opaque areas with hard edges. Works on RGB + alpha.
+    var dlR=Math.max(1,Math.round(p.radius==null?5:p.radius))
+    var dlOrig=new Uint8ClampedArray(d)
+    for(var dly=0;dly<h;dly++) for(var dlx=0;dlx<w;dlx++){
+      var dlpi=(dly*w+dlx)*4
+      var dlRv=dlOrig[dlpi],dlGv=dlOrig[dlpi+1],dlBv=dlOrig[dlpi+2],dlAv=dlOrig[dlpi+3]
+      for(var dldy=-dlR;dldy<=dlR;dldy++) for(var dldx=-dlR;dldx<=dlR;dldx++){
+        if(dldx*dldx+dldy*dldy>dlR*dlR+dlR) continue
+        var dlnx=dlx+dldx,dlny=dly+dldy
+        if(dlnx<0||dlnx>=w||dlny<0||dlny>=h) continue
+        var dlni=(dlny*w+dlnx)*4
+        dlRv=Math.max(dlRv,dlOrig[dlni]);dlGv=Math.max(dlGv,dlOrig[dlni+1])
+        dlBv=Math.max(dlBv,dlOrig[dlni+2]);dlAv=Math.max(dlAv,dlOrig[dlni+3])
+      }
+      d[dlpi]=dlRv;d[dlpi+1]=dlGv;d[dlpi+2]=dlBv;d[dlpi+3]=dlAv
+    }
+  } else if (t==="inflate") {
+    // Inflate: distance-weighted max — soft/anti-aliased expansion.
+    // Each neighbor contributes proportionally to (1 - dist/radius * softness),
+    // creating smooth rounded edges vs dilate's hard circular boundary.
+    var ifR=Math.max(1,Math.round(p.radius==null?5:p.radius))
+    var ifSoft=p.softness==null?0.8:p.softness
+    var ifOrig=new Uint8ClampedArray(d)
+    for(var ify=0;ify<h;ify++) for(var ifx=0;ifx<w;ifx++){
+      var ifpi=(ify*w+ifx)*4
+      var ifRv=ifOrig[ifpi],ifGv=ifOrig[ifpi+1],ifBv=ifOrig[ifpi+2],ifAv=ifOrig[ifpi+3]
+      for(var ifdy=-ifR;ifdy<=ifR;ifdy++) for(var ifdx=-ifR;ifdx<=ifR;ifdx++){
+        var ifd=Math.sqrt(ifdx*ifdx+ifdy*ifdy)
+        if(ifd>ifR) continue
+        var ifnx=ifx+ifdx,ifny=ify+ifdy
+        if(ifnx<0||ifnx>=w||ifny<0||ifny>=h) continue
+        var ifni=(ifny*w+ifnx)*4
+        var ifw=Math.max(0,1-ifd/ifR*ifSoft)
+        ifRv=Math.max(ifRv,Math.round(ifOrig[ifni]*ifw))
+        ifGv=Math.max(ifGv,Math.round(ifOrig[ifni+1]*ifw))
+        ifBv=Math.max(ifBv,Math.round(ifOrig[ifni+2]*ifw))
+        ifAv=Math.max(ifAv,Math.round(ifOrig[ifni+3]*ifw))
+      }
+      d[ifpi]=ifRv;d[ifpi+1]=ifGv;d[ifpi+2]=ifBv;d[ifpi+3]=ifAv
     }
   }
   // NOTE: "transform", "uv-distort", "polar-to-cart", "cart-to-polar"
@@ -2961,6 +3024,30 @@ function compMasks(stack,cmap,cache,iC,w,h,vis,nodes) {
 // Apply a spatial effect to point positions rather than pixels
 // Returns new _points array with x,y (and optionally rotation/scale) modified
 function applyEfxToPoints(pts,efx,w,h) {
+  // Dilate: push each point radially outward from the group centroid
+  if(efx.type==="dilate") {
+    var dAmt=(efx.params.radius==null?5:efx.params.radius)/Math.max(w,h)
+    if(pts.length===0) return pts
+    var cX=0,cY=0; pts.forEach(function(p){cX+=p.x;cY+=p.y}); cX/=pts.length;cY/=pts.length
+    return pts.map(function(p){
+      var dx=p.x-cX,dy=p.y-cY,d=Math.sqrt(dx*dx+dy*dy)
+      return d>0?Object.assign({},p,{x:p.x+dx/d*dAmt,y:p.y+dy/d*dAmt}):p
+    })
+  }
+  // Inflate: push each point away from its nearest neighbours (local repulsion)
+  if(efx.type==="inflate") {
+    var ifAmt=(efx.params.radius==null?5:efx.params.radius)/Math.max(w,h)
+    var ifZone=ifAmt*3
+    return pts.map(function(p,i){
+      var fx=0,fy=0
+      pts.forEach(function(q,j){
+        if(i===j) return
+        var dx=p.x-q.x,dy=p.y-q.y,dist=Math.sqrt(dx*dx+dy*dy)
+        if(dist<ifZone&&dist>0){var f=(ifZone-dist)/ifZone*ifAmt;fx+=dx/dist*f;fy+=dy/dist*f}
+      })
+      return Object.assign({},p,{x:p.x+fx,y:p.y+fy})
+    })
+  }
   var p=efx.params||{}, t=efx.type
   var out=pts.map(function(pt){ return Object.assign({},pt) })
   if(t==="transform"){
@@ -4803,7 +4890,7 @@ var GEO_POINT_TYPES = ["grid","spiral","polar-grid","phyllotaxis","scatter"]
 // Effects available in point context (transform + point-specific only)
 // Effects available in Point Comp isolate mask effect stacks.
 // Luminance/shape ops only — no colour manipulation (masks are greyscale).
-var ISOLATE_MASK_EFFECTS = ["brightness","contrast","curves","exposure","levels","posterize","invert","threshold","pixelate","blur"]
+var ISOLATE_MASK_EFFECTS = ["brightness","contrast","curves","exposure","levels","posterize","invert","threshold","pixelate","blur","dilate","inflate"]
 var POINT_CONTEXT_EFFECTS = ["transform","wave","twirl","bulge","cart-to-polar","polar-to-cart","uv-distort","match","point-map","source-at-points","show-points","attributes","combine","separate","filter","delete"]
 function getSourceGeomType(nodes, sourceId) {
   if(!sourceId||!nodes) return null
@@ -5759,6 +5846,26 @@ function EfxPrimary(props) {
         fmt={function(v){return Math.round(v)+"%"}} fn={function(v){up({strength:v})}}/>
       <Sl l="threshold" v={p.threshold==null?120:p.threshold} mn={0} mx={255} st={1}
         fmt={function(v){return Math.round(v)}} fn={function(v){up({threshold:v})}}/>
+    </div>
+  )
+  if(efx.type==="bevel") return (
+    <div>
+      <Sl l="angle" v={p.angle==null?135:p.angle} mn={0} mx={360} st={1}
+        fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up({angle:v})}}/>
+      <Sl l="strength" v={p.strength==null?0.5:p.strength} mn={0} mx={2} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({strength:v})}}/>
+    </div>
+  )
+  if(efx.type==="dilate") return (
+    <Sl l="radius" v={p.radius==null?5:p.radius} mn={1} mx={40} st={1}
+      fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({radius:v})}}/>
+  )
+  if(efx.type==="inflate") return (
+    <div>
+      <Sl l="radius" v={p.radius==null?5:p.radius} mn={1} mx={40} st={1}
+        fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up({radius:v})}}/>
+      <Sl l="softness" v={p.softness==null?0.8:p.softness} mn={0} mx={1} st={.01}
+        fmt={function(v){return v.toFixed(2)}} fn={function(v){up({softness:v})}}/>
     </div>
   )
   if(efx.type==="emboss") return (
@@ -7015,7 +7122,7 @@ function EfxCard(props) {
 var EFX_GROUPS=[
   {label:"Tonal",    items:["brightness","contrast","exposure","levels","curves","posterize"]},
   {label:"Colour",   items:["hue-shift","saturation","vibrance","colour-map","colour"]},
-  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","bevel","emboss","edge-detect","solarise","duotone"]},
+  {label:"Pixel",    items:["blur","dir-blur","sharpen","invert","threshold","pixelate","vignette","chromatic-ab","glow","bevel","emboss","edge-detect","solarise","duotone","dilate","inflate"]},
   {label:"Distort",  items:["wave","twirl","bulge","uv-texture","uv-distort","polar-to-cart","cart-to-polar"]},
   {label:"Transform",items:["match","transform"]},
   {label:"Points",   items:["show-points","point-map","source-at-points","attributes","combine","separate","filter","delete"]},
