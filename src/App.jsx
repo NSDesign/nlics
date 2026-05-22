@@ -1,5 +1,13 @@
-import { useState, useEffect, useRef, Component, cloneElement, Children } from "react"
+import { useState, useEffect, useRef, Component, cloneElement, Children, useCallback } from "react"
 import { createPortal } from "react-dom"
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+  DragOverlay, useDroppable
+} from "@dnd-kit/core"
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 
 /* ─── CSS ─────────────────────────────────────────────────── */
@@ -8357,8 +8365,6 @@ function SegCtrl(props) {
 }
 
 function SettingsSheet(props) {
-  // props: open, onClose, settings, onSettings
-  // settings: {viewMode, previewPinned, stickyHeaders, panelStyle}
   var s = props.settings
   function set(k, v) { props.onSettings(Object.assign({}, s, {[k]: v})) }
 
@@ -8369,71 +8375,27 @@ function SettingsSheet(props) {
       <div className="sheet-body" style={{position:"relative"}}>
         <div className="sheet-grip"/>
         <div className="sheet-hdr">
-          <span className="sheet-title">Layout Settings</span>
+          <span className="sheet-title">Settings</span>
           <button className="ghost" style={{fontSize:20,minHeight:36}} onClick={props.onClose}>×</button>
         </div>
         <div className="sheet-scroll">
 
+          {/* ── List settings ── */}
           <div className="setting-grp">
-            <div className="setting-grp-lbl">View mode</div>
+            <div className="setting-grp-lbl">List settings</div>
+
             <div className="setting-row">
-              <div>
-                <div className="setting-lbl">Layout style</div>
-                <div className="setting-desc">Split keeps lists and preview in separate resizable panels. Unified scrolls everything in one column.</div>
+              <div style={{flex:1}}>
+                <div className="setting-lbl">Section headers</div>
+                <div className="setting-desc">Sticky keeps §1 and §2 headers fixed while you scroll their contents. Flowing lets them scroll away.</div>
               </div>
             </div>
             <SegCtrl
-              value={s.viewMode}
-              options={[{v:"split",l:"Split"},{v:"unified",l:"Unified scroll"}]}
-              accent="ac"
-              onChange={function(v){ set("viewMode", v) }}/>
-          </div>
+              value={s.stickyHeaders?"sticky":"flowing"}
+              options={[{v:"sticky",l:"Sticky"},{v:"flowing",l:"Flowing"}]}
+              onChange={function(v){ set("stickyHeaders", v==="sticky") }}/>
 
-          {s.viewMode==="unified" && (
-            <div className="setting-grp">
-              <div className="setting-grp-lbl">Unified options</div>
-              <div className="setting-row">
-                <div style={{flex:1}}>
-                  <div className="setting-lbl">Preview</div>
-                  <div className="setting-desc">Pinned keeps the preview locked at the top while lists scroll below. Scrollable lets the preview scroll with the lists.</div>
-                </div>
-              </div>
-              <SegCtrl
-                value={s.previewPinned?"pinned":"scrollable"}
-                options={[{v:"pinned",l:"Pinned"},{v:"scrollable",l:"Scrollable"}]}
-                accent="ac"
-                onChange={function(v){ set("previewPinned", v==="pinned") }}/>
-
-              <div className="setting-row" style={{marginTop:16}}>
-                <div style={{flex:1}}>
-                  <div className="setting-lbl">Section headers</div>
-                  <div className="setting-desc">Sticky keeps §1 and §2 headers fixed while you scroll their contents. Flowing lets them scroll away.</div>
-                </div>
-              </div>
-              <SegCtrl
-                value={s.stickyHeaders?"sticky":"flowing"}
-                options={[{v:"sticky",l:"Sticky"},{v:"flowing",l:"Flowing"}]}
-                onChange={function(v){ set("stickyHeaders", v==="sticky") }}/>
-            </div>
-          )}
-
-          <div className="setting-grp">
-            <div className="setting-grp-lbl">Project</div>
-            <div className="setting-row">
-              <span className="setting-lbl">Auto-save interval</span>
-              <select value={props.autoSaveInt||0} onChange={function(e){props.onAutoSaveInt(Number(e.target.value))}}
-                style={{background:"var(--el)",color:"var(--tx)",border:"1px solid var(--bd)",
-                  borderRadius:4,padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}>
-                <option value={0}>Off</option>
-                <option value={1}>1 min</option>
-                <option value={2}>2 min</option>
-                <option value={5}>5 min</option>
-                <option value={10}>10 min</option>
-              </select>
-            </div>
-            <div className="setting-desc">Auto-saves locally on interval and on app close. Use ↓ to save a file.</div>
-            <div className="setting-grp-lbl">Node settings panel</div>
-            <div className="setting-row">
+            <div className="setting-row" style={{marginTop:16}}>
               <div style={{flex:1}}>
                 <div className="setting-lbl">Panel style</div>
                 <div className="setting-desc">Inline expands settings below the node row, pushing content down. Sheet slides up from the bottom as an overlay, keeping the list visible.</div>
@@ -8445,32 +8407,22 @@ function SettingsSheet(props) {
               onChange={function(v){ set("panelStyle", v) }}/>
           </div>
 
+          {/* ── Auto-save (standalone) ── */}
           <div className="setting-grp">
-            <div className="setting-grp-lbl">Orientation</div>
+            <div className="setting-grp-lbl">Project · Auto-save</div>
             <div className="setting-row">
-              <div style={{flex:1}}>
-                <div className="setting-lbl">Layout axis</div>
-                <div className="setting-desc">Vertical stacks panels top/bottom. Horizontal places them side by side.</div>
-              </div>
-              <SegCtrl
-                value={props.isVert?"vert":"horiz"}
-                options={[{v:"vert",l:"Vertical"},{v:"horiz",l:"Horizontal"}]}
-                onChange={function(v){ props.onIsVert(v==="vert") }}/>
+              <span className="setting-lbl">Interval</span>
+              <select value={props.autoSaveInt||0} onChange={function(e){props.onAutoSaveInt(Number(e.target.value))}}
+                style={{background:"var(--el)",color:"var(--tx)",border:"1px solid var(--bd)",
+                  borderRadius:4,padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace"}}>
+                <option value={0}>Off</option>
+                <option value={1}>1 min</option>
+                <option value={2}>2 min</option>
+                <option value={5}>5 min</option>
+                <option value={10}>10 min</option>
+              </select>
             </div>
-            {props.isVert && (
-              <div>
-                <div className="setting-row" style={{marginTop:12}}>
-                  <div style={{flex:1}}>
-                    <div className="setting-lbl">Panel order</div>
-                    <div className="setting-desc">Choose whether the preview or the lists appear at the top.</div>
-                  </div>
-                </div>
-                <SegCtrl
-                  value={props.flipped?"preview-top":"lists-top"}
-                  options={[{v:"preview-top",l:"Preview top"},{v:"lists-top",l:"Lists top"}]}
-                  onChange={function(v){ props.onFlipped(v==="preview-top") }}/>
-              </div>
-            )}
+            <div className="setting-desc">Auto-saves locally on interval and on app close. Use ↓ to save a file.</div>
           </div>
 
         </div>
@@ -9606,6 +9558,266 @@ function PromotedProps(props) {
   )
 }
 
+/* ─── NODE GROUP (folder) data helpers ───────────────────── */
+// Groups are stored as flat nodes with type:"group" alongside regular nodes.
+// childIds: array of node IDs contained in the group (display order).
+// A group can contain creators or compositors from its own section only.
+function mkGroup(name, sec) {
+  return {
+    id: uid(), type: "group", section: sec,
+    name: name || "Group " + (_uid - 100),
+    enabled: true, collapsed: false,
+    childIds: []
+  }
+}
+
+/* ─── NodeGroupCard ─ folder component with full DnD support ─ */
+// Uses @dnd-kit/sortable for item ordering and cross-group DnD.
+// All required operations: expand/collapse, rename, delete (options), duplicate, reorder.
+//
+// NOTE: The SortableContext + DndContext wiring lives in Section, which
+// wraps the full flat list. NodeGroupCard just renders the group folder UI
+// and delegates its own sortable children via a nested SortableContext.
+
+function NodeGroupCard(props) {
+  // props: group, nodes, childNodes, isFirst, isLast
+  //        onRename, onToggleCollapse, onDelete, onDuplicate, onMove
+  //        onRemoveChild(nodeId), selId, dispId, dispMask, dispSlot
+  //        onSel, onDsp, onDel, onRen, onTog, panelStyle, iC
+  //        onUpd, onLoad, onPromote, onExtract, onNavigate, dspSlot
+  var g = props.group
+  var edSt = useState(false); var editing = edSt[0], setEditing = edSt[1]
+  var nmSt = useState(g.name); var nm = nmSt[0], setNm = nmSt[1]
+  var delMenuSt = useState(false); var delMenu = delMenuSt[0], setDelMenu = delMenuSt[1]
+  var delAnchorRef = useRef(null), delMenuRef = useRef(null)
+  var delPos = usePopoverPosition(delAnchorRef, delMenu, "above")
+  var inputRef = useRef(null)
+
+  useEffect(function(){ setNm(g.name) }, [g.name])
+  useEffect(function(){ if(editing && inputRef.current){ inputRef.current.focus(); inputRef.current.select() }}, [editing])
+  useEffect(function(){
+    if(!delMenu) return
+    function h(e){
+      if(delAnchorRef.current && delAnchorRef.current.contains(e.target)) return
+      if(delMenuRef.current && delMenuRef.current.contains(e.target)) return
+      setDelMenu(false)
+    }
+    document.addEventListener("mousedown", h)
+    return function(){ document.removeEventListener("mousedown", h) }
+  }, [delMenu])
+
+  function commitRename() {
+    setEditing(false)
+    var t = nm.trim()
+    if(t && t !== g.name) props.onRename(t)
+    else setNm(g.name)
+  }
+
+  var { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({id: g.id})
+  var style = { transform: CSS.Transform.toString(transform), transition: transition,
+    opacity: isDragging ? 0.4 : 1 }
+
+  return (
+    <div ref={setNodeRef} style={style} id={"ni-" + g.id}>
+      {/* Group header */}
+      <div style={{display:"flex",alignItems:"center",gap:4,padding:"0 8px 0 6px",
+        minHeight:"var(--tap)",borderBottom:"1px solid rgba(37,37,80,.8)",
+        background:g.collapsed?"var(--pn)":"var(--sf)",
+        cursor:"pointer",userSelect:"none"}} onClick={props.onToggleCollapse}>
+        {/* Drag handle */}
+        <span {...attributes} {...listeners}
+          style={{cursor:"grab",color:"var(--bd)",fontSize:16,padding:"0 2px",touchAction:"none",
+            display:"inline-flex",alignItems:"center"}}
+          onClick={function(e){e.stopPropagation()}}>⋮⋮</span>
+        <span style={{fontSize:14,color:"var(--mu)",transform:g.collapsed?"none":"rotate(90deg)",
+          transition:"transform .15s",display:"inline-flex",alignItems:"center"}}>›</span>
+        {/* Colour dot */}
+        <div style={{width:8,height:8,borderRadius:"50%",background:"var(--di)",flexShrink:0}}/>
+        {/* Name / rename */}
+        {editing
+          ? <input ref={inputRef} value={nm}
+              onChange={function(e){setNm(e.target.value)}}
+              onBlur={commitRename}
+              onKeyDown={function(e){if(e.key==="Enter")commitRename();if(e.key==="Escape"){setEditing(false);setNm(g.name)}}}
+              onClick={function(e){e.stopPropagation()}}
+              style={{flex:1,fontSize:12,padding:"2px 6px",background:"var(--bg)",
+                border:"1px solid var(--ac)",borderRadius:4,color:"var(--tx)",
+                fontFamily:"'IBM Plex Mono',monospace"}}/>
+          : <span onDoubleClick={function(e){e.stopPropagation();setEditing(true)}}
+              style={{flex:1,fontSize:12,color:"var(--di)",fontFamily:"'IBM Plex Mono',monospace",
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",userSelect:"none"}}>
+              {g.name}
+              <span style={{fontSize:9,color:"var(--mu)",marginLeft:6}}>
+                {props.childNodes.length} item{props.childNodes.length!==1?"s":""}
+              </span>
+            </span>
+        }
+        {/* Duplicate */}
+        <button className="icon-btn sm" title="Duplicate group"
+          onClick={function(e){e.stopPropagation();props.onDuplicate()}}
+          style={{fontSize:12,color:"var(--mu)"}}>⧉</button>
+        {/* Delete menu */}
+        <div style={{position:"relative",display:"inline-flex"}}>
+          <button ref={delAnchorRef} className="icon-btn sm"
+            title="Delete options"
+            onClick={function(e){e.stopPropagation();setDelMenu(!delMenu)}}
+            style={{fontSize:14,color:"var(--mu)"}}>×</button>
+          {delMenu && delPos && createPortal(
+            <div ref={delMenuRef} className="drop-menu" style={delPos}>
+              <div className="drop-item" onClick={function(){setDelMenu(false);props.onDelete("all")}}>
+                Delete folder + contents
+              </div>
+              <div className="drop-item" onClick={function(){setDelMenu(false);props.onDelete("folder")}}>
+                Delete folder, keep items
+              </div>
+              <div className="drop-item" onClick={function(){setDelMenu(false);props.onDelete("contents")}}>
+                Delete contents only
+              </div>
+            </div>,
+            document.body
+          )}
+        </div>
+      </div>
+
+      {/* Children */}
+      {!g.collapsed && (
+        <div style={{paddingLeft:16,borderBottom:"1px solid rgba(37,37,80,.5)"}}>
+          <SortableContext
+            items={props.childNodes.map(function(n){return n.id})}
+            strategy={verticalListSortingStrategy}>
+            {props.childNodes.length === 0 && (
+              <div style={{padding:"10px 12px",fontSize:10,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>
+                empty — drag items here
+              </div>
+            )}
+            {props.childNodes.map(function(node, i) {
+              var isSel = props.selId === node.id
+              var isDsp = props.dispId === node.id
+              return (
+                <div key={node.id}>
+                  <NodeItemSortable
+                    node={node} isSel={isSel} isDsp={isDsp}
+                    isMaskDisp={!!(props.dispMask && props.dispId === node.id)}
+                    dispSlot={props.dispSlot}
+                    onSel={props.onSel} onDsp={props.onDsp}
+                    onDel={props.onDel} onRen={props.onRen} onTog={props.onTog}
+                    onRemoveFromGroup={function(){props.onRemoveChild(node.id)}}/>
+                  {isSel && props.panelStyle !== "sheet" && (
+                    <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
+                      {node.section === 1
+                        ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}
+                            nodes={props.nodes} iC={props.iC}/>
+                        : node.type === "blender"
+                          ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes}
+                              iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote}
+                              dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp}
+                              dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
+                          : node.type === "layers"
+                            ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes}
+                                iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                            : node.type === "stack"
+                              ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes}
+                                  iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                              : node.type === "point-comp"
+                                ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes}
+                                    iC={props.iC} onNavigate={props.onNavigate}
+                                    dspSlot={props.dspSlot} dispSlot={props.dispSlot}/>
+                                : null
+                      }
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </SortableContext>
+          {/* Remove-from-group shortcut shown inline when group is not empty */}
+          {props.childNodes.length > 0 && (
+            <div style={{padding:"4px 8px 6px",fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>
+              double-tap name to rename · drag to reorder or move between groups
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* NodeItemSortable — NodeItem wrapped with useSortable for DnD ── */
+function NodeItemSortable(props) {
+  var { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({id: props.node.id})
+  var style = { transform: CSS.Transform.toString(transform), transition: transition,
+    opacity: isDragging ? 0.35 : 1 }
+  return (
+    <div ref={setNodeRef} style={style}>
+      <div style={{display:"flex",alignItems:"center"}}>
+        <span {...attributes} {...listeners}
+          style={{cursor:"grab",color:"var(--bd)",fontSize:16,padding:"0 2px 0 4px",
+            touchAction:"none",flexShrink:0,display:"inline-flex",alignItems:"center",
+            minHeight:"var(--tap)"}}
+          onClick={function(e){e.stopPropagation()}}>⋮</span>
+        <div style={{flex:1,minWidth:0}}>
+          <NodeItem {...props}/>
+        </div>
+        {props.onRemoveFromGroup && (
+          <button className="icon-btn sm"
+            title="Move out of group"
+            onClick={function(e){e.stopPropagation();props.onRemoveFromGroup()}}
+            style={{fontSize:10,color:"var(--mu)",flexShrink:0,marginRight:4}}>↑</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ─── LIST PANEL — tab-based to fix accordion scroll height issues ── */
+// Tabs replace the dual Section accordion layout in split mode.
+// A single stable overflowY:auto container eliminates the height-recalculation
+// bug that occurs when accordion items expand/collapse within competing flex children.
+function ListPanel(props) {
+  var ltSt = useState(1); var lt = ltSt[0], setLt = ltSt[1]
+  var nodes = props.sp.nodes || []
+  var s1Count = nodes.filter(function(n){ return n.section===1 }).length
+  var s2Count = nodes.filter(function(n){ return n.section===2 }).length
+  return (
+    <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",position:"relative"}}>
+      {/* Tab bar */}
+      <div style={{display:"flex",flexShrink:0,background:"var(--bg)",borderBottom:"1px solid var(--bd)"}}>
+        <button
+          className={"tab" + (lt===1 ? " on ac" : "")}
+          style={{flex:1,height:38,borderRadius:0,borderRight:"1px solid var(--bd)",fontSize:10}}
+          onClick={function(){setLt(1)}}>
+          §1 · Creators{s1Count > 0 ? " (" + s1Count + ")" : ""}
+        </button>
+        <button
+          className={"tab" + (lt===2 ? " on co" : "")}
+          style={{flex:1,height:38,borderRadius:0,fontSize:10}}
+          onClick={function(){setLt(2)}}>
+          §2 · Compositors{s2Count > 0 ? " (" + s2Count + ")" : ""}
+        </button>
+      </div>
+      {/* Single scroll container — stable height, no competing flex children */}
+      <div style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
+        {lt===1 && (
+          <Section sec={1} title="§1 · Creators" {...props.sp}
+            collapsed={props.s1Col} onToggle={function(){props.setS1Col(!props.s1Col)}}
+            stickyHeaders={props.stickyHeaders} panelStyle={props.panelStyle} inScroll={true}/>
+        )}
+        {lt===2 && (
+          <Section sec={2} title="§2 · Compositors" {...props.sp}
+            collapsed={props.s2Col} onToggle={function(){props.setS2Col(!props.s2Col)}}
+            stickyHeaders={props.stickyHeaders} panelStyle={props.panelStyle} inScroll={true}/>
+        )}
+      </div>
+      {/* Sheet overlay */}
+      {props.sheetOverlay && (
+        <div style={{position:"absolute",inset:0,background:"rgba(4,4,18,.65)",
+          zIndex:650,pointerEvents:"auto"}}
+          onClick={props.sheetOverlay}/>
+      )}
+    </div>
+  )
+}
+
 /* ─── SECTION (stickyHeader + sheet panel style) ─── */
 function Section(props) {
   var items = props.nodes.filter(function(n){ return n.section===props.sec })
@@ -10499,19 +10711,10 @@ function App() {
             }
             {flipped&&isVert
               ? <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport} fullscreen={rightFS} onFullscreen={function(){setRightFS(!rightFS)}}/>
-              : <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",position:"relative"}}>
-                  <Section sec={1} title="§1 · Creators" {...sp}
-                    collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
-                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
-                  <Section sec={2} title="§2 · Compositors" {...sp}
-                    collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}}
-                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
-                  {settings.panelStyle==="sheet"&&sheetNode&&(
-                    <div style={{position:"absolute",inset:0,background:"rgba(4,4,18,.65)",
-                      zIndex:650,pointerEvents:"auto"}}
-                      onClick={function(){setSheetNode(null);setSelId(null)}}/>
-                  )}
-                </div>
+              : <ListPanel sp={sp} s1Col={s1Col} setS1Col={setS1Col}
+                  s2Col={s2Col} setS2Col={setS2Col}
+                  stickyHeaders={false} panelStyle={settings.panelStyle}
+                  sheetOverlay={settings.panelStyle==="sheet"&&sheetNode?function(){setSheetNode(null);setSelId(null)}:null}/>
             }
           </div>
 
@@ -10523,19 +10726,10 @@ function App() {
               : <PreviewBar/>
             }
             {flipped&&isVert
-              ? <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",position:"relative"}}>
-                  <Section sec={1} title="§1 · Creators" {...sp}
-                    collapsed={s1Col} onToggle={function(){setS1Col(!s1Col)}}
-                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
-                  <Section sec={2} title="§2 · Compositors" {...sp}
-                    collapsed={s2Col} onToggle={function(){setS2Col(!s2Col)}}
-                    stickyHeaders={false} panelStyle={settings.panelStyle} inScroll={false}/>
-                  {settings.panelStyle==="sheet"&&sheetNode&&(
-                    <div style={{position:"absolute",inset:0,background:"rgba(4,4,18,.65)",
-                      zIndex:650,pointerEvents:"auto"}}
-                      onClick={function(){setSheetNode(null);setSelId(null)}}/>
-                  )}
-                </div>
+              ? <ListPanel sp={sp} s1Col={s1Col} setS1Col={setS1Col}
+                  s2Col={s2Col} setS2Col={setS2Col}
+                  stickyHeaders={false} panelStyle={settings.panelStyle}
+                  sheetOverlay={settings.panelStyle==="sheet"&&sheetNode?function(){setSheetNode(null);setSelId(null)}:null}/>
               : <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport} fullscreen={rightFS} onFullscreen={function(){setRightFS(!rightFS)}}/>
             }
           </div>
