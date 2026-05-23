@@ -8239,11 +8239,17 @@ function AddMenu(props) {
               borderTop:"1px solid var(--bd)",borderBottom:"1px solid var(--bd)",background:"var(--bg)"}}>
               Advanced
             </div>,
-            s1advanced.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>})
-          ]:s2items.map(function(item){
-  if(item.t==="__div__") return <div key={item.t} className="drop-grp" style={{borderTop:"1px solid var(--bd)",marginTop:4}}>{item.l}</div>
-  return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>
-})}
+            s1advanced.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>}),
+            <div key="__grpdiv1__" style={{borderTop:"1px solid var(--bd)",marginTop:2}}/>,
+            <div key="group" className="drop-item" style={{color:"var(--mu)"}} onPointerDown={function(e){e.preventDefault();props.onAdd("group",props.sec);setOpen(false)}}>📁 New Group</div>
+          ]:[
+            ...s2items.map(function(item){
+              if(item.t==="__div__") return <div key={item.t} className="drop-grp" style={{borderTop:"1px solid var(--bd)",marginTop:4}}>{item.l}</div>
+              return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>
+            }),
+            <div key="__grpdiv2__" style={{borderTop:"1px solid var(--bd)",marginTop:2}}/>,
+            <div key="group" className="drop-item" style={{color:"var(--mu)"}} onPointerDown={function(e){e.preventDefault();props.onAdd("group",props.sec);setOpen(false)}}>📁 New Group</div>
+          ]}
         </div>,
         document.body
       )}
@@ -9819,13 +9825,63 @@ function ListPanel(props) {
 }
 
 /* ─── SECTION (stickyHeader + sheet panel style) ─── */
+function renderNodeInline(node, props) {
+  var isSel = props.selId===node.id
+  var isDsp = props.dispId===node.id
+  return (
+    <div key={node.id} id={"ni-"+node.id}>
+      <NodeItemSortable
+        node={node} isSel={isSel} isDsp={isDsp}
+        isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
+        dispSlot={props.dispSlot}
+        onSel={function(id){props.onSel(id===props.selId?null:id)}}
+        onDsp={props.onDsp} onDel={props.onDel}
+        onRen={function(name){props.onRen(node.id,name)}}
+        onTog={props.onTog}/>
+      {isSel && props.panelStyle!=="sheet" && (
+        <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
+          {props.sec===1
+            ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} nodes={props.nodes} iC={props.iC}/>
+            : node.type==="blender"
+              ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
+              : node.type==="layers"
+                ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                : node.type==="stack"
+                  ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                  : node.type==="point-comp"
+                    ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot}/>
+                    : null
+          }
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Section(props) {
-  var items = props.nodes.filter(function(n){ return n.section===props.sec })
+  var allItems = props.nodes.filter(function(n){ return n.section===props.sec })
   var color = props.sec===1 ? "var(--gn)" : "var(--co)"
   var shdrCls = "shdr" + (props.stickyHeaders ? " sticky" : "")
-  // In split mode (inScroll=false): section is a flex column that fills available
-  // space with an internal scroll area. In unified/scroll mode (inScroll=true):
-  // section expands to natural height and the parent container scrolls.
+
+  // Partition items
+  var groups = allItems.filter(function(n){ return n.type==="group" })
+  var groupedIds = new Set()
+  groups.forEach(function(g){ (g.childIds||[]).forEach(function(id){ groupedIds.add(id) }) })
+  var promoted = allItems.filter(function(n){ return n.type==="promoted" })
+  // Top-level: groups + ungrouped non-promoted nodes, in array order
+  var topLevel = allItems.filter(function(n){ return !groupedIds.has(n.id) && n.type!=="promoted" })
+  var topLevelIds = topLevel.map(function(n){ return n.id })
+
+  var displayCount = allItems.filter(function(n){ return n.type!=="group" }).length
+
+  var sensors = useSensors(useSensor(PointerSensor, {activationConstraint:{distance:8}}))
+
+  function handleDragEnd(event) {
+    var active = event.active, over = event.over
+    if(!over || active.id===over.id) return
+    props.onGroupDragEnd && props.onGroupDragEnd(active.id, over.id, props.sec)
+  }
+
   var outerStyle = props.inScroll
     ? {borderBottom:"1px solid var(--bd)"}
     : {display:"flex",flexDirection:"column",flex:props.collapsed?"0 0 auto":1,
@@ -9833,67 +9889,66 @@ function Section(props) {
   var innerStyle = props.inScroll
     ? {}
     : {flex:1,overflowY:"auto",overflowX:"hidden"}
+
   return (
     <div style={outerStyle}>
       <div className={shdrCls} style={{cursor:"pointer"}} onClick={props.onToggle}>
         <span style={{fontSize:12,color:props.collapsed?"var(--mu)":"var(--di)"}}>{props.collapsed?"▶":"▼"}</span>
         <span className="slbl" style={{flex:1,color}}>{props.title}</span>
-        <span style={{fontSize:11,color:"var(--mu)",marginRight:8}}>{items.length}</span>
+        <span style={{fontSize:11,color:"var(--mu)",marginRight:8}}>{displayCount}</span>
         <div onClick={function(e){e.stopPropagation()}}><AddMenu sec={props.sec} onAdd={props.onAdd}/></div>
       </div>
       {!props.collapsed && (
         <div style={innerStyle}>
-          {items.length===0 && <div className="empty">no items — tap + Add</div>}
-          {/* Regular (non-promoted) items */}
-          {items.filter(function(n){return n.type!=="promoted"}).map(function(node){
-            var isSel = props.selId===node.id
-            var isDsp = props.dispId===node.id
-            return (
-              <div key={node.id} id={"ni-"+node.id}>
-                <NodeItem node={node} isSel={isSel} isDsp={isDsp}
-                  isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
-                  dispSlot={props.dispSlot}
-                  onSel={function(id){ props.onSel(id===props.selId?null:id) }}
-                  onDsp={props.onDsp} onDel={props.onDel}
-                  onRen={function(name){ props.onRen(node.id,name) }}
-                  onTog={props.onTog}/>
-                {isSel && props.panelStyle!=="sheet" && (
-                  <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
-                    {props.sec===1
-                      ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} nodes={props.nodes} iC={props.iC}/>
-                      : node.type==="blender"
-                        ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
-                        : node.type==="layers"
-                          ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
-                        : node.type==="stack"
-                          ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
-                          : node.type==="point-comp"
-                            ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot}/>
-                          : null
-                    }
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          {/* Promoted taps — grouped */}
-          {props.sec===2 && items.filter(function(n){return n.type==="promoted"}).length>0 && (
+          {topLevel.length===0 && promoted.length===0 && <div className="empty">no items — tap + Add</div>}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={topLevelIds} strategy={verticalListSortingStrategy}>
+              {topLevel.map(function(node){
+                if(node.type==="group"){
+                  var childNodes = (node.childIds||[]).map(function(cid){
+                    return props.nodes.find(function(n){return n.id===cid})
+                  }).filter(Boolean)
+                  return (
+                    <NodeGroupCard key={node.id}
+                      group={node} nodes={props.nodes} childNodes={childNodes}
+                      selId={props.selId} dispId={props.dispId} dispMask={props.dispMask} dispSlot={props.dispSlot}
+                      onSel={function(id){props.onSel(id===props.selId?null:id)}}
+                      onDsp={props.onDsp} onDel={props.onDel}
+                      onRen={function(id,name){props.onRen(id,name)}}
+                      onTog={props.onTog}
+                      panelStyle={props.panelStyle} iC={props.iC}
+                      onUpd={props.onUpd} onLoad={props.onLoad}
+                      onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}
+                      dspSlot={props.dspSlot}
+                      sec={props.sec}
+                      onRename={function(name){props.onRenameGroup(node.id,name)}}
+                      onToggleCollapse={function(){props.onToggleGroupCollapse(node.id)}}
+                      onDelete={function(mode){props.onDeleteGroup(node.id,mode)}}
+                      onDuplicate={function(){props.onDuplicateGroup(node.id)}}
+                      onRemoveChild={function(nodeId){props.onRemoveFromGroup(node.id,nodeId)}}/>
+                  )
+                }
+                return renderNodeInline(node, props)
+              })}
+            </SortableContext>
+          </DndContext>
+          {/* Promoted taps — always at bottom, not draggable */}
+          {props.sec===2 && promoted.length>0 && (
             <div>
               <div className="prom-group-hdr">
                 <span style={{fontSize:9,color:"#e8c840",textTransform:"uppercase",letterSpacing:".1em",fontFamily:"IBM Plex Mono,monospace"}}>Promoted taps</span>
-                <span style={{fontSize:9,color:"var(--mu)",marginLeft:6}}>{items.filter(function(n){return n.type==="promoted"}).length}</span>
+                <span style={{fontSize:9,color:"var(--mu)",marginLeft:6}}>{promoted.length}</span>
               </div>
-              {items.filter(function(n){return n.type==="promoted"}).map(function(node){
-                var isSel = props.selId===node.id
-                var isDsp = props.dispId===node.id
+              {promoted.map(function(node){
+                var isSel=props.selId===node.id, isDsp=props.dispId===node.id
                 return (
                   <div key={node.id} id={"ni-"+node.id}>
                     <NodeItem node={node} isSel={isSel} isDsp={isDsp}
                       isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
                       dispSlot={props.dispSlot}
-                      onSel={function(id){ props.onSel(id===props.selId?null:id) }}
+                      onSel={function(id){props.onSel(id===props.selId?null:id)}}
                       onDsp={props.onDsp} onDel={props.onDel}
-                      onRen={function(name){ props.onRen(node.id,name) }}
+                      onRen={function(name){props.onRen(node.id,name)}}
                       onTog={props.onTog}/>
                     {isSel && props.panelStyle!=="sheet" && (
                       <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
@@ -10282,8 +10337,86 @@ function App() {
     iC.current.set(url,img)
     img.src=url
   }
-  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="point-comp"?mkPointComp():type==="rasterise"?mkRasterise():type==="isolate"?mkIsolate():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
-  function del(id){pushHistory({nodes:nodes});setNodes(function(p){return p.filter(function(n){return n.id!==id})});if(selId===id)setSelId(null);if(dispId===id){setDispId(null);setDispMask(false);setDispSlot(null)}}
+  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="point-comp"?mkPointComp():type==="rasterise"?mkRasterise():type==="isolate"?mkIsolate():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):type==="group"?mkGroup(null,sec):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
+  function del(id){
+    pushHistory({nodes:nodes})
+    setNodes(function(p){
+      return p
+        .filter(function(n){return n.id!==id})
+        .map(function(n){if(n.type!=="group")return n;return Object.assign({},n,{childIds:(n.childIds||[]).filter(function(cid){return cid!==id})})})
+    })
+    if(selId===id)setSelId(null)
+    if(dispId===id){setDispId(null);setDispMask(false);setDispSlot(null)}
+  }
+  function renameGroup(id,name){setNodes(function(ns){return ns.map(function(n){return n.id===id?Object.assign({},n,{name:name}):n})})}
+  function toggleGroupCollapse(id){setNodes(function(ns){return ns.map(function(n){return n.id===id?Object.assign({},n,{collapsed:!n.collapsed}):n})})}
+  function deleteGroup(id,mode){
+    pushHistory({nodes:nodes})
+    setNodes(function(ns){
+      var g=ns.find(function(n){return n.id===id});if(!g)return ns
+      var cids=g.childIds||[]
+      if(mode==="all")return ns.filter(function(n){return n.id!==id&&!cids.includes(n.id)})
+      if(mode==="folder")return ns.filter(function(n){return n.id!==id})
+      if(mode==="contents")return ns.filter(function(n){return !cids.includes(n.id)}).map(function(n){return n.id===id?Object.assign({},n,{childIds:[]}):n})
+      return ns
+    })
+  }
+  function duplicateGroup(id){
+    pushHistory({nodes:nodes})
+    var g=nodes.find(function(n){return n.id===id});if(!g)return
+    var newChildren=(g.childIds||[]).map(function(cid){var c=nodes.find(function(n){return n.id===cid});if(!c)return null;return Object.assign({},c,{id:uid(),name:c.name+" copy"})}).filter(Boolean)
+    var newGroup=Object.assign({},g,{id:uid(),name:g.name+" copy",childIds:newChildren.map(function(n){return n.id})})
+    setNodes(function(ns){var idx=ns.findIndex(function(n){return n.id===id});var r=ns.slice();r.splice(idx+1,0,newGroup,...newChildren);return r})
+  }
+  function removeFromGroup(groupId,nodeId){
+    setNodes(function(ns){return ns.map(function(n){if(n.id!==groupId)return n;return Object.assign({},n,{childIds:(n.childIds||[]).filter(function(id){return id!==nodeId})})})})
+  }
+  function handleGroupDragEnd(activeId,overId,sec){
+    if(!activeId||!overId||activeId===overId)return
+    pushHistory({nodes:nodes})
+    setNodes(function(prev){
+      var ns=prev.slice()
+      var secGroups=ns.filter(function(n){return n.section===sec&&n.type==="group"})
+      var activeGroup=secGroups.find(function(g){return (g.childIds||[]).includes(activeId)})||null
+      var overGroup=secGroups.find(function(g){return (g.childIds||[]).includes(overId)})||null
+      var overIsGroup=ns.some(function(n){return n.id===overId&&n.type==="group"})
+      // Drop on group header → add active to that group
+      if(overIsGroup){
+        if(activeGroup&&activeGroup.id===overId)return prev
+        if(activeGroup){ns=ns.map(function(n){if(n.id!==activeGroup.id)return n;return Object.assign({},n,{childIds:(n.childIds||[]).filter(function(id){return id!==activeId})})})}
+        ns=ns.map(function(n){if(n.id!==overId)return n;var e=n.childIds||[];if(e.includes(activeId))return n;return Object.assign({},n,{childIds:e.concat([activeId])})})
+        return ns
+      }
+      // Reorder within same group
+      if(activeGroup&&overGroup&&activeGroup.id===overGroup.id){
+        var gi=ns.findIndex(function(n){return n.id===activeGroup.id});if(gi<0)return prev
+        var g=ns[gi];var cids=(g.childIds||[]).slice()
+        var fi=cids.indexOf(activeId),ti=cids.indexOf(overId);if(fi<0||ti<0)return prev
+        cids=arrayMove(cids,fi,ti);ns=ns.slice();ns[gi]=Object.assign({},g,{childIds:cids});return ns
+      }
+      // Move from top-level into group (dragged over a node inside a group)
+      if(!activeGroup&&overGroup){
+        ns=ns.map(function(n){
+          if(n.id!==overGroup.id)return n
+          var e=(n.childIds||[]).filter(function(id){return id!==activeId})
+          var ti=e.indexOf(overId);if(ti>=0)e.splice(ti,0,activeId);else e.push(activeId)
+          return Object.assign({},n,{childIds:e})
+        })
+        return ns
+      }
+      // Move out of group to top-level position
+      if(activeGroup&&!overGroup){
+        ns=ns.map(function(n){if(n.id!==activeGroup.id)return n;return Object.assign({},n,{childIds:(n.childIds||[]).filter(function(id){return id!==activeId})})})
+        var fi2=ns.findIndex(function(n){return n.id===activeId}),ti2=ns.findIndex(function(n){return n.id===overId})
+        if(fi2>=0&&ti2>=0)ns=arrayMove(ns,fi2,ti2)
+        return ns
+      }
+      // Both top-level — reorder
+      var fi3=ns.findIndex(function(n){return n.id===activeId}),ti3=ns.findIndex(function(n){return n.id===overId})
+      if(fi3>=0&&ti3>=0)ns=arrayMove(ns,fi3,ti3)
+      return ns
+    })
+  }
   function upd(u){
     setNodes(function(p){return p.map(function(n){return n.id===u.id?u:n})})
     // Keep sheet node in sync if it's the one being updated
@@ -10457,7 +10590,9 @@ function App() {
   var sp={nodes:nodes,selId:selId,dispId:dispId,dispMask:dispMask,dispSlot:dispSlot,dspSlot:dspSlot,
     onSel:selWithSheet,onDsp:dsp,onDel:del,onAdd:add,onUpd:upd,onLoad:loadUrl,onRen:ren,onTog:tog,
     panelStyle:settings.panelStyle,onPromote:handlePromote,onExtract:handleExtract,onNavigate:handleNavigate,
-    iC:iC}
+    iC:iC,
+    onGroupDragEnd:handleGroupDragEnd,onRenameGroup:renameGroup,onDeleteGroup:deleteGroup,
+    onDuplicateGroup:duplicateGroup,onRemoveFromGroup:removeFromGroup,onToggleGroupCollapse:toggleGroupCollapse}
 
   var leftBoxStyle = Object.assign(
     {display:rightFS?"none":"flex",flexDirection:"column",background:"var(--pn)"},
