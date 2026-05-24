@@ -9585,32 +9585,80 @@ function mkGroup(name, sec) {
 // wraps the full flat list. NodeGroupCard just renders the group folder UI
 // and delegates its own sortable children via a nested SortableContext.
 
+/* helper: get all ancestor group IDs (groups that contain groupId, transitively) */
+function getAncestorIds(groupId, nodes) {
+  var result = new Set()
+  var frontier = new Set([groupId])
+  var changed = true
+  while(changed) {
+    changed = false
+    nodes.forEach(function(n) {
+      if(n.type!=="group" || result.has(n.id)) return
+      var kids = n.childIds||[]
+      for(var i=0;i<kids.length;i++){
+        if(frontier.has(kids[i])){ result.add(n.id); frontier.add(n.id); changed=true; break }
+      }
+    })
+  }
+  return result
+}
+
+/* helper: get a short display label for a node */
+function nodeLabel(node) {
+  if(node.type==="group") return "📁 " + node.name
+  return node.name || node.type
+}
+
 function NodeGroupCard(props) {
-  // props: group, nodes, childNodes, isFirst, isLast
-  //        onRename, onToggleCollapse, onDelete, onDuplicate, onMove
-  //        onRemoveChild(nodeId), selId, dispId, dispMask, dispSlot
-  //        onSel, onDsp, onDel, onRen, onTog, panelStyle, iC
+  // props: group, nodes, childNodes, sec
+  //        groupOps: {onRenameGroup,onToggleGroupCollapse,onDeleteGroup,onDuplicateGroup,onAddToGroup,onRemoveFromGroup}
+  //        onRename(name), onToggleCollapse(), onDelete(mode), onDuplicate(), onAddChild(id), onRemoveChild(id)
+  //        selId, dispId, dispMask, dispSlot
+  //        onSel, onDsp, onDel, onRen(id,name), onTog, panelStyle, iC
   //        onUpd, onLoad, onPromote, onExtract, onNavigate, dspSlot
   var g = props.group
+  var sec = props.sec
+  var groupOps = props.groupOps || {}
+
+  // Rename state
   var edSt = useState(false); var editing = edSt[0], setEditing = edSt[1]
   var nmSt = useState(g.name); var nm = nmSt[0], setNm = nmSt[1]
+  var inputRef = useRef(null)
+
+  // Delete menu
   var delMenuSt = useState(false); var delMenu = delMenuSt[0], setDelMenu = delMenuSt[1]
   var delAnchorRef = useRef(null), delMenuRef = useRef(null)
   var delPos = usePopoverPosition(delAnchorRef, delMenu, "above")
-  var inputRef = useRef(null)
+
+  // Add popover
+  var addMenuSt = useState(false); var addMenu = addMenuSt[0], setAddMenu = addMenuSt[1]
+  var addAnchorRef = useRef(null), addMenuRef = useRef(null)
+  var addPos = usePopoverPosition(addAnchorRef, addMenu, "above")
+
+  // Remove popover
+  var remMenuSt = useState(false); var remMenu = remMenuSt[0], setRemMenu = remMenuSt[1]
+  var remAnchorRef = useRef(null), remMenuRef = useRef(null)
+  var remPos = usePopoverPosition(remAnchorRef, remMenu, "above")
 
   useEffect(function(){ setNm(g.name) }, [g.name])
   useEffect(function(){ if(editing && inputRef.current){ inputRef.current.focus(); inputRef.current.select() }}, [editing])
-  useEffect(function(){
-    if(!delMenu) return
-    function h(e){
-      if(delAnchorRef.current && delAnchorRef.current.contains(e.target)) return
-      if(delMenuRef.current && delMenuRef.current.contains(e.target)) return
-      setDelMenu(false)
-    }
-    document.addEventListener("mousedown", h)
-    return function(){ document.removeEventListener("mousedown", h) }
-  }, [delMenu])
+
+  // Close on outside click helper
+  function usePopoverDismiss(open, setOpen, anchorRef, menuRef) {
+    useEffect(function(){
+      if(!open) return
+      function h(e){
+        if(anchorRef.current && anchorRef.current.contains(e.target)) return
+        if(menuRef.current && menuRef.current.contains(e.target)) return
+        setOpen(false)
+      }
+      document.addEventListener("mousedown", h)
+      return function(){ document.removeEventListener("mousedown", h) }
+    }, [open])
+  }
+  usePopoverDismiss(delMenu, setDelMenu, delAnchorRef, delMenuRef)
+  usePopoverDismiss(addMenu, setAddMenu, addAnchorRef, addMenuRef)
+  usePopoverDismiss(remMenu, setRemMenu, remAnchorRef, remMenuRef)
 
   function commitRename() {
     setEditing(false)
@@ -9619,115 +9667,221 @@ function NodeGroupCard(props) {
     else setNm(g.name)
   }
 
+  // Compute addable items: same section, not already a child, not this group, not an ancestor
+  var ancestors = getAncestorIds(g.id, props.nodes)
+  var childSet = new Set(g.childIds||[])
+  var addable = props.nodes.filter(function(n){
+    return n.section===sec &&
+      !childSet.has(n.id) &&
+      n.id!==g.id &&
+      n.type!=="promoted" &&
+      !ancestors.has(n.id)
+  })
+
   var { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({id: g.id})
-  var style = { transform: CSS.Transform.toString(transform), transition: transition,
-    opacity: isDragging ? 0.4 : 1 }
+  var style = { transform: CSS.Transform.toString(transform), transition: transition, opacity: isDragging ? 0.4 : 1 }
+
+  var hdrBg = g.collapsed ? "var(--pn)" : "rgba(28,28,60,.95)"
 
   return (
     <div ref={setNodeRef} style={style} id={"ni-" + g.id}>
-      {/* Group header */}
-      <div style={{display:"flex",alignItems:"center",gap:4,padding:"0 8px 0 6px",
+      {/* ── Header ── */}
+      <div style={{display:"flex",alignItems:"center",gap:3,padding:"0 6px 0 6px",
         minHeight:"var(--tap)",borderBottom:"1px solid rgba(37,37,80,.8)",
-        background:g.collapsed?"var(--pn)":"var(--sf)",
-        cursor:"pointer",userSelect:"none"}} onClick={props.onToggleCollapse}>
+        background:hdrBg, userSelect:"none"}}>
+
         {/* Drag handle */}
         <span {...attributes} {...listeners}
           style={{cursor:"grab",color:"var(--bd)",fontSize:16,padding:"0 2px",touchAction:"none",
-            display:"inline-flex",alignItems:"center"}}
+            display:"inline-flex",alignItems:"center",flexShrink:0}}
           onClick={function(e){e.stopPropagation()}}>⋮⋮</span>
-        <span style={{fontSize:14,color:"var(--mu)",transform:g.collapsed?"none":"rotate(90deg)",
-          transition:"transform .15s",display:"inline-flex",alignItems:"center"}}>›</span>
-        {/* Colour dot */}
-        <div style={{width:8,height:8,borderRadius:"50%",background:"var(--di)",flexShrink:0}}/>
-        {/* Name / rename */}
+
+        {/* Expand / collapse */}
+        <span style={{fontSize:13,color:"var(--mu)",transform:g.collapsed?"none":"rotate(90deg)",
+          transition:"transform .15s",display:"inline-flex",alignItems:"center",flexShrink:0,cursor:"pointer"}}
+          onClick={props.onToggleCollapse}>›</span>
+
+        {/* Colour pip */}
+        <div style={{width:7,height:7,borderRadius:"50%",background:"var(--di)",flexShrink:0}}/>
+
+        {/* Name / rename input */}
         {editing
           ? <input ref={inputRef} value={nm}
               onChange={function(e){setNm(e.target.value)}}
               onBlur={commitRename}
               onKeyDown={function(e){if(e.key==="Enter")commitRename();if(e.key==="Escape"){setEditing(false);setNm(g.name)}}}
               onClick={function(e){e.stopPropagation()}}
-              style={{flex:1,fontSize:12,padding:"2px 6px",background:"var(--bg)",
+              style={{flex:1,minWidth:0,fontSize:12,padding:"2px 6px",background:"var(--bg)",
                 border:"1px solid var(--ac)",borderRadius:4,color:"var(--tx)",
                 fontFamily:"'IBM Plex Mono',monospace"}}/>
-          : <span onDoubleClick={function(e){e.stopPropagation();setEditing(true)}}
-              style={{flex:1,fontSize:12,color:"var(--di)",fontFamily:"'IBM Plex Mono',monospace",
-                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",userSelect:"none"}}>
+          : <span
+              style={{flex:1,minWidth:0,fontSize:12,color:"var(--di)",fontFamily:"'IBM Plex Mono',monospace",
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer"}}
+              onClick={props.onToggleCollapse}>
               {g.name}
-              <span style={{fontSize:9,color:"var(--mu)",marginLeft:6}}>
-                {props.childNodes.length} item{props.childNodes.length!==1?"s":""}
+              <span style={{fontSize:9,color:"var(--mu)",marginLeft:5}}>
+                {props.childNodes.length}
               </span>
             </span>
         }
-        {/* Duplicate */}
+
+        {/* ✎ Rename */}
+        <button className="icon-btn sm" title="Rename group"
+          onClick={function(e){e.stopPropagation();setEditing(true)}}
+          style={{fontSize:11,color:"var(--mu)",flexShrink:0}}>✎</button>
+
+        {/* + Add items */}
+        <div style={{position:"relative",display:"inline-flex",flexShrink:0}}>
+          <button ref={addAnchorRef} className="icon-btn sm"
+            title="Add items to group"
+            onClick={function(e){e.stopPropagation();setRemMenu(false);setDelMenu(false);setAddMenu(!addMenu)}}
+            style={{fontSize:15,fontWeight:"bold",color:"var(--ac)",lineHeight:1}}>+</button>
+          {addMenu && addPos && createPortal(
+            <div ref={addMenuRef} className="drop-menu" style={Object.assign({},addPos,{maxHeight:260,overflowY:"auto",minWidth:180})}>
+              <div style={{padding:"5px 12px 4px",fontSize:9,color:"var(--mu)",
+                textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
+                borderBottom:"1px solid var(--bd)",background:"var(--bg)",position:"sticky",top:0}}>
+                Add to "{g.name}"
+              </div>
+              {addable.length===0 && (
+                <div style={{padding:"10px 14px",fontSize:11,color:"var(--mu)"}}>no items available</div>
+              )}
+              {addable.map(function(n){
+                return (
+                  <div key={n.id} className="drop-item"
+                    style={{display:"flex",alignItems:"center",gap:6}}
+                    onClick={function(){
+                      props.onAddChild(n.id)
+                      // keep menu open so multiple items can be added
+                    }}>
+                    <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {nodeLabel(n)}
+                    </span>
+                    <span style={{fontSize:9,color:"var(--mu)",flexShrink:0}}>{n.type}</span>
+                  </div>
+                )
+              })}
+            </div>,
+            document.body
+          )}
+        </div>
+
+        {/* − Remove items */}
+        <div style={{position:"relative",display:"inline-flex",flexShrink:0}}>
+          <button ref={remAnchorRef} className="icon-btn sm"
+            title="Remove items from group"
+            onClick={function(e){e.stopPropagation();setAddMenu(false);setDelMenu(false);setRemMenu(!remMenu)}}
+            style={{fontSize:15,fontWeight:"bold",color:"var(--mu)",lineHeight:1}}>−</button>
+          {remMenu && remPos && createPortal(
+            <div ref={remMenuRef} className="drop-menu" style={Object.assign({},remPos,{maxHeight:260,overflowY:"auto",minWidth:180})}>
+              <div style={{padding:"5px 12px 4px",fontSize:9,color:"var(--mu)",
+                textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
+                borderBottom:"1px solid var(--bd)",background:"var(--bg)",position:"sticky",top:0}}>
+                Remove from "{g.name}"
+              </div>
+              {props.childNodes.length===0 && (
+                <div style={{padding:"10px 14px",fontSize:11,color:"var(--mu)"}}>group is empty</div>
+              )}
+              {props.childNodes.map(function(n){
+                return (
+                  <div key={n.id} className="drop-item"
+                    style={{display:"flex",alignItems:"center",gap:6}}
+                    onClick={function(){
+                      props.onRemoveChild(n.id)
+                    }}>
+                    <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {nodeLabel(n)}
+                    </span>
+                    <span style={{fontSize:9,color:"var(--mu)",flexShrink:0}}>{n.type}</span>
+                  </div>
+                )
+              })}
+            </div>,
+            document.body
+          )}
+        </div>
+
+        {/* ⧉ Duplicate */}
         <button className="icon-btn sm" title="Duplicate group"
           onClick={function(e){e.stopPropagation();props.onDuplicate()}}
-          style={{fontSize:12,color:"var(--mu)"}}>⧉</button>
-        {/* Delete menu */}
-        <div style={{position:"relative",display:"inline-flex"}}>
+          style={{fontSize:11,color:"var(--mu)",flexShrink:0}}>⧉</button>
+
+        {/* × Delete menu */}
+        <div style={{position:"relative",display:"inline-flex",flexShrink:0}}>
           <button ref={delAnchorRef} className="icon-btn sm"
             title="Delete options"
-            onClick={function(e){e.stopPropagation();setDelMenu(!delMenu)}}
+            onClick={function(e){e.stopPropagation();setAddMenu(false);setRemMenu(false);setDelMenu(!delMenu)}}
             style={{fontSize:14,color:"var(--mu)"}}>×</button>
           {delMenu && delPos && createPortal(
             <div ref={delMenuRef} className="drop-menu" style={delPos}>
-              <div className="drop-item" onClick={function(){setDelMenu(false);props.onDelete("all")}}>
-                Delete folder + contents
-              </div>
-              <div className="drop-item" onClick={function(){setDelMenu(false);props.onDelete("folder")}}>
-                Delete folder, keep items
-              </div>
-              <div className="drop-item" onClick={function(){setDelMenu(false);props.onDelete("contents")}}>
-                Delete contents only
-              </div>
+              <div className="drop-item" onClick={function(){setDelMenu(false);props.onDelete("all")}}>Delete folder + contents</div>
+              <div className="drop-item" onClick={function(){setDelMenu(false);props.onDelete("folder")}}>Delete folder, keep items</div>
+              <div className="drop-item" onClick={function(){setDelMenu(false);props.onDelete("contents")}}>Delete contents only</div>
             </div>,
             document.body
           )}
         </div>
       </div>
 
-      {/* Children */}
+      {/* ── Children ── */}
       {!g.collapsed && (
-        <div style={{paddingLeft:16,borderBottom:"1px solid rgba(37,37,80,.5)"}}>
+        <div style={{paddingLeft:14,borderBottom:"1px solid rgba(37,37,80,.4)"}}>
           <SortableContext
             items={props.childNodes.map(function(n){return n.id})}
             strategy={verticalListSortingStrategy}>
-            {props.childNodes.length === 0 && (
+            {props.childNodes.length===0 && (
               <div style={{padding:"10px 12px",fontSize:10,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>
-                empty — drag items here
+                empty — use + to add items
               </div>
             )}
-            {props.childNodes.map(function(node, i) {
-              var isSel = props.selId === node.id
-              var isDsp = props.dispId === node.id
+            {props.childNodes.map(function(node){
+              // Nested group
+              if(node.type==="group"){
+                var subChildNodes=(node.childIds||[]).map(function(cid){
+                  return props.nodes.find(function(n){return n.id===cid})
+                }).filter(Boolean)
+                return (
+                  <NodeGroupCard key={node.id}
+                    group={node} nodes={props.nodes} childNodes={subChildNodes} sec={sec}
+                    groupOps={groupOps}
+                    selId={props.selId} dispId={props.dispId} dispMask={props.dispMask} dispSlot={props.dispSlot}
+                    onSel={props.onSel} onDsp={props.onDsp} onDel={props.onDel}
+                    onRen={props.onRen} onTog={props.onTog}
+                    panelStyle={props.panelStyle} iC={props.iC}
+                    onUpd={props.onUpd} onLoad={props.onLoad}
+                    onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}
+                    dspSlot={props.dspSlot}
+                    onRename={function(name){groupOps.onRenameGroup&&groupOps.onRenameGroup(node.id,name)}}
+                    onToggleCollapse={function(){groupOps.onToggleGroupCollapse&&groupOps.onToggleGroupCollapse(node.id)}}
+                    onDelete={function(mode){groupOps.onDeleteGroup&&groupOps.onDeleteGroup(node.id,mode)}}
+                    onDuplicate={function(){groupOps.onDuplicateGroup&&groupOps.onDuplicateGroup(node.id)}}
+                    onAddChild={function(nid){groupOps.onAddToGroup&&groupOps.onAddToGroup(node.id,nid)}}
+                    onRemoveChild={function(nid){groupOps.onRemoveFromGroup&&groupOps.onRemoveFromGroup(node.id,nid)}}/>
+                )
+              }
+              // Regular node
+              var isSel=props.selId===node.id, isDsp=props.dispId===node.id
               return (
                 <div key={node.id}>
                   <NodeItemSortable
                     node={node} isSel={isSel} isDsp={isDsp}
-                    isMaskDisp={!!(props.dispMask && props.dispId === node.id)}
+                    isMaskDisp={!!(props.dispMask&&props.dispId===node.id)}
                     dispSlot={props.dispSlot}
                     onSel={props.onSel} onDsp={props.onDsp}
                     onDel={props.onDel} onRen={props.onRen} onTog={props.onTog}
                     onRemoveFromGroup={function(){props.onRemoveChild(node.id)}}/>
-                  {isSel && props.panelStyle !== "sheet" && (
+                  {isSel && props.panelStyle!=="sheet" && (
                     <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
-                      {node.section === 1
-                        ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad}
-                            nodes={props.nodes} iC={props.iC}/>
-                        : node.type === "blender"
-                          ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes}
-                              iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote}
-                              dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp}
-                              dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
-                          : node.type === "layers"
-                            ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes}
-                                iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
-                            : node.type === "stack"
-                              ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes}
-                                  iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
-                              : node.type === "point-comp"
-                                ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes}
-                                    iC={props.iC} onNavigate={props.onNavigate}
-                                    dspSlot={props.dspSlot} dispSlot={props.dispSlot}/>
+                      {node.section===1
+                        ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} nodes={props.nodes} iC={props.iC}/>
+                        : node.type==="blender"
+                          ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
+                          : node.type==="layers"
+                            ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                            : node.type==="stack"
+                              ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                              : node.type==="point-comp"
+                                ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot}/>
                                 : null
                       }
                     </div>
@@ -9736,12 +9890,6 @@ function NodeGroupCard(props) {
               )
             })}
           </SortableContext>
-          {/* Remove-from-group shortcut shown inline when group is not empty */}
-          {props.childNodes.length > 0 && (
-            <div style={{padding:"4px 8px 6px",fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>
-              double-tap name to rename · drag to reorder or move between groups
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -9921,10 +10069,19 @@ function Section(props) {
                       onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}
                       dspSlot={props.dspSlot}
                       sec={props.sec}
+                      groupOps={{
+                        onRenameGroup:props.onRenameGroup,
+                        onToggleGroupCollapse:props.onToggleGroupCollapse,
+                        onDeleteGroup:props.onDeleteGroup,
+                        onDuplicateGroup:props.onDuplicateGroup,
+                        onAddToGroup:props.onAddToGroup,
+                        onRemoveFromGroup:props.onRemoveFromGroup
+                      }}
                       onRename={function(name){props.onRenameGroup(node.id,name)}}
                       onToggleCollapse={function(){props.onToggleGroupCollapse(node.id)}}
                       onDelete={function(mode){props.onDeleteGroup(node.id,mode)}}
                       onDuplicate={function(){props.onDuplicateGroup(node.id)}}
+                      onAddChild={function(nid){props.onAddToGroup(node.id,nid)}}
                       onRemoveChild={function(nodeId){props.onRemoveFromGroup(node.id,nodeId)}}/>
                   )
                 }
@@ -10371,6 +10528,17 @@ function App() {
   function removeFromGroup(groupId,nodeId){
     setNodes(function(ns){return ns.map(function(n){if(n.id!==groupId)return n;return Object.assign({},n,{childIds:(n.childIds||[]).filter(function(id){return id!==nodeId})})})})
   }
+  function addToGroup(groupId,nodeId){
+    if(groupId===nodeId)return
+    setNodes(function(ns){
+      return ns.map(function(n){
+        if(n.id!==groupId)return n
+        var e=n.childIds||[]
+        if(e.includes(nodeId))return n
+        return Object.assign({},n,{childIds:e.concat([nodeId])})
+      })
+    })
+  }
   function handleGroupDragEnd(activeId,overId,sec){
     if(!activeId||!overId||activeId===overId)return
     pushHistory({nodes:nodes})
@@ -10592,7 +10760,8 @@ function App() {
     panelStyle:settings.panelStyle,onPromote:handlePromote,onExtract:handleExtract,onNavigate:handleNavigate,
     iC:iC,
     onGroupDragEnd:handleGroupDragEnd,onRenameGroup:renameGroup,onDeleteGroup:deleteGroup,
-    onDuplicateGroup:duplicateGroup,onRemoveFromGroup:removeFromGroup,onToggleGroupCollapse:toggleGroupCollapse}
+    onDuplicateGroup:duplicateGroup,onRemoveFromGroup:removeFromGroup,onToggleGroupCollapse:toggleGroupCollapse,
+    onAddToGroup:addToGroup}
 
   var leftBoxStyle = Object.assign(
     {display:rightFS?"none":"flex",flexDirection:"column",background:"var(--pn)"},
