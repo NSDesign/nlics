@@ -8866,6 +8866,7 @@ function LayerCompProps(props) {
               navPush={navPush} onNavigate={props.onNavigate}
               onPromote={wrappedPromote}
               onExtract={props.onExtract||null}
+              onAdd={props.onAdd} onLoad={props.onLoad}
               owner={node}
               onMove={function(dir){moveLayer(li,dir)}}
               onDel={function(){delLayer(li)}}
@@ -9532,7 +9533,7 @@ function NodeDetailSheet(props) {
                   onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
               : props.node.type==="layers"
                 ? <LayerCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                    onPromote={props.onPromote} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
+                    onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                 : props.node.type==="point-comp"
                   ? <PointCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                 : props.node.type==="promoted"
@@ -10005,9 +10006,9 @@ function NodeGroupCard(props) {
                         : node.type==="blender"
                           ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                           : node.type==="layers"
-                            ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
+                            ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                             : node.type==="stack"
-                              ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
+                              ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                               : node.type==="point-comp"
                                 ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onAdd={props.onAdd} onLoad={props.onLoad}/>
                                 : null
@@ -10121,9 +10122,9 @@ function renderNodeInline(node, props) {
             : node.type==="blender"
               ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
               : node.type==="layers"
-                ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
+                ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                 : node.type==="stack"
-                  ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
+                  ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                   : node.type==="point-comp"
                     ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onAdd={props.onAdd} onLoad={props.onLoad}/>
                     : null
