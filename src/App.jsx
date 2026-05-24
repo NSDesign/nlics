@@ -4693,10 +4693,6 @@ function NRef(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
 
-  var inlineNode = (hasCreate && inlineId)
-    ? props.nodes.find(function(n){return n.id===inlineId}) || null
-    : null
-
   var creators = mode==="intermediate" ? [] : props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId})
   var comps = props.nodes.filter(function(n){
     if(n.id===props.selfId) return false
@@ -4958,6 +4954,16 @@ function NRef(props) {
     </div>
   )
 
+  // inlineId covers both newly created AND manually opened nodes
+  var inlineNode = (hasCreate && inlineId)
+    ? props.nodes.find(function(n){return n.id===inlineId}) || null
+    : null
+
+  function openInline(id) {
+    setInlineId(inlineId===id ? null : id) // toggle
+    setOpen(false)
+  }
+
   return (
     <div>
       <PR l={props.l}>
@@ -4966,6 +4972,20 @@ function NRef(props) {
             border:"1px solid var(--bd)",borderRadius:6})}>
           {btnLabel}
         </button>
+        {/* ↗ open settings for selected source */}
+        {hasCreate && selectedNode && (
+          <button
+            onClick={function(e){e.stopPropagation();openInline(selectedNode.id)}}
+            title="Open source settings inline"
+            style={{flexShrink:0,width:"var(--tap-sm)",height:"var(--tap-sm)",
+              background:"transparent",
+              border:"1px solid "+(inlineId===selectedNode.id?"var(--ac)":"var(--bd)"),
+              borderRadius:6,color:inlineId===selectedNode.id?"var(--ac)":"var(--mu)",
+              fontSize:14,display:"inline-flex",alignItems:"center",
+              justifyContent:"center",cursor:"pointer",padding:0}}>
+            ↗
+          </button>
+        )}
         {open&&pos&&createPortal(
           <div ref={menuRef} style={Object.assign({},pos,{
             position:"fixed",zIndex:9000,background:"var(--pn)",
@@ -4976,7 +4996,7 @@ function NRef(props) {
           document.body
         )}
       </PR>
-      {/* ── Inline settings for newly created source ── */}
+      {/* ── Inline settings panel — created or opened via ↗ ── */}
       {hasCreate&&inlineNode&&(
         <div style={{
           margin:"0 0 8px 80px",
@@ -7672,7 +7692,7 @@ function SlotPanel(props) {
         <div style={{display:tab==="source"?"":"none"}} className="card-body">
           <NRef l="source" v={slot.refId} nodes={nodes} selfId={selfId} iC={props.iC}
             onAdd={props.onAdd}
-            createOps={{onUpd:onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:wrappedPromote,onExtract:props.onExtract}}
+            createOps={{onUpd:onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:props.onPromote,onExtract:props.onExtract}}
             fn={function(v){onChange(Object.assign({},slot,{refId:v}))}}/>
           <Sl l="fill" v={slot.fillOpacity==null?100:slot.fillOpacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
@@ -7876,6 +7896,7 @@ function BlenderProps(props) {
         headless={headless}
         onNavigate={props.onNavigate}
         onPromote={wrappedPromote}
+        onAdd={props.onAdd} onLoad={props.onLoad}
         dspSlot={props.dspSlot} dispSlot={props.dispSlot}
         onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
@@ -7960,6 +7981,7 @@ function BlenderProps(props) {
         headless={headless}
         onNavigate={props.onNavigate}
         onPromote={wrappedPromote}
+        onAdd={props.onAdd} onLoad={props.onLoad}
         dspSlot={props.dspSlot} dispSlot={props.dispSlot}
         onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
