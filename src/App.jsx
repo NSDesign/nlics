@@ -3718,11 +3718,11 @@ function effectiveMatte(sourceCv,maskStack,cmap,cache,iC,w,h,vis){
 function resolveSlot(slot,cmap,cache,iC,w,h,vis,nodes) {
   if(!slot||!slot.refId||vis.has(slot.refId))return null
   if(slot.enabled===false)return null
-  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis),nodes||[]);if(!base)return null
+  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis),nodes);if(!base)return null
   var cv=clCv(base,w,h),ctx=cv.getContext("2d")
   if(slot.effectStack&&slot.effectStack.length>0){
     var hadPtEfx=slot.effectStack.some(function(e){return e.enabled&&e.domain==="points"&&e.type!=="show-points"&&e.type!=="source-at-points"})
-    applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis),nodes||[])
+    applyEfxStk(ctx,slot.effectStack,cmap,cache,iC,w,h,new Set(vis),nodes)
     if(hadPtEfx&&cv._shapeProps&&cv._points&&cv._points.length>0){
       ctx.clearRect(0,0,w,h); gShape(ctx,cv._shapeProps,w,h)
     }
@@ -3736,7 +3736,7 @@ function resolveSlot(slot,cmap,cache,iC,w,h,vis,nodes) {
 function resolveSlotBase(slot,cmap,cache,iC,w,h,vis,nodes) {
   if(!slot||!slot.refId||vis.has(slot.refId))return null
   if(slot.enabled===false)return null
-  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis),nodes||[]);if(!base)return null
+  var base=compAny(slot.refId,cmap,cache,iC,w,h,new Set(vis),nodes);if(!base)return null
   var cv=clCv(base,w,h),ctx=cv.getContext("2d")
   // Fill opacity: affects source pixels before effects
   if(slot.fillOpacity!=null&&slot.fillOpacity<100){
@@ -4268,8 +4268,8 @@ function compAny(id,cmap,cache,iC,w,h,vis,nodes) {
   // resolveSlotBase: pixels+effects, no mask on alpha.
   // slotEffectiveMatte: source_alpha × maskStack → the input's matte.
   var cv2=mkCv(w,h),ctx2=cv2.getContext("2d")
-  var cAb=resolveSlotBase(n.inputA,cmap,cache,iC,w,h,new Set(vis))
-  var cBb=resolveSlotBase(n.inputB,cmap,cache,iC,w,h,new Set(vis))
+  var cAb=resolveSlotBase(n.inputA,cmap,cache,iC,w,h,new Set(vis),nodes)
+  var cBb=resolveSlotBase(n.inputB,cmap,cache,iC,w,h,new Set(vis),nodes)
   var mA=slotEffectiveMatte(n.inputA,cAb,cmap,cache,iC,w,h,new Set(vis),nodes||[])
   var mB=slotEffectiveMatte(n.inputB,cBb,cmap,cache,iC,w,h,new Set(vis),nodes||[])
   // Apply mattes to pixel alpha for visual compositing
