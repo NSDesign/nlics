@@ -4655,6 +4655,18 @@ function ThumbItem(props) {
     </div>
   )
 }
+/* ── Source type lists for + create button ─── */
+var NREF_S1_TYPES=[
+  {t:"solid",l:"Solid Colour",sec:1},{t:"shape",l:"Geometry",sec:1},
+  {t:"gradient",l:"Gradient",sec:1},{t:"noise",l:"Noise Field",sec:1},
+  {t:"pattern",l:"Pattern",sec:1},{t:"image",l:"Image",sec:1},{t:"tile",l:"Tile",sec:1}
+]
+var NREF_S2_TYPES=[
+  {t:"blender",l:"Blender",sec:2},{t:"layers",l:"Layer Comp",sec:2},
+  {t:"stack-effect",l:"Effect Stack",sec:2},{t:"stack-mask",l:"Mask Stack",sec:2},
+  {t:"point-comp",l:"Point Comp",sec:2}
+]
+
 function NRef(props) {
   // Safety: nodes must be an array
   if(!props.nodes||!Array.isArray(props.nodes)) return null
@@ -4664,6 +4676,13 @@ function NRef(props) {
   var anchorRef=useRef(null)
   var menuRef=useRef(null)
   var pos=usePopoverPosition(anchorRef, open, "above")
+
+  // Create-source state (always declare — hooks rules)
+  var createOpenSt=useState(false); var createOpen=createOpenSt[0], setCreateOpen=createOpenSt[1]
+  var inlineIdSt=useState(null); var inlineId=inlineIdSt[0], setInlineId=inlineIdSt[1]
+  var createAnchorRef=useRef(null), createMenuRef=useRef(null)
+  var createPos=usePopoverPosition(createAnchorRef, createOpen, "above")
+
   useEffect(function(){
     if(!open) return
     function h(e){
@@ -4674,6 +4693,23 @@ function NRef(props) {
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
+
+  useEffect(function(){
+    if(!createOpen) return
+    function h(e){
+      if(createAnchorRef.current&&createAnchorRef.current.contains(e.target)) return
+      if(createMenuRef.current&&createMenuRef.current.contains(e.target)) return
+      setCreateOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[createOpen])
+
+  var hasCreate = !!(props.onAdd)
+  var inlineNode = (hasCreate && inlineId)
+    ? props.nodes.find(function(n){return n.id===inlineId}) || null
+    : null
+
   var creators = mode==="intermediate" ? [] : props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId})
   var comps = props.nodes.filter(function(n){
     if(n.id===props.selfId) return false
@@ -4692,6 +4728,46 @@ function NRef(props) {
     whiteSpace:"nowrap",color:selectedNode?"var(--tx)":"var(--mu)"}
 
   function pick(id){ props.fn(id||null); setOpen(false) }
+
+  function doCreate(type, sec) {
+    setCreateOpen(false)
+    if(!props.onAdd) return
+    props.onAdd(type, sec, function(newNode){
+      setInlineId(newNode.id)
+      props.fn(newNode.id)
+    })
+  }
+
+  // What types to offer in the create popover
+  var showS1 = mode!=="effect-source"
+  var showS2 = mode!=="intermediate" && mode!=="point"
+
+  // Inline settings renderer — onNavigate suppressed to keep context
+  function renderInlineSettings(n) {
+    var co = props.createOps||{}
+    var noop = function(){}
+    if(n.section===1) return (
+      <CreatorProps node={n} onUpdate={co.onUpd||noop} onLoad={co.onLoad||noop}
+        onAdd={props.onAdd} nodes={props.nodes} iC={props.iC}/>
+    )
+    var sharedP = {onChange:co.onUpd||noop, nodes:props.nodes, iC:props.iC,
+      onNavigate:noop, onAdd:props.onAdd, onLoad:co.onLoad||noop}
+    if(n.type==="blender") return (
+      <BlenderProps node={n} {...sharedP}
+        onExtract={co.onExtract||noop} onPromote={co.onPromote||noop}
+        dspSlot={null} dispSlot={null} onDsp={noop} dispId={null} dispMask={false}/>
+    )
+    if(n.type==="layers") return (
+      <LayerCompProps node={n} {...sharedP} onPromote={co.onPromote||noop}/>
+    )
+    if(n.type==="stack") return (
+      <StackProps node={n} {...sharedP} onPromote={co.onPromote||noop}/>
+    )
+    if(n.type==="point-comp") return (
+      <PointCompProps node={n} {...sharedP} dspSlot={null} dispSlot={null}/>
+    )
+    return null
+  }
 
   var menuContent = (
     <div style={{padding:8,maxHeight:"50vh",overflowY:"auto",userSelect:"none"}}>
@@ -4867,23 +4943,97 @@ function NRef(props) {
       )}
     </div>
   )
+
   return (
-    <PR l={props.l}>
-      <button ref={anchorRef} onClick={function(){setOpen(!open)}}
-        style={Object.assign({},btnStyle,{minHeight:"var(--tap-sm)",background:"var(--el)",
-          border:"1px solid var(--bd)",borderRadius:6})}>
-        {btnLabel}
-      </button>
-      {open&&pos&&createPortal(
-        <div ref={menuRef} style={Object.assign({},pos,{
-          position:"fixed",zIndex:9000,background:"var(--pn)",
-          border:"1px solid var(--bd)",borderRadius:10,
-          boxShadow:"0 -8px 32px rgba(0,0,0,.7)"})}>
-          {menuContent}
-        </div>,
-        document.body
+    <div>
+      <PR l={props.l}>
+        <button ref={anchorRef} onClick={function(){setOpen(!open)}}
+          style={Object.assign({},btnStyle,{minHeight:"var(--tap-sm)",background:"var(--el)",
+            border:"1px solid var(--bd)",borderRadius:6})}>
+          {btnLabel}
+        </button>
+        {hasCreate && (
+          <button ref={createAnchorRef}
+            onClick={function(e){e.stopPropagation();setOpen(false);setCreateOpen(!createOpen)}}
+            style={{flexShrink:0,fontSize:10,padding:"0 9px",
+              minHeight:"var(--tap-sm)",background:"transparent",
+              border:"1px solid var(--ac)",borderRadius:6,
+              color:"var(--ac)",fontFamily:"'IBM Plex Mono',monospace",
+              whiteSpace:"nowrap",letterSpacing:".02em"}}>
+            + create
+          </button>
+        )}
+        {open&&pos&&createPortal(
+          <div ref={menuRef} style={Object.assign({},pos,{
+            position:"fixed",zIndex:9000,background:"var(--pn)",
+            border:"1px solid var(--bd)",borderRadius:10,
+            boxShadow:"0 -8px 32px rgba(0,0,0,.7)"})}>
+            {menuContent}
+          </div>,
+          document.body
+        )}
+        {hasCreate&&createOpen&&createPos&&createPortal(
+          <div ref={createMenuRef} style={Object.assign({},createPos,{
+            position:"fixed",zIndex:9001,background:"var(--pn)",
+            border:"1px solid var(--bd)",borderRadius:10,
+            boxShadow:"0 -8px 32px rgba(0,0,0,.7)",
+            minWidth:160,maxHeight:340,overflowY:"auto"})}>
+            {showS1&&(
+              <div>
+                <div style={{padding:"5px 12px 4px",fontSize:9,color:"var(--gn)",
+                  textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
+                  borderBottom:"1px solid var(--bd)",position:"sticky",top:0,background:"var(--pn)"}}>
+                  § Creators
+                </div>
+                {NREF_S1_TYPES.map(function(item){
+                  return <div key={item.t} className="drop-item" onClick={function(){doCreate(item.t,item.sec)}}>{item.l}</div>
+                })}
+              </div>
+            )}
+            {showS2&&(
+              <div style={showS1?{borderTop:"1px solid var(--bd)"}:{}}>
+                <div style={{padding:"5px 12px 4px",fontSize:9,color:"var(--co)",
+                  textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
+                  borderBottom:"1px solid var(--bd)",position:"sticky",top:0,background:"var(--pn)"}}>
+                  § Compositors
+                </div>
+                {NREF_S2_TYPES.map(function(item){
+                  return <div key={item.t} className="drop-item" onClick={function(){doCreate(item.t,item.sec)}}>{item.l}</div>
+                })}
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
+      </PR>
+      {/* ── Inline settings for newly created source ── */}
+      {hasCreate&&inlineNode&&(
+        <div style={{
+          margin:"0 0 8px 80px",
+          border:"1px solid rgba(37,37,80,.9)",borderRadius:8,
+          background:"rgba(4,4,18,.97)",overflow:"hidden"
+        }}>
+          <div style={{display:"flex",alignItems:"center",gap:6,
+            padding:"5px 10px",borderBottom:"1px solid var(--bd)",
+            background:"rgba(28,28,60,.9)"}}>
+            <div style={{width:6,height:6,borderRadius:"50%",
+              background:inlineNode.section===1?"var(--gn)":"var(--co)",flexShrink:0}}/>
+            <span style={{flex:1,fontSize:10,color:"var(--di)",
+              fontFamily:"'IBM Plex Mono',monospace",
+              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {inlineNode.name}
+              <span style={{fontSize:9,color:"var(--mu)",marginLeft:6}}>{inlineNode.type}</span>
+            </span>
+            <span style={{fontSize:9,color:"var(--mu)",marginRight:2,
+              fontFamily:"'IBM Plex Mono',monospace"}}>inline</span>
+            <button className="icon-btn sm" title="Close inline settings"
+              onClick={function(){setInlineId(null)}}
+              style={{fontSize:12,color:"var(--mu)"}}>×</button>
+          </div>
+          {renderInlineSettings(inlineNode)}
+        </div>
       )}
-    </PR>
+    </div>
   )
 }
 function TabBar(props) {
@@ -7549,7 +7699,10 @@ function SlotPanel(props) {
       <TabBar tabs={tabs} active={tab} onChange={setTab}/>
       {(
         <div style={{display:tab==="source"?"":"none"}} className="card-body">
-          <NRef l="source" v={slot.refId} nodes={nodes} selfId={selfId} iC={props.iC} fn={function(v){onChange(Object.assign({},slot,{refId:v}))}}/>
+          <NRef l="source" v={slot.refId} nodes={nodes} selfId={selfId} iC={props.iC}
+            onAdd={props.onAdd}
+            createOps={{onUpd:onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:wrappedPromote,onExtract:props.onExtract}}
+            fn={function(v){onChange(Object.assign({},slot,{refId:v}))}}/>
           <Sl l="fill" v={slot.fillOpacity==null?100:slot.fillOpacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
             fn={function(v){onChange(Object.assign({},slot,{fillOpacity:v}))}}/>
@@ -8494,6 +8647,8 @@ function LayerCard(props) {
       {!isCollapsed && (
         <div style={{display:layerTab==="source"?"":"none"}} className="card-body">
           <NRef l="source" v={lyr.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC} mode="source"
+            onAdd={props.onAdd}
+            createOps={{onUpd:props.onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:props.onPromote}}
             fn={function(v){props.onChange({refId:v})}}/>
           <Sl l="fill" v={lyr.fillOpacity==null?100:lyr.fillOpacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
@@ -9165,6 +9320,8 @@ function PointCompProps(props) {
           <div style={{display:srcTab==="source"?"":"none"}} className="card-body">
             <NRef l="source" v={node.refId||null} nodes={nodes} selfId={node.id}
               iC={props.iC} mode="source"
+              onAdd={props.onAdd}
+              createOps={{onUpd:onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:props.onPromote}}
               fn={function(v){onChange(Object.assign({},node,{refId:v}))}}/>
           </div>
         )}
@@ -9873,15 +10030,15 @@ function NodeGroupCard(props) {
                   {isSel && props.panelStyle!=="sheet" && (
                     <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
                       {node.section===1
-                        ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} nodes={props.nodes} iC={props.iC}/>
+                        ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} onAdd={props.onAdd} nodes={props.nodes} iC={props.iC}/>
                         : node.type==="blender"
-                          ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
+                          ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                           : node.type==="layers"
-                            ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                            ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                             : node.type==="stack"
-                              ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                              ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                               : node.type==="point-comp"
-                                ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot}/>
+                                ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onAdd={props.onAdd} onLoad={props.onLoad}/>
                                 : null
                       }
                     </div>
@@ -9989,15 +10146,15 @@ function renderNodeInline(node, props) {
       {isSel && props.panelStyle!=="sheet" && (
         <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
           {props.sec===1
-            ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} nodes={props.nodes} iC={props.iC}/>
+            ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} onAdd={props.onAdd} nodes={props.nodes} iC={props.iC}/>
             : node.type==="blender"
-              ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
+              ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
               : node.type==="layers"
-                ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                ? <LayerCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                 : node.type==="stack"
-                  ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                  ? <StackProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onPromote={props.onPromote} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                   : node.type==="point-comp"
-                    ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot}/>
+                    ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onAdd={props.onAdd} onLoad={props.onLoad}/>
                     : null
           }
         </div>
@@ -10494,7 +10651,7 @@ function App() {
     iC.current.set(url,img)
     img.src=url
   }
-  function add(type,sec){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="point-comp"?mkPointComp():type==="rasterise"?mkRasterise():type==="isolate"?mkIsolate():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):type==="group"?mkGroup(null,sec):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id)}
+  function add(type,sec,onCreated){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="point-comp"?mkPointComp():type==="rasterise"?mkRasterise():type==="isolate"?mkIsolate():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):type==="group"?mkGroup(null,sec):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id);if(onCreated)onCreated(n)}
   function del(id){
     pushHistory({nodes:nodes})
     setNodes(function(p){
