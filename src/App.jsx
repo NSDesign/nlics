@@ -4767,7 +4767,7 @@ function NRef(props) {
   )
 
   var menuContent = (
-    <div style={{padding:8,maxHeight:"50vh",overflowY:"auto",userSelect:"none"}}>
+    <div style={{padding:8,overflowX:"hidden",userSelect:"none"}}>
       {props.asMask&&(
         <div style={{display:"flex",gap:4,marginBottom:8}}>
           <button onClick={function(){setAsMask(false)}}
@@ -4990,7 +4990,8 @@ function NRef(props) {
           <div ref={menuRef} style={Object.assign({},pos,{
             position:"fixed",zIndex:9000,background:"var(--pn)",
             border:"1px solid var(--bd)",borderRadius:10,
-            boxShadow:"0 -8px 32px rgba(0,0,0,.7)"})}>
+            boxShadow:"0 -8px 32px rgba(0,0,0,.7)",
+            overflowY:"auto",overflowX:"hidden"})}>
             {menuContent}
           </div>,
           document.body
