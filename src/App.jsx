@@ -5789,7 +5789,7 @@ function CreatorProps(props) {
       {node.type==="gradient" && <GradP  p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
       {node.type==="noise"    && <NoiseP p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
       {node.type==="pattern"  && <PatP   p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
-      {node.type==="tile"     && <TileP  p={node.props} up={up} nodes={props.nodes} selfId={node.id} iC={props.iC}/>}
+      {node.type==="tile"     && <TileP  p={node.props} up={up} nodes={props.nodes} selfId={node.id} iC={props.iC} onAdd={props.onAdd} createOps={{onUpd:props.onUpdate,onLoad:props.onLoad}}/>}
       {node.type==="grid"        && <GridP       p={node.props} up={up}/>}
       {node.type==="spiral"      && <SpiralP     p={node.props} up={up}/>}
       {node.type==="polar-grid"  && <PolarGridP  p={node.props} up={up}/>}
@@ -7793,7 +7793,7 @@ function SlotPanel(props) {
         <div style={{display:tab==="source"?"":"none"}} className="card-body">
           <NRef l="source" v={slot.refId} nodes={nodes} selfId={selfId} iC={props.iC}
             onAdd={props.onAdd}
-            createOps={{onUpd:onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:props.onPromote,onExtract:props.onExtract}}
+            createOps={{onUpd:props.onNodeUpd||onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:props.onPromote,onExtract:props.onExtract}}
             fn={function(v){onChange(Object.assign({},slot,{refId:v}))}}/>
           <Sl l="fill" v={slot.fillOpacity==null?100:slot.fillOpacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
@@ -7998,6 +7998,7 @@ function BlenderProps(props) {
         onNavigate={props.onNavigate}
         onPromote={wrappedPromote}
         onAdd={props.onAdd} onLoad={props.onLoad}
+        onNodeUpd={onChange}
         dspSlot={props.dspSlot} dispSlot={props.dispSlot}
         onChange={function(s){onChange(Object.assign({},node,{inputA:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
@@ -8083,6 +8084,7 @@ function BlenderProps(props) {
         onNavigate={props.onNavigate}
         onPromote={wrappedPromote}
         onAdd={props.onAdd} onLoad={props.onLoad}
+        onNodeUpd={onChange}
         dspSlot={props.dspSlot} dispSlot={props.dispSlot}
         onChange={function(s){onChange(Object.assign({},node,{inputB:s}))}}
         onExtract={props.onExtract ? props.onExtract : null}/>
@@ -8720,7 +8722,7 @@ function LayerCard(props) {
         <div style={{display:layerTab==="source"?"":"none"}} className="card-body">
           <NRef l="source" v={lyr.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC} mode="source"
             onAdd={props.onAdd}
-            createOps={{onUpd:props.onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:props.onPromote}}
+            createOps={{onUpd:props.onNodeUpd||props.onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:props.onPromote}}
             fn={function(v){props.onChange({refId:v})}}/>
           <Sl l="fill" v={lyr.fillOpacity==null?100:lyr.fillOpacity} mn={0} mx={100} st={1}
             fmt={function(v){return Math.round(v)+"%"}}
@@ -8968,6 +8970,7 @@ function LayerCompProps(props) {
               onPromote={wrappedPromote}
               onExtract={props.onExtract||null}
               onAdd={props.onAdd} onLoad={props.onLoad}
+              onNodeUpd={onChange}
               owner={node}
               onMove={function(dir){moveLayer(li,dir)}}
               onDel={function(){delLayer(li)}}
