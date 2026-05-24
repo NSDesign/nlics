@@ -4949,12 +4949,12 @@ function NRef(props) {
         {hasCreate && (
           <button ref={createAnchorRef}
             onClick={function(e){e.stopPropagation();setOpen(false);setCreateOpen(!createOpen)}}
-            style={{flexShrink:0,fontSize:10,padding:"0 9px",
-              minHeight:"var(--tap-sm)",background:"transparent",
-              border:"1px solid var(--ac)",borderRadius:6,
-              color:"var(--ac)",fontFamily:"'IBM Plex Mono',monospace",
-              whiteSpace:"nowrap",letterSpacing:".02em"}}>
-            + create
+            title="Create new source"
+            style={{flexShrink:0,width:"var(--tap-sm)",height:"var(--tap-sm)",
+              background:"transparent",border:"1px solid var(--ac)",borderRadius:6,
+              color:"var(--ac)",fontSize:16,display:"inline-flex",alignItems:"center",
+              justifyContent:"center",cursor:"pointer",padding:0}}>
+            +
           </button>
         )}
         {open&&pos&&createPortal(
@@ -9543,19 +9543,19 @@ function NodeDetailSheet(props) {
         </div>
         <div className="node-sheet-scroll">
           {props.sec===1
-            ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad} nodes={props.nodes} iC={props.iC}/>
+            ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad} onAdd={props.onAdd} nodes={props.nodes} iC={props.iC}/>
             : props.node.type==="stack"
               ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                  onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate}/>
+                  onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
               : props.node.type==="layers"
                 ? <LayerCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                    onPromote={props.onPromote} onNavigate={props.onNavigate}/>
+                    onPromote={props.onPromote} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                 : props.node.type==="point-comp"
-                  ? <PointCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
+                  ? <PointCompProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                 : props.node.type==="promoted"
                 ? <PromotedProps node={props.node} nodes={props.nodes}/>
                 : <BlenderProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
-                    onPromote={props.onPromote} onExtract={props.onExtract} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate}/>
+                    onPromote={props.onPromote} onExtract={props.onExtract} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
           }
         </div>
       </div>
@@ -10255,7 +10255,7 @@ function Section(props) {
                     {isSel && props.panelStyle!=="sheet" && (
                       <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
                         {node.type==="point-comp"
-                          ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot}/>
+                          ? <PointCompProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onAdd={props.onAdd} onLoad={props.onLoad}/>
                           : <PromotedProps node={node} nodes={props.nodes}/>}
                       </div>
                     )}
@@ -11122,7 +11122,7 @@ function App() {
         node={sheetNode?sheetNode.node:null}
         sec={sheetNode?sheetNode.sec:null}
         onClose={function(){setSheetNode(null);setSelId(null)}}
-        onUpdate={upd} onLoad={loadUrl} nodes={nodes} iC={iC}
+        onUpdate={upd} onLoad={loadUrl} onAdd={add} nodes={nodes} iC={iC}
         dispId={dispId} dispMask={dispMask} dispSlot={dispSlot} onDsp={dsp} dspSlot={dspSlot}
         onPromote={handlePromote} onExtract={handleExtract} onNavigate={handleNavigate}/>
 
