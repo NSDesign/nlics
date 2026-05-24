@@ -4970,8 +4970,8 @@ function NRef(props) {
           <div ref={createMenuRef} style={Object.assign({},createPos,{
             position:"fixed",zIndex:9001,background:"var(--pn)",
             border:"1px solid var(--bd)",borderRadius:10,
-            boxShadow:"0 -8px 32px rgba(0,0,0,.7)",
-            minWidth:160,maxHeight:340,overflowY:"auto"})}>
+            boxShadow:"0 -8px 32px rgba(0,0,0,.7)",minWidth:160})}>
+            <div style={{overflowY:"auto",maxHeight:"inherit"}}>
             {showS1&&(
               <div>
                 <div style={{padding:"5px 12px 4px",fontSize:9,color:"var(--gn)",
@@ -4989,6 +4989,7 @@ function NRef(props) {
                 no types available for this context
               </div>
             )}
+            </div>
           </div>,
           document.body
         )}
