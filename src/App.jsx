@@ -4661,11 +4661,6 @@ var NREF_S1_TYPES=[
   {t:"gradient",l:"Gradient",sec:1},{t:"noise",l:"Noise Field",sec:1},
   {t:"pattern",l:"Pattern",sec:1},{t:"image",l:"Image",sec:1},{t:"tile",l:"Tile",sec:1}
 ]
-var NREF_S2_TYPES=[
-  {t:"blender",l:"Blender",sec:2},{t:"layers",l:"Layer Comp",sec:2},
-  {t:"stack-effect",l:"Effect Stack",sec:2},{t:"stack-mask",l:"Mask Stack",sec:2},
-  {t:"point-comp",l:"Point Comp",sec:2}
-]
 
 function NRef(props) {
   // Safety: nodes must be an array
@@ -4738,9 +4733,8 @@ function NRef(props) {
     })
   }
 
-  // What types to offer in the create popover
-  var showS1 = mode!=="effect-source"
-  var showS2 = mode!=="intermediate" && mode!=="point"
+  // What types to offer in the create popover — pixel creators only
+  var showS1 = mode!=="effect-source" && mode!=="mask-source"
 
   // Inline settings renderer — onNavigate suppressed to keep context
   function renderInlineSettings(n) {
@@ -4751,7 +4745,7 @@ function NRef(props) {
         onAdd={props.onAdd} nodes={props.nodes} iC={props.iC}/>
     )
     var sharedP = {onChange:co.onUpd||noop, nodes:props.nodes, iC:props.iC,
-      onNavigate:noop, onAdd:props.onAdd, onLoad:co.onLoad||noop}
+      onNavigate:co.onNavigate||noop, onAdd:props.onAdd, onLoad:co.onLoad||noop}
     if(n.type==="blender") return (
       <BlenderProps node={n} {...sharedP}
         onExtract={co.onExtract||noop} onPromote={co.onPromote||noop}
@@ -4983,23 +4977,16 @@ function NRef(props) {
                 <div style={{padding:"5px 12px 4px",fontSize:9,color:"var(--gn)",
                   textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
                   borderBottom:"1px solid var(--bd)",position:"sticky",top:0,background:"var(--pn)"}}>
-                  § Creators
+                  Pixel Creators
                 </div>
                 {NREF_S1_TYPES.map(function(item){
                   return <div key={item.t} className="drop-item" onClick={function(){doCreate(item.t,item.sec)}}>{item.l}</div>
                 })}
               </div>
             )}
-            {showS2&&(
-              <div style={showS1?{borderTop:"1px solid var(--bd)"}:{}}>
-                <div style={{padding:"5px 12px 4px",fontSize:9,color:"var(--co)",
-                  textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
-                  borderBottom:"1px solid var(--bd)",position:"sticky",top:0,background:"var(--pn)"}}>
-                  § Compositors
-                </div>
-                {NREF_S2_TYPES.map(function(item){
-                  return <div key={item.t} className="drop-item" onClick={function(){doCreate(item.t,item.sec)}}>{item.l}</div>
-                })}
+            {!showS1&&(
+              <div style={{padding:"10px 14px",fontSize:11,color:"var(--mu)"}}>
+                no types available for this context
               </div>
             )}
           </div>,
