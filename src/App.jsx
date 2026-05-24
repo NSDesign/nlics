@@ -4655,12 +4655,108 @@ function ThumbItem(props) {
     </div>
   )
 }
-/* ── Source type lists for + create button ─── */
-var NREF_S1_TYPES=[
+/* ── Shared node type lists (used by AddMenu + NRef create-source) ── */
+var NODE_TYPES_S1=[
   {t:"solid",l:"Solid Colour",sec:1},{t:"shape",l:"Geometry",sec:1},
   {t:"gradient",l:"Gradient",sec:1},{t:"noise",l:"Noise Field",sec:1},
-  {t:"pattern",l:"Pattern",sec:1},{t:"image",l:"Image",sec:1},{t:"tile",l:"Tile",sec:1}
+  {t:"pattern",l:"Pattern",sec:1},{t:"image",l:"Image",sec:1}
 ]
+var NODE_TYPES_S1_ADV=[
+  {t:"tile",l:"Tile",sec:1},{t:"uv-create",l:"UV Create",sec:1}
+]
+var NODE_TYPES_S2=[
+  {t:"blender",l:"Blender",sec:2},{t:"layers",l:"Layer Comp",sec:2},
+  {t:"stack-effect",l:"Effect Stack",sec:2},{t:"stack-mask",l:"Mask Stack",sec:2},
+  {t:"point-comp",l:"Point Comp ◉",sec:2}
+]
+/* Legacy alias kept for any remaining NRef references */
+var NREF_S1_TYPES=NODE_TYPES_S1.concat([{t:"tile",l:"Tile",sec:1}])
+
+/* ── NodeTypePopover — reusable node-type picker portal ─────────────
+   Props:
+     pos          positioning object from usePopoverPosition
+     menuRef      ref for the popup div (outside-click detection)
+     sec          1 | 2 — which section's types to show
+     showGroups   bool (default true)  — show 📁 New Group at bottom
+     creatorOnly  bool (default false) — only §1 standard types, no ADV, no sec=2
+     onSelect(type, sec)
+*/
+function NodeTypePopover(props) {
+  var sec = props.sec || 1
+  var showGroups = props.showGroups !== false
+  var creatorOnly = !!props.creatorOnly
+
+  var grpHdr = {
+    padding:"5px 14px 4px",fontSize:8,color:"var(--mu)",
+    textTransform:"uppercase",letterSpacing:".1em",
+    fontFamily:"'IBM Plex Mono',monospace",
+    borderTop:"1px solid var(--bd)",borderBottom:"1px solid var(--bd)",
+    background:"var(--bg)"
+  }
+
+  var containerStyle = Object.assign({}, props.pos, {
+    position:"fixed",zIndex:9200,
+    background:"#111128",border:"1px solid var(--bd)",borderRadius:8,
+    minWidth:180,boxShadow:"0 -8px 32px rgba(0,0,0,.8)",
+    overflowY:"auto",overflowX:"hidden",
+    WebkitOverflowScrolling:"touch"
+  })
+
+  return createPortal(
+    <div ref={props.menuRef} style={containerStyle}>
+      {(sec===1 || creatorOnly) && (
+        <div>
+          {NODE_TYPES_S1.map(function(item){
+            return <div key={item.t} className="drop-item"
+              onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,1)}}>
+              {item.l}
+            </div>
+          })}
+          {!creatorOnly && (
+            <div>
+              <div style={grpHdr}>Advanced</div>
+              {NODE_TYPES_S1_ADV.map(function(item){
+                return <div key={item.t} className="drop-item"
+                  onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,1)}}>
+                  {item.l}
+                </div>
+              })}
+            </div>
+          )}
+          {creatorOnly && (
+            <div>
+              <div style={grpHdr}>Advanced</div>
+              <div className="drop-item"
+                onPointerDown={function(e){e.preventDefault();props.onSelect("tile",1)}}>
+                Tile
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {sec===2 && !creatorOnly && (
+        <div>
+          {NODE_TYPES_S2.map(function(item){
+            return <div key={item.t} className="drop-item"
+              onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,2)}}>
+              {item.l}
+            </div>
+          })}
+        </div>
+      )}
+      {showGroups && (
+        <div>
+          <div style={{borderTop:"1px solid var(--bd)"}}/>
+          <div className="drop-item" style={{color:"var(--mu)"}}
+            onPointerDown={function(e){e.preventDefault();props.onSelect("group",sec)}}>
+            📁 New Group
+          </div>
+        </div>
+      )}
+    </div>,
+    document.body
+  )
+}
 
 function NRef(props) {
   if(!props.nodes||!Array.isArray(props.nodes)) return null
@@ -4670,17 +4766,15 @@ function NRef(props) {
   var anchorRef=useRef(null), menuRef=useRef(null)
   var pos=usePopoverPosition(anchorRef, open, "above")
 
-  // Create-new state (lives inside the picker popup)
-  var creatingNewSt=useState(false); var creatingNew=creatingNewSt[0], setCreatingNew=creatingNewSt[1]
-  // Inline settings panel (shown below the source row after creation)
+  // Create-new popup (positioned on the [+] tile)
+  var createOpenSt=useState(false); var createOpen=createOpenSt[0], setCreateOpen=createOpenSt[1]
+  var createAnchorRef=useRef(null), createMenuRef=useRef(null)
+  var createPos=usePopoverPosition(createAnchorRef, createOpen, "above")
+
+  // Inline settings panel (shown below source row after creation / ↗ open)
   var inlineIdSt=useState(null); var inlineId=inlineIdSt[0], setInlineId=inlineIdSt[1]
 
   var hasCreate = !!(props.onAdd)
-
-  // Reset creatingNew when picker closes
-  useEffect(function(){
-    if(!open) setCreatingNew(false)
-  },[open])
 
   useEffect(function(){
     if(!open) return
@@ -4692,6 +4786,17 @@ function NRef(props) {
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
+
+  useEffect(function(){
+    if(!createOpen) return
+    function h(e){
+      if(createAnchorRef.current&&createAnchorRef.current.contains(e.target)) return
+      if(createMenuRef.current&&createMenuRef.current.contains(e.target)) return
+      setCreateOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[createOpen])
 
   var creators = mode==="intermediate" ? [] : props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId})
   var comps = props.nodes.filter(function(n){
@@ -4713,7 +4818,7 @@ function NRef(props) {
   function pick(id){ props.fn(id||null); setOpen(false) }
 
   function doCreate(type, sec) {
-    setCreatingNew(false)
+    setCreateOpen(false)
     setOpen(false)
     if(!props.onAdd) return
     props.onAdd(type, sec, function(newNode){
@@ -4722,7 +4827,12 @@ function NRef(props) {
     })
   }
 
-  // Allow [+ new] tile for any mode except effect-source
+  function openInline(id) {
+    setInlineId(inlineId===id ? null : id)
+    setOpen(false)
+  }
+
+  // Show [+] tile for source modes (not effect-source or mask-source)
   var showNewTile = hasCreate && mode!=="effect-source" && mode!=="mask-source"
 
   // Inline settings renderer
@@ -4740,31 +4850,37 @@ function NRef(props) {
         onExtract={co.onExtract||noop} onPromote={co.onPromote||noop}
         dspSlot={null} dispSlot={null} onDsp={noop} dispId={null} dispMask={false}/>
     )
-    if(n.type==="layers") return <LayerCompProps node={n} {...sharedP} onPromote={co.onPromote||noop}/>
-    if(n.type==="stack")  return <StackProps node={n} {...sharedP} onPromote={co.onPromote||noop}/>
+    if(n.type==="layers") return <LayerCompProps node={n} {...sharedP} onPromote={co.onPromote||noop} onExtract={co.onExtract||noop}/>
+    if(n.type==="stack")  return <StackProps node={n} {...sharedP} onPromote={co.onPromote||noop} onExtract={co.onExtract||noop}/>
     if(n.type==="point-comp") return <PointCompProps node={n} {...sharedP} dspSlot={null} dispSlot={null}/>
     return null
   }
 
-  // New-creator tile — shown at the start of the Creators thumbnail row
+  // [+] new-creator tile rendered inside the thumbnail row
   var newCreatorTile = showNewTile && (
-    <div onClick={function(){setCreatingNew(!creatingNew)}}
+    <div ref={createAnchorRef}
+      onClick={function(e){e.stopPropagation();setCreateOpen(!createOpen)}}
       style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
         padding:"6px 4px",borderRadius:6,
-        border:"1px solid "+(creatingNew?"var(--ac)":"var(--gn)"),
-        background:creatingNew?"rgba(var(--ac-rgb,80,160,240),.08)":"none",
+        border:"1px solid "+(createOpen?"var(--ac)":"var(--gn)"),
+        background:createOpen?"rgba(80,160,240,.08)":"none",
         minWidth:THUMB_PX+16}}>
       <div style={{width:THUMB_PX,height:THUMB_PX,borderRadius:4,overflow:"hidden",
         background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",
-        boxShadow:"0 0 0 1px "+(creatingNew?"var(--ac)":"var(--gn)")}}>
-        <span style={{fontSize:20,color:creatingNew?"var(--ac)":"var(--gn)",lineHeight:1}}>+</span>
+        boxShadow:"0 0 0 1px "+(createOpen?"var(--ac)":"var(--gn)")}}>
+        <span style={{fontSize:20,color:createOpen?"var(--ac)":"var(--gn)",lineHeight:1}}>+</span>
       </div>
-      <span style={{fontSize:8,color:creatingNew?"var(--ac)":"var(--gn)",textAlign:"center",
+      <span style={{fontSize:8,color:createOpen?"var(--ac)":"var(--gn)",textAlign:"center",
         fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.2}}>
         new
       </span>
     </div>
   )
+
+  // Inline settings for currently selected or newly created source node
+  var inlineNode = (hasCreate && inlineId)
+    ? props.nodes.find(function(n){return n.id===inlineId}) || null
+    : null
 
   var menuContent = (
     <div style={{padding:8,overflowX:"hidden",userSelect:"none"}}>
@@ -4907,29 +5023,14 @@ function NRef(props) {
             letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
             Creators
           </div>
-          {/* Type list when creatingNew, thumbnail grid otherwise */}
-          {creatingNew ? (
-            <div style={{marginBottom:4}}>
-              {NREF_S1_TYPES.map(function(item){
-                return (
-                  <div key={item.t} className="drop-item"
-                    style={{borderRadius:6,marginBottom:2}}
-                    onClick={function(){doCreate(item.t, item.sec)}}>
-                    {item.l}
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-              {newCreatorTile}
-              {creators.map(function(n,ci){
-                return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
-                  label={n.name} active={props.v===n.id} index={ci} asMask={asMask}
-                  greySource={!asMask&&!!props.asMask} onClick={function(){pick(n.id)}}/>
-              })}
-            </div>
-          )}
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {newCreatorTile}
+            {creators.map(function(n,ci){
+              return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
+                label={n.name} active={props.v===n.id} index={ci} asMask={asMask}
+                greySource={!asMask&&!!props.asMask} onClick={function(){pick(n.id)}}/>
+            })}
+          </div>
         </div>
       )}
 
@@ -4954,16 +5055,6 @@ function NRef(props) {
     </div>
   )
 
-  // inlineId covers both newly created AND manually opened nodes
-  var inlineNode = (hasCreate && inlineId)
-    ? props.nodes.find(function(n){return n.id===inlineId}) || null
-    : null
-
-  function openInline(id) {
-    setInlineId(inlineId===id ? null : id) // toggle
-    setOpen(false)
-  }
-
   return (
     <div>
       <PR l={props.l}>
@@ -4972,7 +5063,7 @@ function NRef(props) {
             border:"1px solid var(--bd)",borderRadius:6})}>
           {btnLabel}
         </button>
-        {/* ↗ open settings for selected source */}
+        {/* ↗ open inline settings for selected source */}
         {hasCreate && selectedNode && (
           <button
             onClick={function(e){e.stopPropagation();openInline(selectedNode.id)}}
@@ -4991,13 +5082,21 @@ function NRef(props) {
             position:"fixed",zIndex:9000,background:"var(--pn)",
             border:"1px solid var(--bd)",borderRadius:10,
             boxShadow:"0 -8px 32px rgba(0,0,0,.7)",
-            overflowY:"auto",overflowX:"hidden"})}>
+            overflowY:"auto",overflowX:"hidden",
+            WebkitOverflowScrolling:"touch"})}>
             {menuContent}
           </div>,
           document.body
         )}
+        {/* [+] tile create popup — uses same NodeTypePopover as AddMenu */}
+        {hasCreate&&createOpen&&createPos&&(
+          <NodeTypePopover
+            menuRef={createMenuRef} pos={createPos}
+            sec={1} showGroups={false} creatorOnly={true}
+            onSelect={function(type,sec){doCreate(type,sec)}}/>
+        )}
       </PR>
-      {/* ── Inline settings panel — created or opened via ↗ ── */}
+      {/* ── Inline settings panel ── */}
       {hasCreate&&inlineNode&&(
         <div style={{
           margin:"0 0 8px 80px",
@@ -5027,6 +5126,7 @@ function NRef(props) {
     </div>
   )
 }
+
 
 function TabBar(props) {
   return (
@@ -8358,8 +8458,7 @@ function NodeItem(props) {
 /* ─── ADD MENU ────────────────────────────────────────── */
 function AddMenu(props) {
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
-  var anchorRef=useRef(null)
-  var menuRef=useRef(null)
+  var anchorRef=useRef(null), menuRef=useRef(null)
   var pos=usePopoverPosition(anchorRef, open, "above")
   useEffect(function(){
     if(!open)return
@@ -8371,34 +8470,13 @@ function AddMenu(props) {
     document.addEventListener("mousedown",h)
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
-  var s1standard=[{t:"solid",l:"Solid Colour"},{t:"shape",l:"Geometry"},{t:"gradient",l:"Gradient"},{t:"noise",l:"Noise Field"},{t:"pattern",l:"Pattern"},{t:"image",l:"Image"}]
-  var s1advanced=[{t:"tile",l:"Tile"},{t:"uv-create",l:"UV Create"}]
-  var s2items=[{t:"blender",l:"Blender"},{t:"layers",l:"Layer Comp"},{t:"stack-effect",l:"Effect Stack"},{t:"stack-mask",l:"Mask Stack"},{t:"__div__",l:"Point Context"},{t:"point-comp",l:"Point Comp ◉"}]
   return (
     <div ref={anchorRef} style={{position:"relative"}}>
       <button className="ac" style={{fontSize:10,padding:"0 10px"}} onClick={function(){setOpen(!open)}}>+ Add</button>
-      {open&&pos&&createPortal(
-        <div ref={menuRef} className="drop-menu" style={pos}>
-          {props.sec===1?[
-            s1standard.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>}),
-            <div key="__adv__" style={{padding:"5px 14px 4px",fontSize:8,color:"var(--mu)",
-              textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
-              borderTop:"1px solid var(--bd)",borderBottom:"1px solid var(--bd)",background:"var(--bg)"}}>
-              Advanced
-            </div>,
-            s1advanced.map(function(item){return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>}),
-            <div key="__grpdiv1__" style={{borderTop:"1px solid var(--bd)",marginTop:2}}/>,
-            <div key="group" className="drop-item" style={{color:"var(--mu)"}} onPointerDown={function(e){e.preventDefault();props.onAdd("group",props.sec);setOpen(false)}}>📁 New Group</div>
-          ]:[
-            ...s2items.map(function(item){
-              if(item.t==="__div__") return <div key={item.t} className="drop-grp" style={{borderTop:"1px solid var(--bd)",marginTop:4}}>{item.l}</div>
-              return <div key={item.t} className="drop-item" onPointerDown={function(e){e.preventDefault();props.onAdd(item.t,props.sec);setOpen(false)}}>{item.l}</div>
-            }),
-            <div key="__grpdiv2__" style={{borderTop:"1px solid var(--bd)",marginTop:2}}/>,
-            <div key="group" className="drop-item" style={{color:"var(--mu)"}} onPointerDown={function(e){e.preventDefault();props.onAdd("group",props.sec);setOpen(false)}}>📁 New Group</div>
-          ]}
-        </div>,
-        document.body
+      {open&&pos&&(
+        <NodeTypePopover menuRef={menuRef} pos={pos} sec={props.sec}
+          showGroups={true}
+          onSelect={function(type,sec){props.onAdd(type,sec);setOpen(false)}}/>
       )}
     </div>
   )
