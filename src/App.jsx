@@ -4663,20 +4663,24 @@ var NREF_S1_TYPES=[
 ]
 
 function NRef(props) {
-  // Safety: nodes must be an array
   if(!props.nodes||!Array.isArray(props.nodes)) return null
   var mode = props.mode || "all"
   var asMaskSt=useState(props.asMask||false); var asMask=asMaskSt[0], setAsMask=asMaskSt[1]
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
-  var anchorRef=useRef(null)
-  var menuRef=useRef(null)
+  var anchorRef=useRef(null), menuRef=useRef(null)
   var pos=usePopoverPosition(anchorRef, open, "above")
 
-  // Create-source state (always declare — hooks rules)
-  var createOpenSt=useState(false); var createOpen=createOpenSt[0], setCreateOpen=createOpenSt[1]
+  // Create-new state (lives inside the picker popup)
+  var creatingNewSt=useState(false); var creatingNew=creatingNewSt[0], setCreatingNew=creatingNewSt[1]
+  // Inline settings panel (shown below the source row after creation)
   var inlineIdSt=useState(null); var inlineId=inlineIdSt[0], setInlineId=inlineIdSt[1]
-  var createAnchorRef=useRef(null), createMenuRef=useRef(null)
-  var createPos=usePopoverPosition(createAnchorRef, createOpen, "above")
+
+  var hasCreate = !!(props.onAdd)
+
+  // Reset creatingNew when picker closes
+  useEffect(function(){
+    if(!open) setCreatingNew(false)
+  },[open])
 
   useEffect(function(){
     if(!open) return
@@ -4689,18 +4693,6 @@ function NRef(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[open])
 
-  useEffect(function(){
-    if(!createOpen) return
-    function h(e){
-      if(createAnchorRef.current&&createAnchorRef.current.contains(e.target)) return
-      if(createMenuRef.current&&createMenuRef.current.contains(e.target)) return
-      setCreateOpen(false)
-    }
-    document.addEventListener("mousedown",h)
-    return function(){document.removeEventListener("mousedown",h)}
-  },[createOpen])
-
-  var hasCreate = !!(props.onAdd)
   var inlineNode = (hasCreate && inlineId)
     ? props.nodes.find(function(n){return n.id===inlineId}) || null
     : null
@@ -4710,7 +4702,7 @@ function NRef(props) {
     if(n.id===props.selfId) return false
     if(n.section!==2) return false
     if(mode==="intermediate") return n.type==="promoted"
-    if(mode==="source") return true  // all compositors (incl. promoted taps) are valid pixel sources
+    if(mode==="source") return true
     if(mode==="effect-source") return n.type==="stack"&&n.stackType==="effect"
     if(mode==="mask-source") return n.type==="stack"&&n.stackType==="mask"||n.type==="promoted"
     return true
@@ -4725,7 +4717,8 @@ function NRef(props) {
   function pick(id){ props.fn(id||null); setOpen(false) }
 
   function doCreate(type, sec) {
-    setCreateOpen(false)
+    setCreatingNew(false)
+    setOpen(false)
     if(!props.onAdd) return
     props.onAdd(type, sec, function(newNode){
       setInlineId(newNode.id)
@@ -4733,10 +4726,10 @@ function NRef(props) {
     })
   }
 
-  // What types to offer in the create popover — pixel creators only
-  var showS1 = mode!=="effect-source" && mode!=="mask-source"
+  // Allow [+ new] tile for any mode except effect-source
+  var showNewTile = hasCreate && mode!=="effect-source" && mode!=="mask-source"
 
-  // Inline settings renderer — onNavigate suppressed to keep context
+  // Inline settings renderer
   function renderInlineSettings(n) {
     var co = props.createOps||{}
     var noop = function(){}
@@ -4751,21 +4744,34 @@ function NRef(props) {
         onExtract={co.onExtract||noop} onPromote={co.onPromote||noop}
         dspSlot={null} dispSlot={null} onDsp={noop} dispId={null} dispMask={false}/>
     )
-    if(n.type==="layers") return (
-      <LayerCompProps node={n} {...sharedP} onPromote={co.onPromote||noop}/>
-    )
-    if(n.type==="stack") return (
-      <StackProps node={n} {...sharedP} onPromote={co.onPromote||noop}/>
-    )
-    if(n.type==="point-comp") return (
-      <PointCompProps node={n} {...sharedP} dspSlot={null} dispSlot={null}/>
-    )
+    if(n.type==="layers") return <LayerCompProps node={n} {...sharedP} onPromote={co.onPromote||noop}/>
+    if(n.type==="stack")  return <StackProps node={n} {...sharedP} onPromote={co.onPromote||noop}/>
+    if(n.type==="point-comp") return <PointCompProps node={n} {...sharedP} dspSlot={null} dispSlot={null}/>
     return null
   }
 
+  // New-creator tile — shown at the start of the Creators thumbnail row
+  var newCreatorTile = showNewTile && (
+    <div onClick={function(){setCreatingNew(!creatingNew)}}
+      style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
+        padding:"6px 4px",borderRadius:6,
+        border:"1px solid "+(creatingNew?"var(--ac)":"var(--gn)"),
+        background:creatingNew?"rgba(var(--ac-rgb,80,160,240),.08)":"none",
+        minWidth:THUMB_PX+16}}>
+      <div style={{width:THUMB_PX,height:THUMB_PX,borderRadius:4,overflow:"hidden",
+        background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",
+        boxShadow:"0 0 0 1px "+(creatingNew?"var(--ac)":"var(--gn)")}}>
+        <span style={{fontSize:20,color:creatingNew?"var(--ac)":"var(--gn)",lineHeight:1}}>+</span>
+      </div>
+      <span style={{fontSize:8,color:creatingNew?"var(--ac)":"var(--gn)",textAlign:"center",
+        fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.2}}>
+        new
+      </span>
+    </div>
+  )
+
   var menuContent = (
     <div style={{padding:8,maxHeight:"50vh",overflowY:"auto",userSelect:"none"}}>
-      {/* Source/Matte toggle — only shown in mask context */}
       {props.asMask&&(
         <div style={{display:"flex",gap:4,marginBottom:8}}>
           <button onClick={function(){setAsMask(false)}}
@@ -4786,7 +4792,6 @@ function NRef(props) {
           </button>
         </div>
       )}
-      {/* None option */}
       <div onClick={function(){pick(null)}}
         style={{padding:"6px 10px",fontSize:11,color:"var(--mu)",cursor:"pointer",
           borderRadius:5,marginBottom:6,border:"1px solid "+(props.v==null?"var(--bd)":"transparent"),
@@ -4827,7 +4832,6 @@ function NRef(props) {
         </div>
       )}
       {(function(){
-        // Phase 2: Other Stacks — masks from effect stacks on other nodes
         var otherMasks=[]
         ;(props.nodes||[]).forEach(function(n){
           if(n.id===props.selfId) return
@@ -4855,13 +4859,10 @@ function NRef(props) {
           })
           if(n.effectStack) collectFromStack(n.effectStack,"")
         })
-        // Exclude masks already shown in Same Stack group
         var sibIds=new Set((props.siblingEffects||[]).map(function(e){
           return (e.maskStack||[]).map(function(m){return e.id+":"+m.id})
         }).reduce(function(a,b){return a.concat(b)},[]))
-        otherMasks=otherMasks.filter(function(om){
-          return !sibIds.has(om.effectId+":"+om.maskId)
-        })
+        otherMasks=otherMasks.filter(function(om){return !sibIds.has(om.effectId+":"+om.maskId)})
         if(!otherMasks.length) return null
         return (
           <div style={{marginBottom:8}}>
@@ -4902,23 +4903,42 @@ function NRef(props) {
           </div>
         )
       })()}
-      {creators.length>0&&(
+
+      {/* ── Creators section — [+] tile always first when hasCreate ── */}
+      {(showNewTile || creators.length>0) && (
         <div>
           <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
             letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
             Creators
           </div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-            {creators.map(function(n,ci){
-              return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
-                label={n.name} active={props.v===n.id} index={ci} asMask={asMask}
-                greySource={!asMask&&!!props.asMask} onClick={function(){pick(n.id)}}/>
-            })}
-          </div>
+          {/* Type list when creatingNew, thumbnail grid otherwise */}
+          {creatingNew ? (
+            <div style={{marginBottom:4}}>
+              {NREF_S1_TYPES.map(function(item){
+                return (
+                  <div key={item.t} className="drop-item"
+                    style={{borderRadius:6,marginBottom:2}}
+                    onClick={function(){doCreate(item.t, item.sec)}}>
+                    {item.l}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {newCreatorTile}
+              {creators.map(function(n,ci){
+                return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
+                  label={n.name} active={props.v===n.id} index={ci} asMask={asMask}
+                  greySource={!asMask&&!!props.asMask} onClick={function(){pick(n.id)}}/>
+              })}
+            </div>
+          )}
         </div>
       )}
+
       {comps.length>0&&(
-        <div style={{marginTop:creators.length>0?10:0}}>
+        <div style={{marginTop:(showNewTile||creators.length>0)?10:0}}>
           <div style={{fontSize:8,color:"var(--mu)",textTransform:"uppercase",
             letterSpacing:".1em",padding:"2px 4px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>
             {mode==="intermediate"?"Promoted Taps":"Compositors"}
@@ -4926,13 +4946,13 @@ function NRef(props) {
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
             {comps.map(function(n,ci){
               return <ThumbItem key={n.id} nodeId={n.id} nodes={props.nodes} iC={props.iC}
-                label={n.name} active={props.v===n.id} index={creators.length+ci} asMask={asMask}
+                label={n.name} active={props.v===n.id} index={(showNewTile?1:0)+creators.length+ci} asMask={asMask}
                 greySource={!asMask&&!!props.asMask} onClick={function(){pick(n.id)}}/>
             })}
           </div>
         </div>
       )}
-      {allItems.length===0&&(
+      {!showNewTile && allItems.length===0&&(
         <div style={{fontSize:11,color:"var(--mu)",padding:"4px 10px"}}>no valid sources</div>
       )}
     </div>
@@ -4946,50 +4966,12 @@ function NRef(props) {
             border:"1px solid var(--bd)",borderRadius:6})}>
           {btnLabel}
         </button>
-        {hasCreate && (
-          <button ref={createAnchorRef}
-            onClick={function(e){e.stopPropagation();setOpen(false);setCreateOpen(!createOpen)}}
-            title="Create new source"
-            style={{flexShrink:0,width:"var(--tap-sm)",height:"var(--tap-sm)",
-              background:"transparent",border:"1px solid var(--ac)",borderRadius:6,
-              color:"var(--ac)",fontSize:16,display:"inline-flex",alignItems:"center",
-              justifyContent:"center",cursor:"pointer",padding:0}}>
-            +
-          </button>
-        )}
         {open&&pos&&createPortal(
           <div ref={menuRef} style={Object.assign({},pos,{
             position:"fixed",zIndex:9000,background:"var(--pn)",
             border:"1px solid var(--bd)",borderRadius:10,
             boxShadow:"0 -8px 32px rgba(0,0,0,.7)"})}>
             {menuContent}
-          </div>,
-          document.body
-        )}
-        {hasCreate&&createOpen&&createPos&&createPortal(
-          <div ref={createMenuRef} style={Object.assign({},createPos,{
-            position:"fixed",zIndex:9001,background:"var(--pn)",
-            border:"1px solid var(--bd)",borderRadius:10,
-            boxShadow:"0 -8px 32px rgba(0,0,0,.7)",minWidth:160})}>
-            <div style={{overflowY:"auto",maxHeight:"inherit"}}>
-            {showS1&&(
-              <div>
-                <div style={{padding:"5px 12px 4px",fontSize:9,color:"var(--gn)",
-                  textTransform:"uppercase",letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
-                  borderBottom:"1px solid var(--bd)",position:"sticky",top:0,background:"var(--pn)"}}>
-                  Pixel Creators
-                </div>
-                {NREF_S1_TYPES.map(function(item){
-                  return <div key={item.t} className="drop-item" onClick={function(){doCreate(item.t,item.sec)}}>{item.l}</div>
-                })}
-              </div>
-            )}
-            {!showS1&&(
-              <div style={{padding:"10px 14px",fontSize:11,color:"var(--mu)"}}>
-                no types available for this context
-              </div>
-            )}
-            </div>
           </div>,
           document.body
         )}
@@ -5024,6 +5006,7 @@ function NRef(props) {
     </div>
   )
 }
+
 function TabBar(props) {
   return (
     <div className="tabs">
