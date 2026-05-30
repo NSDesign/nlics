@@ -8642,6 +8642,7 @@ function CanvasSizePicker(props) {
   var popSt=useState(false); var popOpen=popSt[0],setPopOpen=popSt[1]
   var addSt=useState(false); var addOpen=addSt[0],setAddOpen=addSt[1]
   var popRef=useRef(null), popAnchorRef=useRef(null)
+  var pos=usePopoverPosition(popAnchorRef, popOpen, "below")
 
   useEffect(function(){setWStr(String(props.szW))},[props.szW])
   useEffect(function(){setHStr(String(props.szH))},[props.szH])
@@ -8731,15 +8732,14 @@ function CanvasSizePicker(props) {
             cursor:"pointer",flexShrink:0,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:".05em"}}>
           ▤
         </button>
-        {popOpen&&createPortal(
-          <div ref={popRef} style={{
+        {popOpen&&pos&&createPortal(
+          <div ref={popRef} style={Object.assign({},pos,{
             position:"fixed",zIndex:9100,background:"var(--pn)",
             border:"1px solid var(--bd)",borderRadius:10,
-            boxShadow:"0 -8px 32px rgba(0,0,0,.7)",
+            boxShadow:"0 8px 32px rgba(0,0,0,.7)",
             padding:"10px 0",minWidth:190,
-            bottom:(function(){if(!popAnchorRef.current)return 40;var r=popAnchorRef.current.getBoundingClientRect();return window.innerHeight-r.top+6})(),
-            left:(function(){if(!popAnchorRef.current)return 0;return popAnchorRef.current.getBoundingClientRect().left})()
-          }}>
+            overflowY:"auto",overflowX:"hidden"
+          })}>
             {/* Header + Add New button */}
             <div style={{display:"flex",alignItems:"center",padding:"0 12px 8px",
               borderBottom:"1px solid var(--bd)",marginBottom:4}}>
