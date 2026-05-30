@@ -8485,6 +8485,213 @@ function AddMenu(props) {
 }
 
 /* ─── LIVE PREVIEW ────────────────────────────────────── */
+/* ── Canvas size presets ─────────────────────────────────── */
+var CANVAS_PRESETS=[
+  {w:256,h:256},{w:400,h:400},{w:512,h:512},{w:768,h:768},{w:1024,h:1024}
+]
+var CANVAS_CUSTOM_KEY="nlics_canvas_custom"
+function loadCustomSizes(){
+  try{var s=localStorage.getItem(CANVAS_CUSTOM_KEY);return s?JSON.parse(s):[]}
+  catch(e){return []}
+}
+function saveCustomSizes(arr){
+  try{localStorage.setItem(CANVAS_CUSTOM_KEY,JSON.stringify(arr))}catch(e){}
+}
+
+/* CanvasSizePicker — W×H inputs with link toggle + preset/custom popover */
+function CanvasSizePicker(props) {
+  /* props: szW, szH, onResize(w,h) */
+  var wSt=useState(String(props.szW)); var wStr=wSt[0], setWStr=wSt[1]
+  var hSt=useState(String(props.szH)); var hStr=hSt[0], setHStr=hSt[1]
+  /* link mode: "free" | "ar" | "sq" */
+  var lmSt=useState("sq"); var linkMode=lmSt[0], setLinkMode=lmSt[1]
+  var customSt=useState(loadCustomSizes); var customs=customSt[0], setCustoms=customSt[1]
+  var popSt=useState(false); var popOpen=popSt[0], setPopOpen=popSt[1]
+  var popRef=useRef(null), popAnchorRef=useRef(null)
+
+  /* Keep local strings in sync with external changes */
+  useEffect(function(){setWStr(String(props.szW))},[props.szW])
+  useEffect(function(){setHStr(String(props.szH))},[props.szH])
+
+  /* Dismiss popover on outside click */
+  useEffect(function(){
+    if(!popOpen)return
+    function h(e){
+      if(popAnchorRef.current&&popAnchorRef.current.contains(e.target))return
+      if(popRef.current&&popRef.current.contains(e.target))return
+      setPopOpen(false)
+    }
+    document.addEventListener("mousedown",h)
+    return function(){document.removeEventListener("mousedown",h)}
+  },[popOpen])
+
+  function applyDims(w,h){
+    if(!w||!h||isNaN(w)||isNaN(h))return
+    w=Math.max(64,Math.min(4096,Math.round(w)))
+    h=Math.max(64,Math.min(4096,Math.round(h)))
+    setWStr(String(w)); setHStr(String(h))
+    props.onResize(w,h)
+  }
+
+  function onWChange(raw){
+    setWStr(raw)
+    var w=parseInt(raw,10)
+    if(isNaN(w)||w<1)return
+    if(linkMode==="sq"){ setHStr(String(w)); props.onResize(w,w) }
+    else if(linkMode==="ar"){
+      var ratio=props.szH/Math.max(1,props.szW)
+      var h=Math.max(64,Math.min(4096,Math.round(w*ratio)))
+      setHStr(String(h)); props.onResize(w,h)
+    } else { props.onResize(w,parseInt(hStr,10)||props.szH) }
+  }
+
+  function onHChange(raw){
+    setHStr(raw)
+    var h=parseInt(raw,10)
+    if(isNaN(h)||h<1)return
+    if(linkMode==="sq"){ setWStr(String(h)); props.onResize(h,h) }
+    else if(linkMode==="ar"){
+      var ratio=props.szW/Math.max(1,props.szH)
+      var w=Math.max(64,Math.min(4096,Math.round(h*ratio)))
+      setWStr(String(w)); props.onResize(w,h)
+    } else { props.onResize(parseInt(wStr,10)||props.szW, h) }
+  }
+
+  function onWBlur(){
+    var w=parseInt(wStr,10)||props.szW
+    var h=linkMode==="sq"?w:linkMode==="ar"?Math.round(w*props.szH/Math.max(1,props.szW)):parseInt(hStr,10)||props.szH
+    applyDims(w,h)
+  }
+  function onHBlur(){
+    var h=parseInt(hStr,10)||props.szH
+    var w=linkMode==="sq"?h:linkMode==="ar"?Math.round(h*props.szW/Math.max(1,props.szH)):parseInt(wStr,10)||props.szW
+    applyDims(w,h)
+  }
+
+  function cycleLinkMode(){
+    setLinkMode(linkMode==="free"?"sq":linkMode==="sq"?"ar":"free")
+  }
+
+  function saveCustom(){
+    var w=parseInt(wStr,10)||props.szW, h=parseInt(hStr,10)||props.szH
+    if(!w||!h)return
+    /* don't add if already a preset */
+    var all=CANVAS_PRESETS.concat(customs)
+    if(all.some(function(s){return s.w===w&&s.h===h}))return
+    var next=customs.concat([{w:w,h:h}])
+    setCustoms(next); saveCustomSizes(next)
+  }
+
+  function deleteCustom(idx){
+    var next=customs.filter(function(_,i){return i!==idx})
+    setCustoms(next); saveCustomSizes(next)
+  }
+
+  var linkIcon = linkMode==="ar" ? "🔗" : linkMode==="sq" ? "⬛" : "🔓"
+  var linkTitle = linkMode==="ar" ? "Linked — aspect ratio" : linkMode==="sq" ? "Linked — square 1:1" : "Unlinked"
+
+  var inputStyle={width:44,fontSize:10,padding:"3px 4px",background:"var(--bg)",
+    border:"1px solid var(--bd)",borderRadius:4,color:"var(--tx)",textAlign:"center",
+    fontFamily:"'IBM Plex Mono',monospace"}
+
+  return (
+    <div style={{display:"inline-flex",alignItems:"center",gap:2,flexShrink:0}}>
+      <input type="number" value={wStr} min={64} max={4096}
+        style={inputStyle}
+        onChange={function(e){onWChange(e.target.value)}}
+        onBlur={onWBlur}
+        onKeyDown={function(e){if(e.key==="Enter")onWBlur()}}/>
+      <button title={linkTitle} onClick={cycleLinkMode}
+        style={{fontSize:12,padding:"0 2px",background:"transparent",border:"none",
+          cursor:"pointer",color:linkMode==="free"?"var(--mu)":"var(--ac)"}}>
+        {linkIcon}
+      </button>
+      <input type="number" value={hStr} min={64} max={4096}
+        style={inputStyle}
+        onChange={function(e){onHChange(e.target.value)}}
+        onBlur={onHBlur}
+        onKeyDown={function(e){if(e.key==="Enter")onHBlur()}}/>
+      {/* Save custom size */}
+      <button title="Save this canvas size" onClick={saveCustom}
+        style={{fontSize:11,padding:"0 4px",minHeight:26,background:"transparent",
+          border:"1px solid var(--bd)",borderRadius:4,color:"var(--mu)",cursor:"pointer",flexShrink:0}}>
+        +
+      </button>
+      {/* Preset/custom popover */}
+      <div ref={popAnchorRef} style={{position:"relative",display:"inline-flex"}}>
+        <button title="Canvas size presets" onClick={function(){setPopOpen(!popOpen)}}
+          style={{fontSize:10,padding:"0 6px",minHeight:26,background:"transparent",
+            border:"1px solid var(--bd)",borderRadius:4,color:"var(--di)",cursor:"pointer",flexShrink:0,
+            fontFamily:"'IBM Plex Mono',monospace"}}>
+          ▤
+        </button>
+        {popOpen&&createPortal(
+          <div ref={popRef} style={{
+            position:"fixed",zIndex:9100,background:"var(--pn)",
+            border:"1px solid var(--bd)",borderRadius:10,
+            boxShadow:"0 -8px 32px rgba(0,0,0,.7)",
+            padding:10,minWidth:180,
+            bottom:(function(){
+              if(!popAnchorRef.current)return 40
+              var r=popAnchorRef.current.getBoundingClientRect()
+              return window.innerHeight-r.top+4
+            })(),
+            left:(function(){
+              if(!popAnchorRef.current)return 0
+              return popAnchorRef.current.getBoundingClientRect().left
+            })()
+          }}>
+            <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",
+              letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",marginBottom:6}}>
+              Presets
+            </div>
+            {CANVAS_PRESETS.map(function(s){
+              var active=props.szW===s.w&&props.szH===s.h
+              return (
+                <div key={s.w+"x"+s.h}
+                  onClick={function(){applyDims(s.w,s.h);setPopOpen(false)}}
+                  style={{padding:"7px 10px",fontSize:11,cursor:"pointer",borderRadius:6,
+                    fontFamily:"'IBM Plex Mono',monospace",
+                    background:active?"var(--sl)":"transparent",
+                    color:active?"var(--ac)":"var(--tx)"}}>
+                  {s.w===s.h?s.w:s.w+"×"+s.h}
+                </div>
+              )
+            })}
+            {customs.length>0&&(
+              <div>
+                <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",
+                  letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
+                  margin:"8px 0 4px",borderTop:"1px solid var(--bd)",paddingTop:8}}>
+                  Custom
+                </div>
+                {customs.map(function(s,idx){
+                  var active=props.szW===s.w&&props.szH===s.h
+                  return (
+                    <div key={idx} style={{display:"flex",alignItems:"center",gap:4}}>
+                      <div onClick={function(){applyDims(s.w,s.h);setPopOpen(false)}}
+                        style={{flex:1,padding:"7px 10px",fontSize:11,cursor:"pointer",borderRadius:6,
+                          fontFamily:"'IBM Plex Mono',monospace",
+                          background:active?"var(--sl)":"transparent",
+                          color:active?"var(--ac)":"var(--tx)"}}>
+                        {s.w===s.h?s.w:s.w+"×"+s.h}
+                      </div>
+                      <button onClick={function(){deleteCustom(idx)}}
+                        style={{fontSize:11,padding:"0 5px",background:"transparent",
+                          border:"none",color:"var(--mu)",cursor:"pointer"}}>×</button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
+      </div>
+    </div>
+  )
+}
+
 function LivePreview(props) {
   var zSt=useState(1); var zoom=zSt[0], setZoom=zSt[1]
   var fSt=useState("png"); var fmt=fSt[0], setFmt=fSt[1]
@@ -8516,9 +8723,7 @@ function LivePreview(props) {
         <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",
           paddingRight:46,
           background:"var(--pn)",borderBottom:"1px solid var(--bd)",flexShrink:0,overflowX:"auto"}}>
-          <select value={String(props.sz)} onChange={function(e){props.onResize(parseInt(e.target.value))}} style={{width:58,fontSize:10,padding:"3px 4px",flexShrink:0}}>
-            {["256","400","512","768","1024"].map(function(s){return <option key={s} value={s}>{s}</option>})}
-          </select>
+          <CanvasSizePicker szW={props.szW||props.sz||400} szH={props.szH||props.sz||400} onResize={props.onResize}/>
           <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.max(.25,z-.25)})}} style={{fontSize:16,width:32,height:32}}>-</button>
           <span style={{fontSize:10,color:"var(--di)",minWidth:30,textAlign:"center",flexShrink:0}}>{Math.round(zoom*100)}%</span>
           <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.min(4,z+.25)})}} style={{fontSize:16,width:32,height:32}}>+</button>
@@ -8538,13 +8743,13 @@ function LivePreview(props) {
           </div>
         )}
         <div style={{transform:"scale("+zoom+")",transformOrigin:"center center",boxShadow:"0 12px 60px rgba(0,0,0,.85)",outline:"1px solid var(--bd)",lineHeight:0}}>
-          <canvas ref={props.cvRef} width={props.sz} height={props.sz} style={{display:"block",imageRendering:zoom>2?"pixelated":"auto"}}/>
+          <canvas ref={props.cvRef} width={props.szW||props.sz} height={props.szH||props.sz} style={{display:"block",imageRendering:zoom>2?"pixelated":"auto"}}/>
         </div>
       </div>
       {/* Bottom bar */}
       {barsVis&&(
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",background:"var(--pn)",borderTop:"1px solid var(--bd)",flexShrink:0}}>
-          <span style={{fontSize:9,color:"var(--mu)"}}>{props.sz}x{props.sz}px</span>
+          <span style={{fontSize:9,color:"var(--mu)"}}>{props.szW||props.sz}×{props.szH||props.sz}px</span>
           {props.active && <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>[{props.active.type}]</span>}
           <span style={{flex:1}}/>
           <span style={{fontSize:9,color:"var(--mu)",letterSpacing:".08em",fontFamily:"'IBM Plex Mono',monospace"}}>{(typeof __BUILD_HASH__!=="undefined"?__BUILD_HASH__:"dev")+" · Selena"}</span>
@@ -10389,7 +10594,7 @@ function UnifiedLayout(props) {
 
   var previewBlock = (
     <div style={{height:props.previewH+"vh",display:"flex",flexDirection:"column"}}>
-      <props.LivePreviewCmp cvRef={props.cvRef} active={props.active} sz={props.sz}
+      <props.LivePreviewCmp cvRef={props.cvRef} active={props.active} szW={props.szW} szH={props.szH}
         onResize={props.onResize} onExport={props.onExport}/>
     </div>
   )
@@ -10453,7 +10658,8 @@ function App() {
   var s9 = useState(true);        var flipped=s9[0], setFlipped=s9[1]  // default: preview on top
   var s10= useState(false);       var leftFS=s10[0], setLeftFS=s10[1]
   var s11= useState(false);       var rightFS=s11[0],setRightFS=s11[1]
-  var s12= useState(400);         var sz=s12[0],     setSz=s12[1]
+  var s12= useState(400);         var szW=s12[0],    setSzW=s12[1]
+  var s12b=useState(400);         var szH=s12b[0],   setSzH=s12b[1]
 
   // Settings state
   var DEFAULTS = {viewMode:"split",previewPinned:true,stickyHeaders:true,panelStyle:"inline",previewH:44,isVert:false,flipped:true}
@@ -10704,7 +10910,7 @@ function App() {
   // Immediate re-render on data changes
   useEffect(function(){
     if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask,dispSlot)
-  },[nodes,dispId,sz,dispMask,dispSlot])
+  },[nodes,dispId,szW,szH,dispMask,dispSlot])
   // Deferred re-render on layout changes — waits for browser reflow so
   // canvas has correct dimensions and cvRef is attached to the live canvas
   useEffect(function(){
@@ -11007,7 +11213,7 @@ function App() {
     rightFS ? {position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:200} : {}
   )
 
-  function handleResize(s){setSz(s);setTimeout(function(){var st=stRef.current;renderPipeline(cvRef.current,st.dispId,st.nodes,iC.current)},30)}
+  function handleResize(w,h){setSzW(w);setSzH(h);setTimeout(function(){var st=stRef.current;renderPipeline(cvRef.current,st.dispId,st.nodes,iC.current)},30)}
 
   var anyFS = leftFS || rightFS
 
@@ -11228,7 +11434,7 @@ function App() {
             sp={sp}
             cvRef={cvRef}
             active={active}
-            sz={sz}
+            szW={szW} szH={szH}
             previewH={previewH}
             setPreviewH={setPreviewH}
             onResize={handleResize}
@@ -11247,7 +11453,7 @@ function App() {
               : <HeaderBar showExpand={true}/>
             }
             {flipped&&isVert
-              ? <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport} fullscreen={rightFS} onFullscreen={function(){setRightFS(!rightFS)}}/>
+              ? <LivePreview cvRef={cvRef} active={active} szW={szW} szH={szH} onResize={handleResize} onExport={doExport} fullscreen={rightFS} onFullscreen={function(){setRightFS(!rightFS)}}/>
               : <ListPanel sp={sp} s1Col={s1Col} setS1Col={setS1Col}
                   s2Col={s2Col} setS2Col={setS2Col}
                   stickyHeaders={false} panelStyle={settings.panelStyle}
@@ -11267,7 +11473,7 @@ function App() {
                   s2Col={s2Col} setS2Col={setS2Col}
                   stickyHeaders={false} panelStyle={settings.panelStyle}
                   sheetOverlay={settings.panelStyle==="sheet"&&sheetNode?function(){setSheetNode(null);setSelId(null)}:null}/>
-              : <LivePreview cvRef={cvRef} active={active} sz={sz} onResize={handleResize} onExport={doExport} fullscreen={rightFS} onFullscreen={function(){setRightFS(!rightFS)}}/>
+              : <LivePreview cvRef={cvRef} active={active} szW={szW} szH={szH} onResize={handleResize} onExport={doExport} fullscreen={rightFS} onFullscreen={function(){setRightFS(!rightFS)}}/>
             }
           </div>
         </div>
