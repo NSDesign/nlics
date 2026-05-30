@@ -5099,7 +5099,7 @@ function NRef(props) {
       {/* ── Inline settings panel ── */}
       {hasCreate&&inlineNode&&(
         <div style={{
-          margin:"0 0 8px 80px",
+          margin:"0 0 8px 0",
           border:"1px solid rgba(37,37,80,.9)",borderRadius:8,
           background:"rgba(4,4,18,.97)",overflow:"hidden"
         }}>
