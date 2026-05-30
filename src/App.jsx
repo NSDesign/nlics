@@ -8498,22 +8498,154 @@ function saveCustomSizes(arr){
   try{localStorage.setItem(CANVAS_CUSTOM_KEY,JSON.stringify(arr))}catch(e){}
 }
 
-/* CanvasSizePicker — W×H inputs with link toggle + preset/custom popover */
+/* ── Add Canvas Dialog — modal for creating a new canvas size ── */
+function AddCanvasDialog(props) {
+  // props: allSizes (presets+custom), onAdd(w,h), onClose
+  var wSt=useState(String(props.startW||512)); var wStr=wSt[0],setWStr=wSt[1]
+  var hSt=useState(String(props.startH||512)); var hStr=hSt[0],setHStr=hSt[1]
+  var lmSt=useState("sq");   var linkMode=lmSt[0],setLinkMode=lmSt[1]
+
+  var w=parseInt(wStr,10)||512, h=parseInt(hStr,10)||512
+
+  function cycleLinkMode(){
+    setLinkMode(linkMode==="free"?"sq":linkMode==="sq"?"ar":"free")
+  }
+
+  function onWChange(raw){
+    setWStr(raw)
+    var nw=parseInt(raw,10); if(isNaN(nw)||nw<1) return
+    if(linkMode==="sq")setHStr(String(nw))
+    else if(linkMode==="ar"){var ratio=h/Math.max(1,w);setHStr(String(Math.max(64,Math.min(4096,Math.round(nw*ratio)))))}
+  }
+  function onHChange(raw){
+    setHStr(raw)
+    var nh=parseInt(raw,10); if(isNaN(nh)||nh<1) return
+    if(linkMode==="sq")setWStr(String(nh))
+    else if(linkMode==="ar"){var ratio=w/Math.max(1,h);setWStr(String(Math.max(64,Math.min(4096,Math.round(nh*ratio)))))}
+  }
+  function applyStartPoint(sz){
+    setWStr(String(sz.w)); setHStr(String(sz.h))
+  }
+  function commit(){
+    var fw=Math.max(64,Math.min(4096,parseInt(wStr,10)||512))
+    var fh=Math.max(64,Math.min(4096,parseInt(hStr,10)||512))
+    props.onAdd(fw,fh)
+  }
+
+  var linkIcon=linkMode==="ar"?"🔗":linkMode==="sq"?"⬛":"🔓"
+  var linkLabel=linkMode==="ar"?"Aspect ratio":linkMode==="sq"?"1:1 square":"Unlinked"
+
+  var inputSt={width:70,fontSize:13,padding:"6px 10px",
+    background:"var(--bg)",border:"1px solid var(--bd)",borderRadius:6,
+    color:"var(--tx)",textAlign:"center",fontFamily:"'IBM Plex Mono',monospace"}
+  var btnBase={fontSize:11,padding:"0 18px",minHeight:38,borderRadius:8,cursor:"pointer",
+    fontFamily:"'IBM Plex Mono',monospace"}
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,zIndex:9900,
+      display:"flex",alignItems:"center",justifyContent:"center",
+      background:"rgba(4,4,18,.7)"}}>
+      <div style={{background:"var(--pn)",border:"1px solid var(--bd)",borderRadius:14,
+        boxShadow:"0 24px 80px rgba(0,0,0,.9)",padding:20,minWidth:300,maxWidth:380,
+        width:"92vw"}}>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",marginBottom:16}}>
+          <span style={{flex:1,fontSize:13,color:"var(--di)",fontFamily:"'IBM Plex Mono',monospace",
+            fontWeight:"bold"}}>New Canvas Size</span>
+          <button onClick={props.onClose} style={{fontSize:16,background:"transparent",
+            border:"none",color:"var(--mu)",cursor:"pointer",padding:"0 4px"}}>×</button>
+        </div>
+
+        {/* Start from list */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",
+            letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",marginBottom:6}}>
+            Start from
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {props.allSizes.map(function(s,i){
+              var lbl=s.w===s.h?s.w:(s.w+"×"+s.h)
+              var active=parseInt(wStr,10)===s.w&&parseInt(hStr,10)===s.h
+              return (
+                <div key={i} onClick={function(){applyStartPoint(s)}}
+                  style={{padding:"5px 9px",fontSize:10,borderRadius:6,cursor:"pointer",
+                    fontFamily:"'IBM Plex Mono',monospace",
+                    background:active?"var(--ac)":"var(--el)",
+                    color:active?"var(--bg)":"var(--tx)",
+                    border:"1px solid "+(active?"var(--ac)":"var(--bd)")}}>
+                  {lbl}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* W × H inputs + link */}
+        <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center",marginBottom:10}}>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+            <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:".1em"}}>Width</span>
+            <input type="number" value={wStr} min={64} max={4096} style={inputSt}
+              onChange={function(e){onWChange(e.target.value)}}
+              onBlur={function(){setWStr(String(Math.max(64,Math.min(4096,parseInt(wStr,10)||512))))}}/>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,paddingTop:16}}>
+            <button onClick={cycleLinkMode} title={linkLabel}
+              style={{fontSize:16,padding:"2px 6px",background:"transparent",
+                border:"1px solid var(--bd)",borderRadius:6,cursor:"pointer",
+                color:linkMode==="free"?"var(--mu)":"var(--ac)"}}>
+              {linkIcon}
+            </button>
+            <span style={{fontSize:8,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>
+              {linkLabel}
+            </span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+            <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:".1em"}}>Height</span>
+            <input type="number" value={hStr} min={64} max={4096} style={inputSt}
+              onChange={function(e){onHChange(e.target.value)}}
+              onBlur={function(){setHStr(String(Math.max(64,Math.min(4096,parseInt(hStr,10)||512))))}}/>
+          </div>
+        </div>
+
+        {/* Preview label */}
+        <div style={{textAlign:"center",fontSize:10,color:"var(--mu)",
+          fontFamily:"'IBM Plex Mono',monospace",marginBottom:16}}>
+          {Math.max(64,Math.min(4096,parseInt(wStr,10)||512))} × {Math.max(64,Math.min(4096,parseInt(hStr,10)||512))} px
+        </div>
+
+        {/* Commit / Cancel */}
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={props.onClose}
+            style={Object.assign({},btnBase,{flex:1,background:"var(--el)",
+              border:"1px solid var(--bd)",color:"var(--mu)"})}>
+            Cancel
+          </button>
+          <button onClick={commit}
+            style={Object.assign({},btnBase,{flex:2,background:"var(--ac)",
+              border:"none",color:"var(--bg)",fontWeight:"bold"})}>
+            Add Canvas
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+/* CanvasSizePicker — compact W×H pair + manage/add panel */
 function CanvasSizePicker(props) {
   /* props: szW, szH, onResize(w,h) */
-  var wSt=useState(String(props.szW)); var wStr=wSt[0], setWStr=wSt[1]
-  var hSt=useState(String(props.szH)); var hStr=hSt[0], setHStr=hSt[1]
-  /* link mode: "free" | "ar" | "sq" */
-  var lmSt=useState("sq"); var linkMode=lmSt[0], setLinkMode=lmSt[1]
-  var customSt=useState(loadCustomSizes); var customs=customSt[0], setCustoms=customSt[1]
-  var popSt=useState(false); var popOpen=popSt[0], setPopOpen=popSt[1]
+  var wSt=useState(String(props.szW)); var wStr=wSt[0],setWStr=wSt[1]
+  var hSt=useState(String(props.szH)); var hStr=hSt[0],setHStr=hSt[1]
+  var lmSt=useState("sq"); var linkMode=lmSt[0],setLinkMode=lmSt[1]
+  var customSt=useState(loadCustomSizes); var customs=customSt[0],setCustoms=customSt[1]
+  var popSt=useState(false); var popOpen=popSt[0],setPopOpen=popSt[1]
+  var addSt=useState(false); var addOpen=addSt[0],setAddOpen=addSt[1]
   var popRef=useRef(null), popAnchorRef=useRef(null)
 
-  /* Keep local strings in sync with external changes */
   useEffect(function(){setWStr(String(props.szW))},[props.szW])
   useEffect(function(){setHStr(String(props.szH))},[props.szH])
 
-  /* Dismiss popover on outside click */
   useEffect(function(){
     if(!popOpen)return
     function h(e){
@@ -8526,7 +8658,6 @@ function CanvasSizePicker(props) {
   },[popOpen])
 
   function applyDims(w,h){
-    if(!w||!h||isNaN(w)||isNaN(h))return
     w=Math.max(64,Math.min(4096,Math.round(w)))
     h=Math.max(64,Math.min(4096,Math.round(h)))
     setWStr(String(w)); setHStr(String(h))
@@ -8535,94 +8666,69 @@ function CanvasSizePicker(props) {
 
   function onWChange(raw){
     setWStr(raw)
-    var w=parseInt(raw,10)
-    if(isNaN(w)||w<1)return
-    if(linkMode==="sq"){ setHStr(String(w)); props.onResize(w,w) }
-    else if(linkMode==="ar"){
-      var ratio=props.szH/Math.max(1,props.szW)
-      var h=Math.max(64,Math.min(4096,Math.round(w*ratio)))
-      setHStr(String(h)); props.onResize(w,h)
-    } else { props.onResize(w,parseInt(hStr,10)||props.szH) }
+    var nw=parseInt(raw,10); if(isNaN(nw)||nw<1)return
+    if(linkMode==="sq"){setHStr(String(nw));props.onResize(nw,nw)}
+    else if(linkMode==="ar"){var ratio=props.szH/Math.max(1,props.szW);var nh=Math.max(64,Math.min(4096,Math.round(nw*ratio)));setHStr(String(nh));props.onResize(nw,nh)}
+    else props.onResize(nw,parseInt(hStr,10)||props.szH)
   }
-
   function onHChange(raw){
     setHStr(raw)
-    var h=parseInt(raw,10)
-    if(isNaN(h)||h<1)return
-    if(linkMode==="sq"){ setWStr(String(h)); props.onResize(h,h) }
-    else if(linkMode==="ar"){
-      var ratio=props.szW/Math.max(1,props.szH)
-      var w=Math.max(64,Math.min(4096,Math.round(h*ratio)))
-      setWStr(String(w)); props.onResize(w,h)
-    } else { props.onResize(parseInt(wStr,10)||props.szW, h) }
+    var nh=parseInt(raw,10); if(isNaN(nh)||nh<1)return
+    if(linkMode==="sq"){setWStr(String(nh));props.onResize(nh,nh)}
+    else if(linkMode==="ar"){var ratio=props.szW/Math.max(1,props.szH);var nw=Math.max(64,Math.min(4096,Math.round(nh*ratio)));setWStr(String(nw));props.onResize(nw,nh)}
+    else props.onResize(parseInt(wStr,10)||props.szW,nh)
   }
-
-  function onWBlur(){
-    var w=parseInt(wStr,10)||props.szW
-    var h=linkMode==="sq"?w:linkMode==="ar"?Math.round(w*props.szH/Math.max(1,props.szW)):parseInt(hStr,10)||props.szH
-    applyDims(w,h)
-  }
-  function onHBlur(){
-    var h=parseInt(hStr,10)||props.szH
-    var w=linkMode==="sq"?h:linkMode==="ar"?Math.round(h*props.szW/Math.max(1,props.szH)):parseInt(wStr,10)||props.szW
-    applyDims(w,h)
-  }
-
-  function cycleLinkMode(){
-    setLinkMode(linkMode==="free"?"sq":linkMode==="sq"?"ar":"free")
-  }
-
-  function saveCustom(){
-    var w=parseInt(wStr,10)||props.szW, h=parseInt(hStr,10)||props.szH
-    if(!w||!h)return
-    /* don't add if already a preset */
-    var all=CANVAS_PRESETS.concat(customs)
-    if(all.some(function(s){return s.w===w&&s.h===h}))return
-    var next=customs.concat([{w:w,h:h}])
-    setCustoms(next); saveCustomSizes(next)
-  }
+  function onWBlur(){var fw=Math.max(64,Math.min(4096,parseInt(wStr,10)||props.szW));var fh=linkMode==="sq"?fw:linkMode==="ar"?Math.max(64,Math.min(4096,Math.round(fw*props.szH/Math.max(1,props.szW)))):Math.max(64,Math.min(4096,parseInt(hStr,10)||props.szH));applyDims(fw,fh)}
+  function onHBlur(){var fh=Math.max(64,Math.min(4096,parseInt(hStr,10)||props.szH));var fw=linkMode==="sq"?fh:linkMode==="ar"?Math.max(64,Math.min(4096,Math.round(fh*props.szW/Math.max(1,props.szH)))):Math.max(64,Math.min(4096,parseInt(wStr,10)||props.szW));applyDims(fw,fh)}
+  function cycleLinkMode(){setLinkMode(linkMode==="free"?"sq":linkMode==="sq"?"ar":"free")}
 
   function deleteCustom(idx){
     var next=customs.filter(function(_,i){return i!==idx})
     setCustoms(next); saveCustomSizes(next)
   }
 
-  var linkIcon = linkMode==="ar" ? "🔗" : linkMode==="sq" ? "⬛" : "🔓"
-  var linkTitle = linkMode==="ar" ? "Linked — aspect ratio" : linkMode==="sq" ? "Linked — square 1:1" : "Unlinked"
+  function handleAdd(w,h){
+    // Apply immediately
+    applyDims(w,h)
+    // Add to custom list if not already present
+    var all=CANVAS_PRESETS.concat(customs)
+    if(!all.some(function(s){return s.w===w&&s.h===h})){
+      var next=customs.concat([{w:w,h:h}])
+      setCustoms(next); saveCustomSizes(next)
+    }
+    setAddOpen(false)
+  }
 
-  var inputStyle={width:44,fontSize:10,padding:"3px 4px",background:"var(--bg)",
+  var linkIcon=linkMode==="ar"?"🔗":linkMode==="sq"?"⬛":"🔓"
+  var linkTitle=linkMode==="ar"?"Linked – aspect ratio":linkMode==="sq"?"Linked – 1:1 square":"Unlinked"
+  var inputSt={width:44,fontSize:10,padding:"3px 4px",background:"var(--bg)",
     border:"1px solid var(--bd)",borderRadius:4,color:"var(--tx)",textAlign:"center",
     fontFamily:"'IBM Plex Mono',monospace"}
+  var allSizes=CANVAS_PRESETS.concat(customs)
 
   return (
     <div style={{display:"inline-flex",alignItems:"center",gap:2,flexShrink:0}}>
-      <input type="number" value={wStr} min={64} max={4096}
-        style={inputStyle}
+      {/* Inline W/H inputs */}
+      <input type="number" value={wStr} min={64} max={4096} style={inputSt}
         onChange={function(e){onWChange(e.target.value)}}
         onBlur={onWBlur}
         onKeyDown={function(e){if(e.key==="Enter")onWBlur()}}/>
       <button title={linkTitle} onClick={cycleLinkMode}
-        style={{fontSize:12,padding:"0 2px",background:"transparent",border:"none",
+        style={{fontSize:12,padding:"0 3px",background:"transparent",border:"none",
           cursor:"pointer",color:linkMode==="free"?"var(--mu)":"var(--ac)"}}>
         {linkIcon}
       </button>
-      <input type="number" value={hStr} min={64} max={4096}
-        style={inputStyle}
+      <input type="number" value={hStr} min={64} max={4096} style={inputSt}
         onChange={function(e){onHChange(e.target.value)}}
         onBlur={onHBlur}
         onKeyDown={function(e){if(e.key==="Enter")onHBlur()}}/>
-      {/* Save custom size */}
-      <button title="Save this canvas size" onClick={saveCustom}
-        style={{fontSize:11,padding:"0 4px",minHeight:26,background:"transparent",
-          border:"1px solid var(--bd)",borderRadius:4,color:"var(--mu)",cursor:"pointer",flexShrink:0}}>
-        +
-      </button>
-      {/* Preset/custom popover */}
+
+      {/* Manage sizes popover */}
       <div ref={popAnchorRef} style={{position:"relative",display:"inline-flex"}}>
-        <button title="Canvas size presets" onClick={function(){setPopOpen(!popOpen)}}
-          style={{fontSize:10,padding:"0 6px",minHeight:26,background:"transparent",
-            border:"1px solid var(--bd)",borderRadius:4,color:"var(--di)",cursor:"pointer",flexShrink:0,
-            fontFamily:"'IBM Plex Mono',monospace"}}>
+        <button title="Manage canvas sizes" onClick={function(){setPopOpen(!popOpen)}}
+          style={{fontSize:11,padding:"0 7px",minHeight:26,background:"transparent",
+            border:"1px solid var(--bd)",borderRadius:4,color:"var(--di)",
+            cursor:"pointer",flexShrink:0,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:".05em"}}>
           ▤
         </button>
         {popOpen&&createPortal(
@@ -8630,55 +8736,67 @@ function CanvasSizePicker(props) {
             position:"fixed",zIndex:9100,background:"var(--pn)",
             border:"1px solid var(--bd)",borderRadius:10,
             boxShadow:"0 -8px 32px rgba(0,0,0,.7)",
-            padding:10,minWidth:180,
-            bottom:(function(){
-              if(!popAnchorRef.current)return 40
-              var r=popAnchorRef.current.getBoundingClientRect()
-              return window.innerHeight-r.top+4
-            })(),
-            left:(function(){
-              if(!popAnchorRef.current)return 0
-              return popAnchorRef.current.getBoundingClientRect().left
-            })()
+            padding:"10px 0",minWidth:190,
+            bottom:(function(){if(!popAnchorRef.current)return 40;var r=popAnchorRef.current.getBoundingClientRect();return window.innerHeight-r.top+6})(),
+            left:(function(){if(!popAnchorRef.current)return 0;return popAnchorRef.current.getBoundingClientRect().left})()
           }}>
-            <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",
-              letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",marginBottom:6}}>
-              Presets
+            {/* Header + Add New button */}
+            <div style={{display:"flex",alignItems:"center",padding:"0 12px 8px",
+              borderBottom:"1px solid var(--bd)",marginBottom:4}}>
+              <span style={{flex:1,fontSize:9,color:"var(--mu)",textTransform:"uppercase",
+                letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace"}}>Canvas Sizes</span>
+              <button onClick={function(){setPopOpen(false);setAddOpen(true)}}
+                style={{fontSize:10,padding:"3px 10px",borderRadius:6,cursor:"pointer",
+                  background:"var(--ac)",border:"none",color:"var(--bg)",
+                  fontFamily:"'IBM Plex Mono',monospace",fontWeight:"bold"}}>
+                + New
+              </button>
             </div>
-            {CANVAS_PRESETS.map(function(s){
-              var active=props.szW===s.w&&props.szH===s.h
-              return (
-                <div key={s.w+"x"+s.h}
-                  onClick={function(){applyDims(s.w,s.h);setPopOpen(false)}}
-                  style={{padding:"7px 10px",fontSize:11,cursor:"pointer",borderRadius:6,
-                    fontFamily:"'IBM Plex Mono',monospace",
-                    background:active?"var(--sl)":"transparent",
-                    color:active?"var(--ac)":"var(--tx)"}}>
-                  {s.w===s.h?s.w:s.w+"×"+s.h}
-                </div>
-              )
-            })}
+
+            {/* Presets */}
+            <div style={{padding:"2px 0"}}>
+              {CANVAS_PRESETS.map(function(s){
+                var active=props.szW===s.w&&props.szH===s.h
+                var lbl=s.w===s.h?s.w:(s.w+"×"+s.h)
+                return (
+                  <div key={s.w+"x"+s.h}
+                    onClick={function(){applyDims(s.w,s.h);setPopOpen(false)}}
+                    style={{display:"flex",alignItems:"center",
+                      padding:"8px 14px",fontSize:11,cursor:"pointer",
+                      background:active?"var(--sl)":"transparent",
+                      color:active?"var(--ac)":"var(--tx)",
+                      fontFamily:"'IBM Plex Mono',monospace"}}>
+                    <span style={{flex:1}}>{lbl}</span>
+                    {active&&<span style={{fontSize:9,color:"var(--ac)"}}>●</span>}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Custom sizes */}
             {customs.length>0&&(
-              <div>
-                <div style={{fontSize:9,color:"var(--mu)",textTransform:"uppercase",
-                  letterSpacing:".1em",fontFamily:"'IBM Plex Mono',monospace",
-                  margin:"8px 0 4px",borderTop:"1px solid var(--bd)",paddingTop:8}}>
-                  Custom
-                </div>
+              <div style={{borderTop:"1px solid var(--bd)",paddingTop:4,marginTop:4}}>
+                <div style={{padding:"3px 14px 4px",fontSize:9,color:"var(--mu)",
+                  textTransform:"uppercase",letterSpacing:".1em",
+                  fontFamily:"'IBM Plex Mono',monospace"}}>Custom</div>
                 {customs.map(function(s,idx){
                   var active=props.szW===s.w&&props.szH===s.h
+                  var lbl=s.w===s.h?s.w:(s.w+"×"+s.h)
                   return (
-                    <div key={idx} style={{display:"flex",alignItems:"center",gap:4}}>
-                      <div onClick={function(){applyDims(s.w,s.h);setPopOpen(false)}}
-                        style={{flex:1,padding:"7px 10px",fontSize:11,cursor:"pointer",borderRadius:6,
-                          fontFamily:"'IBM Plex Mono',monospace",
-                          background:active?"var(--sl)":"transparent",
-                          color:active?"var(--ac)":"var(--tx)"}}>
-                        {s.w===s.h?s.w:s.w+"×"+s.h}
-                      </div>
-                      <button onClick={function(){deleteCustom(idx)}}
-                        style={{fontSize:11,padding:"0 5px",background:"transparent",
-                          border:"none",color:"var(--mu)",cursor:"pointer"}}>×</button>
+                    <div key={idx} style={{display:"flex",alignItems:"center",
+                      padding:"0 8px 0 14px",
+                      background:active?"var(--sl)":"transparent"}}>
+                      <span onClick={function(){applyDims(s.w,s.h);setPopOpen(false)}}
+                        style={{flex:1,padding:"8px 0",fontSize:11,cursor:"pointer",
+                          color:active?"var(--ac)":"var(--tx)",
+                          fontFamily:"'IBM Plex Mono',monospace"}}>
+                        {lbl}
+                      </span>
+                      {active&&<span style={{fontSize:9,color:"var(--ac)",marginRight:4}}>●</span>}
+                      <button onClick={function(e){e.stopPropagation();deleteCustom(idx)}}
+                        style={{fontSize:13,padding:"0 4px",background:"transparent",
+                          border:"none",color:"var(--mu)",cursor:"pointer",
+                          lineHeight:1}}>×</button>
                     </div>
                   )
                 })}
@@ -8688,9 +8806,19 @@ function CanvasSizePicker(props) {
           document.body
         )}
       </div>
+
+      {/* Add Canvas Dialog */}
+      {addOpen&&(
+        <AddCanvasDialog
+          allSizes={allSizes}
+          startW={props.szW} startH={props.szH}
+          onAdd={handleAdd}
+          onClose={function(){setAddOpen(false)}}/>
+      )}
     </div>
   )
 }
+
 
 function LivePreview(props) {
   var zSt=useState(1); var zoom=zSt[0], setZoom=zSt[1]
