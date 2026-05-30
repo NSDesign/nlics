@@ -8958,8 +8958,8 @@ function LivePreview(props) {
             <div style={{fontSize:12,color:"var(--mu)"}}>Tap ◎ on any item to preview</div>
           </div>
         )}
-        <div style={{transform:"scale("+effectiveZoom+")",transformOrigin:"center center",boxShadow:"0 12px 60px rgba(0,0,0,.85)",outline:"1px solid var(--bd)",lineHeight:0}}>
-          <canvas ref={props.cvRef} width={szW} height={szH} style={{display:"block",imageRendering:effectiveZoom>2?"pixelated":"auto"}}/>
+        <div style={{boxShadow:"0 12px 60px rgba(0,0,0,.85)",outline:"1px solid var(--bd)",lineHeight:0,flexShrink:0}}>
+          <canvas ref={props.cvRef} width={szW} height={szH} style={{display:"block",width:Math.round(szW*effectiveZoom),height:Math.round(szH*effectiveZoom),imageRendering:effectiveZoom>2?"pixelated":"auto"}}/>
         </div>
       </div>
       {/* Bottom bar */}
