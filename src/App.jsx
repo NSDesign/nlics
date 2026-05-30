@@ -4625,6 +4625,17 @@ function drawThumbLabel(ctx, text, sz) {
   ctx.textAlign="center"; ctx.fillText(text, sz/2, sz/2+3)
 }
 // Single thumb item in the picker
+function tapHandlers(onClick){
+  // Distinguishes a tap from a scroll gesture on touch devices.
+  // Only fires onClick if the finger did not move beyond threshold (i.e. a tap, not a scroll).
+  var st={x:0,y:0,moved:false}
+  return {
+    onClick:onClick,
+    onTouchStart:function(e){var t=e.touches[0];st.x=t.clientX;st.y=t.clientY;st.moved=false},
+    onTouchMove:function(e){var t=e.touches[0];if(Math.abs(t.clientX-st.x)>8||Math.abs(t.clientY-st.y)>8)st.moved=true},
+    onTouchEnd:function(e){if(!st.moved){e.preventDefault();onClick()}}
+  }
+}
 function ThumbItem(props) {
   var cvRef=useRef(null)
   useEffect(function(){
@@ -4636,7 +4647,7 @@ function ThumbItem(props) {
     return function(){ clearTimeout(t) }
   },[props.nodeId, props.index, props.asMask, props.greySource])
   return (
-    <div onClick={props.onClick}
+    <div {...tapHandlers(props.onClick)}
       style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
         padding:"6px 4px",borderRadius:6,
         background:props.active?"var(--sl)":"none",
@@ -4904,7 +4915,7 @@ function NRef(props) {
           </button>
         </div>
       )}
-      <div onClick={function(){pick(null)}}
+      <div {...tapHandlers(function(){pick(null)})}
         style={{padding:"6px 10px",fontSize:11,color:"var(--mu)",cursor:"pointer",
           borderRadius:5,marginBottom:6,border:"1px solid "+(props.v==null?"var(--bd)":"transparent"),
           background:props.v==null?"var(--sl)":"none"}}>— none —</div>
@@ -4920,7 +4931,7 @@ function NRef(props) {
                 var synId="__sibling__:"+(props.ownerNodeId||"?")+":"+sibEfx.id+":"+sibMk.id
                 var lbl=(sibEfx.name||sibEfx.type)+" › "+(sibMk.name||sibMk.channel||"mask")
                 return (
-                  <div key={synId} onClick={function(){pick(synId)}}
+                  <div key={synId} {...tapHandlers(function(){pick(synId)})}
                     style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
                       padding:"6px 4px",borderRadius:6,
                       background:props.v===synId?"var(--sl)":"none",
@@ -4987,7 +4998,7 @@ function NRef(props) {
                 var lbl=om.nodeName+(om.slotLabel?" · "+om.slotLabel:"")+" › "+om.effectLabel+" › "+om.maskLabel
                 var isActive=props.v===om.synId
                 return (
-                  <div key={om.synId} onClick={function(){pick(om.synId)}}
+                  <div key={om.synId} {...tapHandlers(function(){pick(om.synId)})}
                     style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",
                       padding:"6px 4px",borderRadius:6,
                       background:isActive?"var(--sl)":"none",
@@ -5272,11 +5283,11 @@ function ShapeP(props) {
       {/* Jitter available in both modes for all shapes */}
       {(s==="ellipse"||s==="ring"||s==="rectangle"||s==="rounded-rect")&&(
         <div>
-          <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01}
-            fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
-          {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1}
+          {ex("jitter",<Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01}
+            fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>)}
+          {(p.jitter||0)>0&&ex("jitterSeed",<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1}
             fmt={function(v){return Math.round(v)}}
-            fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
+            fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>)}
         </div>
       )}
       {/* ── Geometry-specific params ── */}
@@ -5312,7 +5323,7 @@ function ShapeP(props) {
       </div>)}
       {s==="phyllotaxis"&&(<div>
         {ex("pointCount",<Sl l="points" v={p.pointCount||64} mn={4} mx={1024} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>)}
-        <Sl l="divergence" v={p.divergenceAngle==null?137.508:p.divergenceAngle} mn={90} mx={180} st={.001} fmt={function(v){return v.toFixed(3)+"°"}} fn={function(v){up(Object.assign({},p,{divergenceAngle:v}))}}/>
+        {ex("divergenceAngle",<Sl l="divergence" v={p.divergenceAngle==null?137.508:p.divergenceAngle} mn={90} mx={180} st={.001} fmt={function(v){return v.toFixed(3)+"°"}} fn={function(v){up(Object.assign({},p,{divergenceAngle:v}))}}/>)}
         {ex("scale",<Sl l="spread" v={p.scale||.45} mn={.05} mx={.5} st={.005} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
         {ex("cx",<Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>)}
         {ex("cy",<Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>)}
@@ -5321,7 +5332,7 @@ function ShapeP(props) {
       </div>)}
       {s==="scatter"&&(<div>
         {ex("pointCount",<Sl l="points" v={p.pointCount||32} mn={2} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>)}
-        <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
+        {ex("seed",<Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>)}
         {ex("x0",<Sl l="x min" v={p.x0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x0:v}))}}/>)}
         {ex("x1",<Sl l="x max" v={p.x1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x1:v}))}}/>)}
         {ex("y0",<Sl l="y min" v={p.y0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y0:v}))}}/>)}
