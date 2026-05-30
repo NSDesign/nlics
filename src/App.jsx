@@ -5231,43 +5231,43 @@ function ShapeP(props) {
       {!isPointGeo&&ex('sz',    <Sl l="size" v={p.sz||.6}  mn={.05} mx={1.8} st={.01} fn={function(v){up(Object.assign({},p,{sz:v}))}}/>)}
       {(s==="ellipse") && (
         <div>
-          <Sl l="x radius" v={p.rx==null?1:p.rx} mn={.1} mx={3} st={.01} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>
-          <Sl l="y radius" v={p.ry==null?1:p.ry} mn={.1} mx={3} st={.01} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>
+          {ex("rx",<Sl l="x radius" v={p.rx==null?1:p.rx} mn={.1} mx={3} st={.01} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>)}
+          {ex("ry",<Sl l="y radius" v={p.ry==null?1:p.ry} mn={.1} mx={3} st={.01} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>)}
         </div>
       )}
       {(s==="rectangle") && (
         <div>
-          <Sl l="size x" v={p.rx==null?1:p.rx} mn={0.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>
-          <Sl l="size y" v={p.ry==null?1:p.ry} mn={0.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>
+          {ex("rx",<Sl l="size x" v={p.rx==null?1:p.rx} mn={0.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{rx:v}))}}/>)}
+          {ex("ry",<Sl l="size y" v={p.ry==null?1:p.ry} mn={0.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{ry:v}))}}/>)}
         </div>
       )}
       {!isPointGeo&&ex("rot",<Sl l="rotation" v={p.rot||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{rot:v}))}}/>)}
       {s==="star" && (
         <div>
-          <Sl l="points" v={p.pts} mn={3} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pts:v}))}}/>
-          <Sl l="inner r" v={p.innerR} mn={.05} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{innerR:v}))}}/>
-          <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
-          {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
+          {ex("pts",<Sl l="points" v={p.pts} mn={3} mx={16} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pts:v}))}}/>)}
+          {ex("innerR",<Sl l="inner r" v={p.innerR} mn={.05} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{innerR:v}))}}/>)}
+          {ex("jitter",<Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>)}
+          {(p.jitter||0)>0&&ex("jitterSeed",<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>)}
         </div>
       )}
-      {s==="ring" && <Sl l="inner r" v={p.ringR} mn={.1} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{ringR:v}))}}/>}
+      {s==="ring" && ex("ringR",<Sl l="inner r" v={p.ringR} mn={.1} mx={.95} st={.01} fn={function(v){up(Object.assign({},p,{ringR:v}))}}/>)}
       {s==="rounded-rect" && (
-        <Sl l="corner r" v={p.cornerR==null?.2:p.cornerR} mn={0} mx={1} st={.01}
+        ex("cornerR",<Sl l="corner r" v={p.cornerR==null?.2:p.cornerR} mn={0} mx={1} st={.01}
           fmt={function(v){return Math.round(v*100)+"%"}}
-          fn={function(v){up(Object.assign({},p,{cornerR:v}))}}/>
+          fn={function(v){up(Object.assign({},p,{cornerR:v}))}}/>)
       )}
       {s==="polygon" && (
         <div>
-          <Sl l="sides" v={p.sides} mn={3} mx={14} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{sides:v}))}}/>
-          <Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>
-          {(p.jitter||0)>0&&<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>}
+          {ex("sides",<Sl l="sides" v={p.sides} mn={3} mx={14} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{sides:v}))}}/>)}
+          {ex("jitter",<Sl l="jitter" v={p.jitter||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{jitter:v}))}}/>)}
+          {(p.jitter||0)>0&&ex("jitterSeed",<Sl l="j.seed" v={p.jitterSeed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{jitterSeed:v}))}}/>)}
         </div>
       )}
 
       {(p.renderMode==="faceted")&&(
-        <Sl l="segments" v={p.segments||32} mn={3} mx={128} st={1}
+        ex("segments",<Sl l="segments" v={p.segments||32} mn={3} mx={128} st={1}
           fmt={function(v){return Math.round(v)}}
-          fn={function(v){up(Object.assign({},p,{segments:v}))}}/>
+          fn={function(v){up(Object.assign({},p,{segments:v}))}}/>)
       )}
       {/* Jitter available in both modes for all shapes */}
       {(s==="ellipse"||s==="ring"||s==="rectangle"||s==="rounded-rect")&&(
@@ -5281,75 +5281,75 @@ function ShapeP(props) {
       )}
       {/* ── Geometry-specific params ── */}
       {s==="grid"&&(<div>
-        <Sl l="columns" v={p.cols||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>
-        <Sl l="rows" v={p.rows||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>
-        <Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>
+        {ex("cols",<Sl l="columns" v={p.cols||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>)}
+        {ex("rows",<Sl l="rows" v={p.rows||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>)}
+        {ex("stagger",<Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>)}
         {(p.stagger||0)>0&&<Se l="axis" v={p.staggerAxis||"row"} opts={["row","col"]} fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>}
-        <Sl l="offset X" v={p.offX||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
-        <Sl l="offset Y" v={p.offY||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
-        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        {ex("offX",<Sl l="offset X" v={p.offX||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>)}
+        {ex("offY",<Sl l="offset Y" v={p.offY||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>)}
+        {ex("scale",<Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
         <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
       </div>)}
       {s==="spiral"&&(<div>
         <Sl l="points" v={p.pointCount||32} mn={4} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
-        <Sl l="turns" v={p.turns||3} mn={.25} mx={20} st={.25} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{turns:v}))}}/>
-        <Sl l="start r" v={p.startRadius||0} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>
-        <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
-        <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
-        <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
-        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        {ex("turns",<Sl l="turns" v={p.turns||3} mn={.25} mx={20} st={.25} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{turns:v}))}}/>)}
+        {ex("startRadius",<Sl l="start r" v={p.startRadius||0} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>)}
+        {ex("endRadius",<Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>)}
+        {ex("cx",<Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>)}
+        {ex("cy",<Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>)}
+        {ex("scale",<Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
         <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
       </div>)}
       {s==="polar-grid"&&(<div>
-        <Sl l="rings" v={p.rings||4} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rings:v}))}}/>
-        <Sl l="per ring" v={p.pointsPerRing||8} mn={2} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointsPerRing:v}))}}/>
-        <Sl l="start r" v={p.startRadius||.05} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>
-        <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
-        <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
-        <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
-        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        {ex("rings",<Sl l="rings" v={p.rings||4} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rings:v}))}}/>)}
+        {ex("pointsPerRing",<Sl l="per ring" v={p.pointsPerRing||8} mn={2} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointsPerRing:v}))}}/>)}
+        {ex("startRadius",<Sl l="start r" v={p.startRadius||.05} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>)}
+        {ex("endRadius",<Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>)}
+        {ex("cx",<Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>)}
+        {ex("cy",<Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>)}
+        {ex("scale",<Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
         <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
       </div>)}
       {s==="phyllotaxis"&&(<div>
-        <Sl l="points" v={p.pointCount||64} mn={4} mx={1024} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+        {ex("pointCount",<Sl l="points" v={p.pointCount||64} mn={4} mx={1024} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>)}
         <Sl l="divergence" v={p.divergenceAngle==null?137.508:p.divergenceAngle} mn={90} mx={180} st={.001} fmt={function(v){return v.toFixed(3)+"°"}} fn={function(v){up(Object.assign({},p,{divergenceAngle:v}))}}/>
-        <Sl l="spread" v={p.scale||.45} mn={.05} mx={.5} st={.005} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
-        <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
-        <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
-        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        {ex("scale",<Sl l="spread" v={p.scale||.45} mn={.05} mx={.5} st={.005} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
+        {ex("cx",<Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>)}
+        {ex("cy",<Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>)}
+        {ex("scale",<Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
         <PR l="connected">{["on","off"].map(function(opt){var a=(p.connected===false?"off":"on")===opt;return <button key={opt} className={a?"ac":"ghost"} onClick={function(){up(Object.assign({},p,{connected:opt==="on"}))}} style={{flex:1,fontSize:11,minHeight:32}}>{opt}</button>})}</PR>
       </div>)}
       {s==="scatter"&&(<div>
-        <Sl l="points" v={p.pointCount||32} mn={2} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+        {ex("pointCount",<Sl l="points" v={p.pointCount||32} mn={2} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>)}
         <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
-        <Sl l="x min" v={p.x0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x0:v}))}}/>
-        <Sl l="x max" v={p.x1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x1:v}))}}/>
-        <Sl l="y min" v={p.y0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y0:v}))}}/>
-        <Sl l="y max" v={p.y1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y1:v}))}}/>
-        <Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
+        {ex("x0",<Sl l="x min" v={p.x0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x0:v}))}}/>)}
+        {ex("x1",<Sl l="x max" v={p.x1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x1:v}))}}/>)}
+        {ex("y0",<Sl l="y min" v={p.y0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y0:v}))}}/>)}
+        {ex("y1",<Sl l="y max" v={p.y1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y1:v}))}}/>)}
+        {ex("scale",<Sl l="scale" v={p.scale==null?1:p.scale} mn={.1} mx={3} st={.01} fmt={function(v){return v.toFixed(2)+"×"}} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>)}
       </div>)}
       {isPointGeo&&<div>
         <Se l="style" v={p.pointStyle||"dots"} opts={["dots","hidden"]}
           fn={function(v){up(Object.assign({},p,{pointStyle:v}))}}/>
         {(p.pointStyle||"dots")==="dots"&&<div>
-          <Sl l="dot size" v={p.dotSize||4} mn={1} mx={20} st={.5}
-            fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up(Object.assign({},p,{dotSize:v}))}}/>
+          {ex("dotSize",<Sl l="dot size" v={p.dotSize||4} mn={1} mx={20} st={.5}
+            fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up(Object.assign({},p,{dotSize:v}))}}/>)}
           <Co l="colour" v={p.color||"#ffffff"} fn={function(v){up(Object.assign({},p,{color:v}))}}/>
-          <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
-            fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
+          {ex("opacity",<Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
+            fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>)}
         </div>}
       </div>}
       {!isPointGeo&&<Co l="fill" v={p.fill} fn={function(v){up(Object.assign({},p,{fill:v}))}}/>}
-      {!isPointGeo&&<Sl l="fill op" v={p.fillOpacity==null?1:p.fillOpacity} mn={0} mx={1} st={.01}
+      {!isPointGeo&&ex("fillOpacity",<Sl l="fill op" v={p.fillOpacity==null?1:p.fillOpacity} mn={0} mx={1} st={.01}
         fmt={function(v){return Math.round(v*100)+"%"}}
-        fn={function(v){up(Object.assign({},p,{fillOpacity:v}))}}/>}
+        fn={function(v){up(Object.assign({},p,{fillOpacity:v}))}}/>)}
       {!isPointGeo&&ex("strokeW",<Sl l="stroke w" v={p.strokeW} mn={0} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{strokeW:v}))}}/>)}
       {!isPointGeo&&p.strokeW>0 && (
         <div>
           <Co l="stroke" v={p.stroke} fn={function(v){up(Object.assign({},p,{stroke:v}))}}/>
-          <Sl l="stroke op" v={p.strokeOpacity==null?1:p.strokeOpacity} mn={0} mx={1} st={.01}
+          {ex("strokeOpacity",<Sl l="stroke op" v={p.strokeOpacity==null?1:p.strokeOpacity} mn={0} mx={1} st={.01}
             fmt={function(v){return Math.round(v*100)+"%"}}
-            fn={function(v){up(Object.assign({},p,{strokeOpacity:v}))}}/>
+            fn={function(v){up(Object.assign({},p,{strokeOpacity:v}))}}/>)}
         </div>
       )}
       {!isPointGeo&&ex("opacity",<Sl l="opacity" v={p.opacity==null?(p.alpha==null?1:p.alpha):p.opacity} mn={0} mx={1} st={.01}
@@ -5497,8 +5497,8 @@ function NoiseP(props) {
       {hasOct&&ex('oct',<Sl l="octaves" v={p.oct||4} mn={1} mx={8} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{oct:v}))}}/>)}
       {hasLacGain&&(
         <div>
-          <Sl l="lacunarity" v={p.lac||2} mn={1} mx={4} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{lac:v}))}}/>
-          <Sl l="gain" v={p.gain||.5} mn={.1} mx={.9} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gain:v}))}}/>
+          {ex("lac",<Sl l="lacunarity" v={p.lac||2} mn={1} mx={4} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{lac:v}))}}/>)}
+          {ex("gain",<Sl l="gain" v={p.gain||.5} mn={.1} mx={.9} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{gain:v}))}}/>)}
         </div>
       )}
       {hasAbs&&(
@@ -5512,23 +5512,22 @@ function NoiseP(props) {
       {p.nType==="worley"&&(
         <div>
           <Se l="mode" v={p.wMode||"f1"} opts={["f1","f2","f2f1","f1f2","f2df1"]} fn={function(v){up(Object.assign({},p,{wMode:v}))}}/>
-          <Sl l="jitter" v={p.wJitter==null?1:p.wJitter} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{wJitter:v}))}}/>
+          {ex("wJitter",<Sl l="jitter" v={p.wJitter==null?1:p.wJitter} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{wJitter:v}))}}/>)}
         </div>
       )}
-      {p.nType==="white"&&(
-        <Sl l="grain size" v={p.grainSize||1} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up(Object.assign({},p,{grainSize:v}))}}/>
-      )}
+      {p.nType==="white"&&
+      ex("grainSize",<Sl l="grain size" v={p.grainSize||1} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)+"px"}} fn={function(v){up(Object.assign({},p,{grainSize:v}))}}/>)}
       {p.nType==="phasor"&&(
         <div>
-          <Sl l="frequency" v={p.pFreq||8} mn={1} mx={40} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{pFreq:v}))}}/>
-          <Sl l="angle" v={p.pAngle||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{pAngle:v}))}}/>
-          <Sl l="bandwidth" v={p.pBandwidth||1} mn={0} mx={4} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{pBandwidth:v}))}}/>
+          {ex("pFreq",<Sl l="frequency" v={p.pFreq||8} mn={1} mx={40} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{pFreq:v}))}}/>)}
+          {ex("pAngle",<Sl l="angle" v={p.pAngle||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{pAngle:v}))}}/>)}
+          {ex("pBandwidth",<Sl l="bandwidth" v={p.pBandwidth||1} mn={0} mx={4} st={.05} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{pBandwidth:v}))}}/>)}
         </div>
       )}
       {(p.nType==="marble"||p.nType==="wood")&&(
         <div>
-          <Sl l="frequency" v={p.mFreq||4} mn={1} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{mFreq:v}))}}/>
-          <Sl l="turbulence" v={p.mTurb||2} mn={0} mx={10} st={.1} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{mTurb:v}))}}/>
+          {ex("mFreq",<Sl l="frequency" v={p.mFreq||4} mn={1} mx={20} st={.5} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{mFreq:v}))}}/>)}
+          {ex("mTurb",<Sl l="turbulence" v={p.mTurb||2} mn={0} mx={10} st={.1} fmt={function(v){return v.toFixed(1)}} fn={function(v){up(Object.assign({},p,{mTurb:v}))}}/>)}
         </div>
       )}
       {ex('seed',<Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>)}
@@ -5568,11 +5567,11 @@ function PointCreatorBase(props) {
       </PR>
       {(p.renderMode||"dots")==="dots"&&(
         <div>
-          <Sl l="dot size" v={p.dotSize||4} mn={1} mx={20} st={.5}
-            fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up(Object.assign({},p,{dotSize:v}))}}/>
+          {ex("dotSize",<Sl l="dot size" v={p.dotSize||4} mn={1} mx={20} st={.5}
+            fmt={function(v){return v.toFixed(1)+"px"}} fn={function(v){up(Object.assign({},p,{dotSize:v}))}}/>)}
           <Co l="colour" v={p.color||"#ffffff"} fn={function(v){up(Object.assign({},p,{color:v}))}}/>
-          <Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
-            fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>
+          {ex("opacity",<Sl l="opacity" v={p.opacity==null?1:p.opacity} mn={0} mx={1} st={.01}
+            fmt={function(v){return Math.round(v*100)+"%"}} fn={function(v){up(Object.assign({},p,{opacity:v}))}}/>)}
         </div>
       )}
       {props.children}
@@ -5582,56 +5581,56 @@ function PointCreatorBase(props) {
 function GridP(props) {
   var p=props.p,up=props.up
   return (<PointCreatorBase p={p} up={up}>
-    <Sl l="columns" v={p.cols||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>
-    <Sl l="rows" v={p.rows||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>
-    <Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>
+    {ex("cols",<Sl l="columns" v={p.cols||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{cols:v}))}}/>)}
+    {ex("rows",<Sl l="rows" v={p.rows||4} mn={1} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rows:v}))}}/>)}
+    {ex("stagger",<Sl l="stagger" v={p.stagger||0} mn={0} mx={1} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{stagger:v}))}}/>)}
     {(p.stagger||0)>0&&<Se l="axis" v={p.staggerAxis||"row"} opts={["row","col"]} fn={function(v){up(Object.assign({},p,{staggerAxis:v}))}}/>}
-    <Sl l="offset X" v={p.offX||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>
-    <Sl l="offset Y" v={p.offY||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>
+    {ex("offX",<Sl l="offset X" v={p.offX||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offX:v}))}}/>)}
+    {ex("offY",<Sl l="offset Y" v={p.offY||0} mn={-.5} mx={.5} st={.01} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{offY:v}))}}/>)}
   </PointCreatorBase>)
 }
 function SpiralP(props) {
   var p=props.p,up=props.up
   return (<PointCreatorBase p={p} up={up}>
     <Sl l="points" v={p.pointCount||32} mn={4} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
-    <Sl l="turns" v={p.turns||3} mn={.25} mx={20} st={.25} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{turns:v}))}}/>
-    <Sl l="start r" v={p.startRadius||0} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>
-    <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
-    <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
-    <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+    {ex("turns",<Sl l="turns" v={p.turns||3} mn={.25} mx={20} st={.25} fmt={function(v){return v.toFixed(2)}} fn={function(v){up(Object.assign({},p,{turns:v}))}}/>)}
+    {ex("startRadius",<Sl l="start r" v={p.startRadius||0} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>)}
+    {ex("endRadius",<Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>)}
+    {ex("cx",<Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>)}
+    {ex("cy",<Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>)}
   </PointCreatorBase>)
 }
 function PolarGridP(props) {
   var p=props.p,up=props.up
   return (<PointCreatorBase p={p} up={up}>
-    <Sl l="rings" v={p.rings||4} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rings:v}))}}/>
-    <Sl l="per ring" v={p.pointsPerRing||8} mn={2} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointsPerRing:v}))}}/>
-    <Sl l="start r" v={p.startRadius||.05} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>
-    <Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>
-    <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
-    <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+    {ex("rings",<Sl l="rings" v={p.rings||4} mn={1} mx={32} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{rings:v}))}}/>)}
+    {ex("pointsPerRing",<Sl l="per ring" v={p.pointsPerRing||8} mn={2} mx={64} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointsPerRing:v}))}}/>)}
+    {ex("startRadius",<Sl l="start r" v={p.startRadius||.05} mn={0} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{startRadius:v}))}}/>)}
+    {ex("endRadius",<Sl l="end r" v={p.endRadius||.45} mn={.01} mx={.5} st={.01} fn={function(v){up(Object.assign({},p,{endRadius:v}))}}/>)}
+    {ex("cx",<Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>)}
+    {ex("cy",<Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>)}
   </PointCreatorBase>)
 }
 function PhyllotaxisP(props) {
   var p=props.p,up=props.up
   return (<PointCreatorBase p={p} up={up}>
-    <Sl l="points" v={p.pointCount||64} mn={4} mx={1024} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
-    <Sl l="divergence" v={p.divergenceAngle==null?137.508:p.divergenceAngle} mn={90} mx={180} st={.001}
-      fmt={function(v){return v.toFixed(3)+"°"}} fn={function(v){up(Object.assign({},p,{divergenceAngle:v}))}}/>
+    {ex("pointCount",<Sl l="points" v={p.pointCount||64} mn={4} mx={1024} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>)}
+    {ex("divergenceAngle",<Sl l="divergence" v={p.divergenceAngle==null?137.508:p.divergenceAngle} mn={90} mx={180} st={.001}
+      fmt={function(v){return v.toFixed(3)+"°"}} fn={function(v){up(Object.assign({},p,{divergenceAngle:v}))}}/>)}
     <Sl l="scale" v={p.scale||.45} mn={.05} mx={.5} st={.005} fn={function(v){up(Object.assign({},p,{scale:v}))}}/>
-    <Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>
-    <Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>
+    {ex("cx",<Sl l="centre X" v={p.cx==null?.5:p.cx} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cx:v}))}}/>)}
+    {ex("cy",<Sl l="centre Y" v={p.cy==null?.5:p.cy} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{cy:v}))}}/>)}
   </PointCreatorBase>)
 }
 function ScatterP(props) {
   var p=props.p,up=props.up
   return (<PointCreatorBase p={p} up={up}>
-    <Sl l="points" v={p.pointCount||32} mn={2} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>
+    {ex("pointCount",<Sl l="points" v={p.pointCount||32} mn={2} mx={512} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{pointCount:v}))}}/>)}
     <Sl l="seed" v={p.seed||1} mn={0} mx={9999} st={1} fmt={function(v){return Math.round(v)}} fn={function(v){up(Object.assign({},p,{seed:v}))}}/>
-    <Sl l="x min" v={p.x0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x0:v}))}}/>
-    <Sl l="x max" v={p.x1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x1:v}))}}/>
-    <Sl l="y min" v={p.y0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y0:v}))}}/>
-    <Sl l="y max" v={p.y1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y1:v}))}}/>
+    {ex("x0",<Sl l="x min" v={p.x0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x0:v}))}}/>)}
+    {ex("x1",<Sl l="x max" v={p.x1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{x1:v}))}}/>)}
+    {ex("y0",<Sl l="y min" v={p.y0||0} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y0:v}))}}/>)}
+    {ex("y1",<Sl l="y max" v={p.y1||1} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{y1:v}))}}/>)}
   </PointCreatorBase>)
 }
 function PatP(props) {
