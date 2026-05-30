@@ -8821,16 +8821,66 @@ function CanvasSizePicker(props) {
 
 
 function LivePreview(props) {
-  var zSt=useState(1); var zoom=zSt[0], setZoom=zSt[1]
-  var fSt=useState("png"); var fmt=fSt[0], setFmt=fSt[1]
-  var bSt=useState(true); var barsVis=bSt[0], setBarsVis=bSt[1]
+  var zSt=useState(1);    var zoom=zSt[0],    setZoom=zSt[1]
+  var fSt=useState("png"); var fmt=fSt[0],     setFmt=fSt[1]
+  var bSt=useState(true);  var barsVis=bSt[0], setBarsVis=bSt[1]
+  var fitSt=useState(false); var fitMode=fitSt[0], setFitMode=fitSt[1]
+  var zInpSt=useState("100"); var zInp=zInpSt[0], setZInp=zInpSt[1]
+  var zEditSt=useState(false); var zEditing=zEditSt[0], setZEditing=zEditSt[1]
+  var checkerRef=useRef(null)
+  var cszSt=useState({w:0,h:0}); var csz=cszSt[0], setCsz=cszSt[1]
+
+  // Track checker div size for fit-to-area
+  useEffect(function(){
+    var el=checkerRef.current; if(!el)return
+    var ro=new ResizeObserver(function(entries){
+      for(var e of entries) setCsz({w:e.contentRect.width,h:e.contentRect.height})
+    })
+    ro.observe(el)
+    return function(){ro.disconnect()}
+  },[])
+
+  // Compute fit zoom from checker area and canvas dims
+  var szW=props.szW||props.sz||400, szH=props.szH||props.sz||400
+  var fitZoom = csz.w>0&&csz.h>0
+    ? Math.max(0.05,Math.min(4,Math.min((csz.w-48)/szW,(csz.h-48)/szH)))
+    : zoom
+  var effectiveZoom = fitMode ? fitZoom : zoom
+
+  // Keep zoom input synced when not editing
+  useEffect(function(){
+    if(!zEditing) setZInp(String(Math.round(effectiveZoom*100)))
+  },[effectiveZoom,zEditing])
+
+  function step(dir){
+    if(fitMode) return
+    setZoom(function(z){
+      var s=z>=1?0.25:z>=0.25?0.05:0.01
+      var nz=z+dir*s
+      return Math.max(0.05,Math.min(4,Math.round(nz/s)*s))
+    })
+  }
+
+  function applyZInput(){
+    var v=parseFloat(zInp)
+    if(!isNaN(v)&&v>=5&&v<=400){
+      setZoom(v/100)
+      setFitMode(false)
+    }
+    setZEditing(false)
+  }
+
   var fsStyle = props.fullscreen
     ? {position:"fixed",top:0,left:0,width:"100%",height:"100%",
        zIndex:500,background:"var(--bg)",WebkitOverflowScrolling:"touch"}
     : {flex:1,minHeight:0}
+
+  var ctrlDisabled = fitMode
+  var ctrlColor = fitMode ? "var(--mu)" : "var(--di)"
+
   return (
     <div style={Object.assign({display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"},fsStyle)}>
-      {/* Floating bars toggle — always visible, floats above the top bar */}
+      {/* Floating bars toggle */}
       <button
         title={barsVis?"Hide bars":"Show bars"}
         onClick={function(){setBarsVis(function(v){return !v})}}
@@ -8851,33 +8901,71 @@ function LivePreview(props) {
         <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",
           paddingRight:46,
           background:"var(--pn)",borderBottom:"1px solid var(--bd)",flexShrink:0,overflowX:"auto"}}>
-          <CanvasSizePicker szW={props.szW||props.sz||400} szH={props.szH||props.sz||400} onResize={props.onResize}/>
-          <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.max(.25,z-.25)})}} style={{fontSize:16,width:32,height:32}}>-</button>
-          <span style={{fontSize:10,color:"var(--di)",minWidth:30,textAlign:"center",flexShrink:0}}>{Math.round(zoom*100)}%</span>
-          <button className="icon-btn sm" onClick={function(){setZoom(function(z){return Math.min(4,z+.25)})}} style={{fontSize:16,width:32,height:32}}>+</button>
-          <button onClick={function(){setZoom(1)}} style={{fontSize:10,padding:"0 8px",minHeight:30,flexShrink:0}}>1:1</button>
+          <CanvasSizePicker szW={szW} szH={szH} onResize={props.onResize}/>
+          {/* Zoom controls */}
+          <button className="icon-btn sm" onClick={function(){step(-1)}}
+            style={{fontSize:16,width:32,height:32,
+              color:ctrlDisabled?"var(--mu)":undefined,
+              opacity:ctrlDisabled?.5:1}}>−</button>
+          {/* Editable zoom input */}
+          <input
+            type="text" inputMode="decimal"
+            value={zEditing?zInp:Math.round(effectiveZoom*100)+"%"}
+            disabled={ctrlDisabled}
+            style={{width:48,fontSize:10,padding:"3px 4px",
+              background:ctrlDisabled?"transparent":"var(--bg)",
+              border:"1px solid "+(ctrlDisabled?"transparent":"var(--bd)"),
+              borderRadius:4,color:ctrlColor,textAlign:"center",
+              fontFamily:"'IBM Plex Mono',monospace",flexShrink:0,cursor:ctrlDisabled?"default":"text"}}
+            onFocus={function(){
+              if(ctrlDisabled)return
+              setZEditing(true)
+              setZInp(String(Math.round(effectiveZoom*100)))
+            }}
+            onChange={function(e){if(!ctrlDisabled)setZInp(e.target.value.replace(/[^0-9.]/g,""))}}
+            onBlur={applyZInput}
+            onKeyDown={function(e){if(e.key==="Enter")applyZInput();if(e.key==="Escape"){setZEditing(false);setZInp(String(Math.round(effectiveZoom*100)))}}}
+          />
+          <button className="icon-btn sm" onClick={function(){step(1)}}
+            style={{fontSize:16,width:32,height:32,
+              color:ctrlDisabled?"var(--mu)":undefined,
+              opacity:ctrlDisabled?.5:1}}>+</button>
+          <button onClick={function(){if(!ctrlDisabled)setZoom(1)}}
+            style={{fontSize:10,padding:"0 7px",minHeight:30,flexShrink:0,
+              opacity:ctrlDisabled?.5:1}}>1:1</button>
+          {/* Fit toggle */}
+          <button
+            title={fitMode?"Fit mode on — click to unlock":"Fit canvas to preview area"}
+            onClick={function(){setFitMode(function(f){return !f})}}
+            style={{fontSize:11,padding:"0 8px",minHeight:30,flexShrink:0,
+              background:fitMode?"var(--ac)":"transparent",
+              border:"1px solid "+(fitMode?"var(--ac)":"var(--bd)"),
+              borderRadius:5,color:fitMode?"var(--bg)":"var(--mu)",
+              cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}}>
+            ⊡ fit
+          </button>
           <select value={fmt} onChange={function(e){setFmt(e.target.value)}} style={{width:50,fontSize:10,padding:"3px 3px",flexShrink:0}}>
             {["png","jpeg","webp"].map(function(f){return <option key={f}>{f}</option>})}
           </select>
           <button className="ac" onClick={function(){props.onExport(fmt)}} style={{padding:"0 10px",fontSize:11,flexShrink:0}}>↓</button>
         </div>
       )}
-      {/* Canvas area — expands to fill all available space when bars are hidden */}
-      <div className="checker" style={{flex:1,overflow:"auto",display:"flex",alignItems:"center",justifyContent:"center",padding:20,position:"relative"}}>
+      {/* Canvas area */}
+      <div ref={checkerRef} className="checker" style={{flex:1,overflow:"auto",display:"flex",alignItems:"center",justifyContent:"center",padding:24,position:"relative"}}>
         {!props.active && (
           <div style={{position:"absolute",textAlign:"center",pointerEvents:"none"}}>
             <div style={{fontSize:40,color:"var(--bd)",marginBottom:12}}>◎</div>
             <div style={{fontSize:12,color:"var(--mu)"}}>Tap ◎ on any item to preview</div>
           </div>
         )}
-        <div style={{transform:"scale("+zoom+")",transformOrigin:"center center",boxShadow:"0 12px 60px rgba(0,0,0,.85)",outline:"1px solid var(--bd)",lineHeight:0}}>
-          <canvas ref={props.cvRef} width={props.szW||props.sz} height={props.szH||props.sz} style={{display:"block",imageRendering:zoom>2?"pixelated":"auto"}}/>
+        <div style={{transform:"scale("+effectiveZoom+")",transformOrigin:"center center",boxShadow:"0 12px 60px rgba(0,0,0,.85)",outline:"1px solid var(--bd)",lineHeight:0}}>
+          <canvas ref={props.cvRef} width={szW} height={szH} style={{display:"block",imageRendering:effectiveZoom>2?"pixelated":"auto"}}/>
         </div>
       </div>
       {/* Bottom bar */}
       {barsVis&&(
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",background:"var(--pn)",borderTop:"1px solid var(--bd)",flexShrink:0}}>
-          <span style={{fontSize:9,color:"var(--mu)"}}>{props.szW||props.sz}×{props.szH||props.sz}px</span>
+          <span style={{fontSize:9,color:"var(--mu)"}}>{szW}×{szH}px</span>
           {props.active && <span style={{fontSize:9,color:"var(--mu)",fontFamily:"'IBM Plex Mono',monospace"}}>[{props.active.type}]</span>}
           <span style={{flex:1}}/>
           <span style={{fontSize:9,color:"var(--mu)",letterSpacing:".08em",fontFamily:"'IBM Plex Mono',monospace"}}>{(typeof __BUILD_HASH__!=="undefined"?__BUILD_HASH__:"dev")+" · Selena"}</span>
