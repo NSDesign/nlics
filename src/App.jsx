@@ -6057,6 +6057,14 @@ function BezierCurveEditor(props) {
   )
 }
 function EfxPrimary(props) {
+  // NOTE: The mode="source" pickers in this component (texture / UV source /
+  // blend node) intentionally do NOT receive onNavigate, so they do not
+  // auto-jump the settings panel to the picked node the way the primary
+  // source slots do (see NRef.pick). Two reasons: (1) onNavigate is not
+  // threaded through EfxPrimary at either callsite, and (2) these are
+  // effect-parameter inputs — jumping away mid-effect-config is likely more
+  // disruptive than helpful. Open decision: wire onNavigate through here if
+  // the auto-jump is wanted for these pickers too.
   var efx=props.efx, p=efx.params
   var allAttrs=computeAllAttrs(props.nodes,props.selfId,props.sourceId)
   function up(np){props.onChange(Object.assign({},efx,{params:Object.assign({},p,np)}))}
