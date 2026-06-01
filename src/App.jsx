@@ -4826,7 +4826,7 @@ function NRef(props) {
     fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",
     whiteSpace:"nowrap",color:selectedNode?"var(--tx)":"var(--mu)"}
 
-  function pick(id){ props.fn(id||null); setOpen(false) }
+  function pick(id){ props.fn(id||null); setOpen(false); var nav=co.onNavigate||props.onNavigate; if(id&&nav&&id.indexOf("__")!==0) nav(id) }
 
   function doCreate(type, sec) {
     setCreateOpen(false)
@@ -4851,7 +4851,7 @@ function NRef(props) {
     var co = props.createOps||{}
     var noop = function(){}
     if(n.section===1) return (
-      <CreatorProps node={n} onUpdate={co.onUpd||noop} onLoad={co.onLoad||noop}
+      <CreatorProps node={n} onUpdate={co.onUpd||noop} onLoad={co.onLoad||noop} onNavigate={co.onNavigate||noop}
         onAdd={props.onAdd} nodes={props.nodes} iC={props.iC}/>
     )
     var sharedP = {onChange:co.onUpd||noop, nodes:props.nodes, iC:props.iC,
@@ -5684,7 +5684,7 @@ function TileP(props) {
   return (
     <div>
       {/* Source */}
-      <NRef l="source" v={p.refId} nodes={nodes} selfId={selfId} iC={iC}
+      <NRef l="source" v={p.refId} nodes={nodes} selfId={selfId} iC={iC} onNavigate={props.onNavigate}
         fn={function(v){up(Object.assign({},p,{refId:v}))}}/>
       {/* Grid */}
       {ex("cols",   <Sl l="columns" v={p.cols||4} mn={1} mx={32} st={1}
@@ -5799,7 +5799,7 @@ function CreatorProps(props) {
       {node.type==="gradient" && <GradP  p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
       {node.type==="noise"    && <NoiseP p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
       {node.type==="pattern"  && <PatP   p={node.props} up={up} nodes={props.nodes} selfId={node.id}/>}
-      {node.type==="tile"     && <TileP  p={node.props} up={up} nodes={props.nodes} selfId={node.id} iC={props.iC} onAdd={props.onAdd} createOps={{onUpd:props.onUpdate,onLoad:props.onLoad}}/>}
+      {node.type==="tile"     && <TileP  p={node.props} up={up} nodes={props.nodes} selfId={node.id} iC={props.iC} onAdd={props.onAdd} onNavigate={props.onNavigate} createOps={{onUpd:props.onUpdate,onLoad:props.onLoad}}/>}
       {node.type==="grid"        && <GridP       p={node.props} up={up}/>}
       {node.type==="spiral"      && <SpiralP     p={node.props} up={up}/>}
       {node.type==="polar-grid"  && <PolarGridP  p={node.props} up={up}/>}
@@ -6922,7 +6922,7 @@ function MaskCard(props) {
               ⚠ no source — mask inactive until a source is selected
             </div>
           )}
-          <NRef l="source" v={mk.refId} nodes={props.nodes} selfId={props.selfId}
+          <NRef l="source" v={mk.refId} nodes={props.nodes} selfId={props.selfId} onNavigate={props.onNavigate}
             iC={props.iC} mode="source" asMask={true}
             siblingEffects={props.siblingEffects} ownerNodeId={props.ownerNodeId}
             fn={function(v){props.onChange(Object.assign({},mk,{refId:v}))}}/>
@@ -7366,7 +7366,7 @@ function EfxCard(props) {
           {nMasks===0 && <div className="empty" style={{padding:"6px 0 10px"}}>no masks on this effect</div>}
           {(efx.maskStack||[]).map(function(mk,mi){
             return (
-              <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+              <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC} onNavigate={props.onNavigate}
                 siblingEffects={props.siblingEffects} ownerNodeId={props.ownerNodeId}
                 isFirst={mi===0} isLast={mi===(efx.maskStack||[]).length-1}
                 onMove={function(dir){
@@ -7721,7 +7721,7 @@ function MaskStackPanel(props) {
             onNavigate={props.onNavigate}/>
         )
         return (
-          <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC}
+          <MaskCard key={mk.id} mask={mk} nodes={props.nodes} selfId={props.selfId} iC={props.iC} onNavigate={props.onNavigate}
             siblingEffects={props.siblingEffects} ownerNodeId={props.ownerNodeId}
             isFirst={mi===0} isLast={mi===props.stack.length-1}
             onMove={function(dir){move(mi,dir)}}
@@ -10062,7 +10062,7 @@ function NodeDetailSheet(props) {
         </div>
         <div className="node-sheet-scroll">
           {props.sec===1
-            ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad} onAdd={props.onAdd} nodes={props.nodes} iC={props.iC}/>
+            ? <CreatorProps node={props.node} onUpdate={props.onUpdate} onLoad={props.onLoad} onAdd={props.onAdd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
             : props.node.type==="stack"
               ? <StackProps node={props.node} onChange={props.onUpdate} nodes={props.nodes} iC={props.iC}
                   onPromote={props.onPromote} onExtract={props.onExtract} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
@@ -10170,7 +10170,7 @@ function StackProps(props) {
           <span style={{fontSize:9,color:"var(--mu)"}}>for preview only · not composited</span>
         </div>
         <div className="card-body">
-          <NRef l="source" v={node.previewRefId||null} nodes={nodes} selfId={node.id} iC={props.iC}
+          <NRef l="source" v={node.previewRefId||null} nodes={nodes} selfId={node.id} iC={props.iC} onNavigate={props.onNavigate}
             fn={function(v){onChange(Object.assign({},node,{previewRefId:v||null}))}}/>
           {node.previewRefId && (
             <div style={{fontSize:9,color:"var(--mu)",marginTop:6,lineHeight:1.5}}>
@@ -10537,7 +10537,7 @@ function NodeGroupCard(props) {
                   {isSel && props.panelStyle!=="sheet" && (
                     <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
                       {node.section===1
-                        ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} onAdd={props.onAdd} nodes={props.nodes} iC={props.iC}/>
+                        ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} onAdd={props.onAdd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
                         : node.type==="blender"
                           ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
                           : node.type==="layers"
@@ -10653,7 +10653,7 @@ function renderNodeInline(node, props) {
       {isSel && props.panelStyle!=="sheet" && (
         <div style={{background:"rgba(4,4,18,.97)",borderBottom:"1px solid var(--bd)"}}>
           {props.sec===1
-            ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} onAdd={props.onAdd} nodes={props.nodes} iC={props.iC}/>
+            ? <CreatorProps node={node} onUpdate={props.onUpd} onLoad={props.onLoad} onAdd={props.onAdd} nodes={props.nodes} iC={props.iC} onNavigate={props.onNavigate}/>
             : node.type==="blender"
               ? <BlenderProps node={node} onChange={props.onUpd} nodes={props.nodes} iC={props.iC} onExtract={props.onExtract} onPromote={props.onPromote} dspSlot={props.dspSlot} dispSlot={props.dispSlot} onDsp={props.onDsp} dispId={props.dispId} dispMask={props.dispMask} onNavigate={props.onNavigate} onAdd={props.onAdd} onLoad={props.onLoad}/>
               : node.type==="layers"
