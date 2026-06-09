@@ -2898,6 +2898,54 @@ function resolvePath(node, slotKey, steps) {
 /* ─── RENDERING ENGINE ───────────────────────────────────── */
 var BM = {"normal":"source-over","add":"lighter","multiply":"multiply","screen":"screen","overlay":"overlay","soft-light":"soft-light","hard-light":"hard-light","difference":"difference","exclusion":"exclusion","darken":"darken","lighten":"lighten","color-burn":"color-burn","color-dodge":"color-dodge","hue":"hue","saturation":"saturation","color":"color","luminosity":"luminosity"}
 function mkCv(w,h){var c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d",{willReadFrequently:true});return c}
+// Resolve any CSS colour string (hex / hsl / rgb / named) to [r,g,b] via 1x1 canvas
+var _css1px=null
+function cssToRgbArr(c){
+  if(!_css1px)_css1px=mkCv(1,1)
+  var cx=_css1px.getContext("2d")
+  cx.clearRect(0,0,1,1);cx.fillStyle="#000";cx.fillStyle=c
+  cx.fillRect(0,0,1,1)
+  var d=cx.getImageData(0,0,1,1).data
+  return [d[0],d[1],d[2]]
+}
+// Tint a source thumb with colour at blend mode + opacity, preserving source alpha.
+// Canvas-native ops where possible; per-pixel math for subtract/divide.
+var SAT_BLEND_OPS={normal:"source-atop",multiply:"multiply",screen:"screen",overlay:"overlay",add:"lighter",difference:"difference"}
+function applySatTint(srcCv,tw,th,tint,blend,op){
+  var cv=mkCv(tw,th),cx=cv.getContext("2d",{willReadFrequently:true})
+  cx.drawImage(srcCv,0,0)
+  var a=Math.max(0,Math.min(1,op==null?1:op/100))
+  if(a<=0)return cv
+  if(blend==="subtract"||blend==="divide"){
+    var t=cssToRgbArr(tint)
+    var img=cx.getImageData(0,0,tw,th),d=img.data
+    for(var i=0;i<d.length;i+=4){
+      if(d[i+3]===0)continue
+      for(var ch=0;ch<3;ch++){
+        var b=d[i+ch],r
+        if(blend==="subtract")r=b-t[ch]
+        else r=t[ch]===0?255:b/t[ch]*255
+        r=Math.max(0,Math.min(255,r))
+        d[i+ch]=Math.round(b+(r-b)*a)
+      }
+    }
+    cx.putImageData(img,0,0)
+    return cv
+  }
+  var gco=SAT_BLEND_OPS[blend]||"source-atop"
+  cx.globalAlpha=a
+  cx.globalCompositeOperation=gco
+  cx.fillStyle=tint
+  cx.fillRect(0,0,tw,th)
+  if(gco!=="source-atop"){
+    // blend-mode fills paint transparent areas too -- clip alpha back to source
+    cx.globalAlpha=1
+    cx.globalCompositeOperation="destination-in"
+    cx.drawImage(srcCv,0,0)
+  }
+  cx.globalAlpha=1;cx.globalCompositeOperation="source-over"
+  return cv
+}
 function clCv(s,w,h){var c=mkCv(w,h);c.getContext("2d").drawImage(s,0,0);if(s&&s._points)c._points=s._points.slice();return c}
 
 function pxBl(mode,p,c) {
@@ -3414,6 +3462,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
             sx2.drawImage(sc,0,0,satTW,satTH);return sv
           })
           var satTotalW=satSrcs.reduce(function(a,s){return a+(s.weight||1)},0)
+          var satTintCache=new Map()
           satPts.forEach(function(pt,pi){
             var srcIdx=0
             if(satMode==="sequence"){
@@ -3432,9 +3481,16 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
             var satCM=satSrcEntry.colorMode||"attribute"
             var satTint=null
             if(satCM==="attribute"){
-              satTint=pt.color||null
+              var satAV=pt[satSrcEntry.colorAttr||"color"]
+              if(typeof satAV==="string"&&satAV.length>0)satTint=satAV
+              else if(typeof satAV==="number"){
+                // numeric attribute -> greyscale (clamped 0-1)
+                var satGV=Math.round(Math.max(0,Math.min(1,satAV))*255)
+                var satGH=("0"+satGV.toString(16)).slice(-2)
+                satTint="#"+satGH+satGH+satGH
+              }
             } else if(satCM==="solid"){
-              satTint=satSrcEntry.color||null
+              satTint=satSrcEntry.color||"#ffffff"
             } else if(satCM==="random"){
               var satRand2=seededRand(pi*1337+(efx._seed||1))
               var satHue=Math.round(satRand2()*360)
@@ -3446,14 +3502,17 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
               var satLC=lrC(satCA,satCB,satT)
               satTint="#"+("0"+satLC.r.toString(16)).slice(-2)+("0"+satLC.g.toString(16)).slice(-2)+("0"+satLC.b.toString(16)).slice(-2)
             }
-            // Apply tint via source-atop compositing on an offscreen canvas
+            // Apply tint at the source's blend mode + opacity (cached per src+colour)
             var drawCv=satCv
             if(satTint){
-              var tintCv=mkCv(satTW,satTH),tintCtx=tintCv.getContext("2d")
-              tintCtx.drawImage(satCv,0,0)
-              tintCtx.globalCompositeOperation="source-atop"
-              tintCtx.fillStyle=satTint
-              tintCtx.fillRect(0,0,satTW,satTH)
+              var satTB=satSrcEntry.tintBlend||"normal"
+              var satTO=satSrcEntry.tintOpacity==null?100:satSrcEntry.tintOpacity
+              var satTK=srcIdx+"|"+satTint
+              var tintCv=satTintCache.get(satTK)
+              if(!tintCv){
+                tintCv=applySatTint(satCv,satTW,satTH,satTint,satTB,satTO)
+                satTintCache.set(satTK,tintCv)
+              }
               drawCv=tintCv
             }
             ctx.save()
@@ -6810,6 +6869,11 @@ function EfxPrimary(props) {
                 fmt={function(v){return v.toFixed(1)}} fn={function(v){updSrc(si,{weight:v})}}/>
               <Se l="colour" v={s.colorMode||"attribute"} opts={["attribute","solid","random","range"]}
                 fn={function(v){(function(idx){updSrc(idx,{colorMode:v})})(si)}}/>
+              {(s.colorMode||"attribute")==="attribute"&&(
+                <Se l="attribute" v={s.colorAttr||"color"}
+                  opts={allAttrs.includes("color")?allAttrs:["color"].concat(allAttrs)}
+                  fn={function(v){(function(idx){updSrc(idx,{colorAttr:v})})(si)}}/>
+              )}
               {(s.colorMode||"attribute")==="solid"&&(
                 <Co l="colour" v={s.color||"#ffffff"} fn={function(v){(function(idx){updSrc(idx,{color:v})})(si)}}/>
               )}
@@ -6819,6 +6883,12 @@ function EfxPrimary(props) {
                   <Co l="to"   v={s.colorB||"#4488ff"} fn={function(v){(function(idx){updSrc(idx,{colorB:v})})(si)}}/>
                 </>
               )}
+              <Se l="blend" v={s.tintBlend||"normal"}
+                opts={["normal","multiply","screen","overlay","add","subtract","divide","difference"]}
+                fn={function(v){(function(idx){updSrc(idx,{tintBlend:v})})(si)}}/>
+              <Sl l="opacity" v={s.tintOpacity==null?100:s.tintOpacity} mn={0} mx={100} st={1}
+                fmt={function(v){return Math.round(v)+"%"}}
+                fn={function(v){(function(idx){updSrc(idx,{tintOpacity:v})})(si)}}/>
             </div>
           )
         })}
