@@ -1296,6 +1296,51 @@ function wood(x,y,oct,s,freq,turb) {
 }
 
 /* ─── PIXEL EFFECTS ── pure pixel math, zero CSS ─────────── */
+/* -- O(1) sliding-window box blur (radius-independent cost) ----------------
+   Operates on Float32 RGBA buffers. Open boundary: edge pixels average only
+   in-bounds taps (matches the previous brute-force kernels exactly for box
+   mode). Gaussian is approximated with 3 successive box passes whose sizes
+   come from _gaussBoxes (Kuckir method) -- visually equivalent to a true
+   gaussian at a fraction of the cost. */
+function _sbH(s,o,w,h,r){ // horizontal pass: s -> o
+  if(r<1){o.set(s);return}
+  for(var y=0;y<h;y++){
+    var row=y*w*4, rs=0,gs=0,bs=0,as=0,cnt=0,i2,x2
+    for(x2=0;x2<=r&&x2<w;x2++){i2=row+x2*4;rs+=s[i2];gs+=s[i2+1];bs+=s[i2+2];as+=s[i2+3];cnt++}
+    for(var x=0;x<w;x++){
+      var oi=row+x*4
+      o[oi]=rs/cnt;o[oi+1]=gs/cnt;o[oi+2]=bs/cnt;o[oi+3]=as/cnt
+      var ax=x+r+1;if(ax<w){i2=row+ax*4;rs+=s[i2];gs+=s[i2+1];bs+=s[i2+2];as+=s[i2+3];cnt++}
+      var rx=x-r;if(rx>=0){i2=row+rx*4;rs-=s[i2];gs-=s[i2+1];bs-=s[i2+2];as-=s[i2+3];cnt--}
+    }
+  }
+}
+function _sbV(s,o,w,h,r){ // vertical pass: s -> o
+  // Row-sweep with per-column running sums (sequential memory access --
+  // a per-column walk thrashes cache at large widths).
+  if(r<1){o.set(s);return}
+  var st=w*4, acc=new Float32Array(st), j
+  var top=Math.min(r,h-1)
+  for(var y2=0;y2<=top;y2++){var ro=y2*st;for(j=0;j<st;j++)acc[j]+=s[ro+j]}
+  var cnt=top+1
+  for(var y=0;y<h;y++){
+    var oo=y*st, inv=1/cnt
+    for(j=0;j<st;j++)o[oo+j]=acc[j]*inv
+    var ay=y+r+1;if(ay<h){var ai=ay*st;for(j=0;j<st;j++)acc[j]+=s[ai+j];cnt++}
+    var ry=y-r;if(ry>=0){var ri=ry*st;for(j=0;j<st;j++)acc[j]-=s[ri+j];cnt--}
+  }
+}
+function _gaussBoxes(sigma){ // 3 box radii approximating gaussian(sigma)
+  var n=3
+  var wI=Math.sqrt((12*sigma*sigma/n)+1)
+  var wl=Math.floor(wI);if(wl%2===0)wl--
+  var wu=wl+2
+  var m=Math.round((12*sigma*sigma-n*wl*wl-4*n*wl-3*n)/(-4*wl-4))
+  var out=[]
+  for(var i2=0;i2<n;i2++)out.push(Math.max(0,i2<m?(wl-1)/2:(wu-1)/2))
+  return out
+}
+
 function pxFn(d,w,h,t,p) {
   var i, f, hsl, rgb
   if (t==="brightness") {
@@ -1303,42 +1348,26 @@ function pxFn(d,w,h,t,p) {
   } else if (t==="contrast") {
     f=p.value/100; for(i=0;i<d.length;i+=4){d[i]=Math.min(255,Math.max(0,(d[i]-128)*f+128));d[i+1]=Math.min(255,Math.max(0,(d[i+1]-128)*f+128));d[i+2]=Math.min(255,Math.max(0,(d[i+2]-128)*f+128))}
   } else if (t==="blur") {
-    // Separable two-pass blur (horizontal then vertical) with premultiplied alpha
-    // and open boundary (edge pixels use reduced kernel, no border fringing).
-    // mode: "box" (equal weights) | "gaussian" (bell-curve weights, softer falloff)
+    // O(1) sliding-window blur -- cost is independent of radius.
+    // box: exact sliding accumulator (same output as the old kernel).
+    // gaussian: 3 successive box passes sized by _gaussBoxes (sigma=r/2.5,
+    // matching the previous gaussian's perceived softness).
     var r=Math.max(1,Math.round(p.radius||0))
     var blurMode=p.mode||"box"
-    var x, y, nx, ny, dx, dy, rs, gs, bs, as, wa, n
-    // Build kernel weights
-    var bKernel=[]
+    // Premultiply into float working buffers (also avoids the old per-pass
+    // 8-bit quantisation as a bonus)
+    var bufA=new Float32Array(d.length), bufB=new Float32Array(d.length)
+    for(i=0;i<d.length;i+=4){var a255=d[i+3]/255;bufA[i]=d[i]*a255;bufA[i+1]=d[i+1]*a255;bufA[i+2]=d[i+2]*a255;bufA[i+3]=d[i+3]}
     if(blurMode==="gaussian"){
-      var bSig=r/2.5; var bSum=0
-      for(var bk=-r;bk<=r;bk++){var bw=Math.exp(-(bk*bk)/(2*bSig*bSig));bKernel.push(bw);bSum+=bw}
-      bKernel=bKernel.map(function(bw){return bw/bSum})
+      var bxs=_gaussBoxes(r/2.5)
+      for(var bi=0;bi<bxs.length;bi++){_sbH(bufA,bufB,w,h,bxs[bi]);_sbV(bufB,bufA,w,h,bxs[bi])}
+    } else {
+      _sbH(bufA,bufB,w,h,r);_sbV(bufB,bufA,w,h,r)
     }
-    // Premultiply d in-place
-    for(i=0;i<d.length;i+=4){var a255=d[i+3]/255;d[i]=Math.round(d[i]*a255);d[i+1]=Math.round(d[i+1]*a255);d[i+2]=Math.round(d[i+2]*a255)}
-    var tmp=new Uint8ClampedArray(d.length)
-    // Horizontal pass — open boundary: skip out-of-bounds
-    for(y=0;y<h;y++) for(x=0;x<w;x++){
-      rs=gs=bs=as=0;wa=0
-      for(dx=-r;dx<=r;dx++){nx=x+dx;if(nx<0||nx>=w)continue;i=(y*w+nx)*4
-        var bkw=blurMode==="gaussian"?bKernel[dx+r]:1
-        rs+=d[i]*bkw;gs+=d[i+1]*bkw;bs+=d[i+2]*bkw;as+=d[i+3]*bkw;wa+=bkw}
-      if(wa===0)wa=1
-      i=(y*w+x)*4;tmp[i]=rs/wa;tmp[i+1]=gs/wa;tmp[i+2]=bs/wa;tmp[i+3]=as/wa
-    }
-    // Vertical pass — open boundary
-    for(y=0;y<h;y++) for(x=0;x<w;x++){
-      rs=gs=bs=as=0;wa=0
-      for(dy=-r;dy<=r;dy++){ny=y+dy;if(ny<0||ny>=h)continue;i=(ny*w+x)*4
-        var bkw2=blurMode==="gaussian"?bKernel[dy+r]:1
-        rs+=tmp[i]*bkw2;gs+=tmp[i+1]*bkw2;bs+=tmp[i+2]*bkw2;as+=tmp[i+3]*bkw2;wa+=bkw2}
-      if(wa===0)wa=1
-      i=(y*w+x)*4;d[i]=rs/wa;d[i+1]=gs/wa;d[i+2]=bs/wa;d[i+3]=as/wa
-    }
-    // Unpremultiply
-    for(i=0;i<d.length;i+=4){var a2=d[i+3];if(a2>0){d[i]=Math.min(255,Math.round(d[i]*255/a2));d[i+1]=Math.min(255,Math.round(d[i+1]*255/a2));d[i+2]=Math.min(255,Math.round(d[i+2]*255/a2))}}
+    // Unpremultiply back into d
+    for(i=0;i<d.length;i+=4){var a2=bufA[i+3];d[i+3]=a2
+      if(a2>0){var ia=255/a2;d[i]=bufA[i]*ia;d[i+1]=bufA[i+1]*ia;d[i+2]=bufA[i+2]*ia}
+      else{d[i]=0;d[i+1]=0;d[i+2]=0}}
   } else if (t==="invert") {
     f=p.amount/100; for(i=0;i<d.length;i+=4){d[i]=d[i]*(1-f)+(255-d[i])*f;d[i+1]=d[i+1]*(1-f)+(255-d[i+1])*f;d[i+2]=d[i+2]*(1-f)+(255-d[i+2])*f}
   } else if (t==="threshold") {
@@ -1465,7 +1494,10 @@ function pxFn(d,w,h,t,p) {
     // Build sample offsets and weights
     var offsets=[], dbWeights=[]
     var dbSig=dist/2.5
-    for(var si=1; si<=dist; si++){
+    // Bounded tap count: stride-sample the line so cost no longer scales with
+    // distance (>=48 taps is visually indistinguishable for motion trails)
+    var dbStep=Math.max(1,Math.ceil(dist/48))
+    for(var si=1; si<=dist; si+=dbStep){
       if(spread==="forward"||spread==="both"){
         offsets.push(si)
         dbWeights.push(dbMode==="gaussian"?Math.exp(-(si*si)/(2*dbSig*dbSig)):1)
@@ -1558,19 +1590,12 @@ function pxFn(d,w,h,t,p) {
     }
     // Box blur bright layer (2 passes for speed)
     function glBlur(src,r){
-      var tmp=new Uint8ClampedArray(src.length)
-      var gx,gy,gd,gn,gs,pi
-      for(gy=0;gy<h;gy++) for(gx=0;gx<w;gx++){
-        var rs=0,gs2=0,bs=0,n=0
-        for(gd=-r;gd<=r;gd++){var nx=gx+gd;if(nx<0||nx>=w)continue;pi=(gy*w+nx)*4;rs+=src[pi];gs2+=src[pi+1];bs+=src[pi+2];n++}
-        pi=(gy*w+gx)*4;tmp[pi]=rs/n;tmp[pi+1]=gs2/n;tmp[pi+2]=bs/n;tmp[pi+3]=255
-      }
-      var out=new Uint8ClampedArray(tmp.length)
-      for(gy=0;gy<h;gy++) for(gx=0;gx<w;gx++){
-        var rs=0,gs2=0,bs=0,n=0
-        for(gd=-r;gd<=r;gd++){var ny=gy+gd;if(ny<0||ny>=h)continue;pi=(ny*w+gx)*4;rs+=tmp[pi];gs2+=tmp[pi+1];bs+=tmp[pi+2];n++}
-        pi=(gy*w+gx)*4;out[pi]=rs/n;out[pi+1]=gs2/n;out[pi+2]=bs/n;out[pi+3]=255
-      }
+      // O(1) sliding-window box blur (RGB; alpha carried through as 255)
+      var fA=new Float32Array(src.length), fB=new Float32Array(src.length)
+      for(var fi=0;fi<src.length;fi++)fA[fi]=src[fi]
+      _sbH(fA,fB,w,h,r);_sbV(fB,fA,w,h,r)
+      var out=new Uint8ClampedArray(src.length)
+      for(fi=0;fi<src.length;fi+=4){out[fi]=fA[fi];out[fi+1]=fA[fi+1];out[fi+2]=fA[fi+2];out[fi+3]=255}
       return out
     }
     var glBlurred=glBlur(glBright,glR)
