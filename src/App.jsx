@@ -11636,10 +11636,26 @@ function App() {
     if (settings.panelStyle === "sheet") setSheetNode({node: node, sec: node.section})
     if (node.section === 1) setS1Col(false)
     else setS2Col(false)
-    // Scroll to the node in the list after state has updated and panel has expanded
+    // Scroll to the node in the list after state has updated and panel has expanded.
+    // NOTE: deliberately NOT scrollIntoView — it scrolls ALL scrollable ancestors,
+    // including overflow:hidden ones (html/body/#root, layout wrappers), which in
+    // inline panel mode pushed the top bar off screen with no way to recover.
+    // Instead, scroll only the nearest overflowY:auto/scroll ancestor (the node list).
     setTimeout(function(){
       var el=document.getElementById("ni-"+id)
-      if(el) el.scrollIntoView({behavior:"smooth",block:"nearest"})
+      if(!el) return
+      var sc=el.parentElement
+      while(sc&&sc!==document.body){
+        var oy=getComputedStyle(sc).overflowY
+        if((oy==="auto"||oy==="scroll")&&sc.scrollHeight>sc.clientHeight) break
+        sc=sc.parentElement
+      }
+      if(!sc||sc===document.body) return
+      var er=el.getBoundingClientRect(), sr=sc.getBoundingClientRect()
+      var delta=0
+      if(er.top<sr.top) delta=er.top-sr.top
+      else if(er.bottom>sr.bottom) delta=Math.min(er.top-sr.top, er.bottom-sr.bottom)
+      if(delta!==0) sc.scrollTo({top:sc.scrollTop+delta, behavior:"smooth"})
     }, 120)
   }
 
