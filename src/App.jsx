@@ -4947,7 +4947,7 @@ function NRef(props) {
     if(n.id===props.selfId) return false
     if(n.section!==2) return false
     if(mode==="intermediate") return n.type==="promoted"
-    if(mode==="source") return pointCtx ? n.type==="point-comp" : true
+    if(mode==="source") return pointCtx ? (n.type==="point-comp"||(n.type==="layers"&&(n.context||"pixel")==="point")) : true
     if(mode==="effect-source") return n.type==="stack"&&n.stackType==="effect"
     if(mode==="mask-source") return n.type==="stack"&&n.stackType==="mask"||n.type==="promoted"
     return true
@@ -9304,6 +9304,7 @@ function LayerCard(props) {
       {!isCollapsed && (
         <div style={{display:layerTab==="source"?"":"none"}} className="card-body">
           <NRef l="source" v={lyr.refId} nodes={props.nodes} selfId={props.selfId} iC={props.iC} mode="source"
+            pointCtx={props.context==="point"}
             onAdd={props.onAdd}
             createOps={{onUpd:props.onNodeUpd||props.onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:props.onPromote}}
             fn={function(v){props.onChange({refId:v})}}/>
