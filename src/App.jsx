@@ -4781,6 +4781,13 @@ var NODE_TYPES_S2=[
   {t:"stack-effect",l:"Effect Stack",sec:2},{t:"stack-mask",l:"Mask Stack",sec:2},
   {t:"point-comp",l:"Point Comp ◉",sec:2}
 ]
+/* Point-context create menu — geometry point types only (created as
+   shape nodes with shapeType pre-set via the "shape:<geo>" synthetic type) */
+var NODE_TYPES_POINT=[
+  {t:"shape:grid",l:"Grid"},{t:"shape:spiral",l:"Spiral"},
+  {t:"shape:polar-grid",l:"Polar Grid"},{t:"shape:phyllotaxis",l:"Phyllotaxis"},
+  {t:"shape:scatter",l:"Scatter"}
+]
 /* Legacy alias kept for any remaining NRef references */
 var NREF_S1_TYPES=NODE_TYPES_S1.concat([{t:"tile",l:"Tile",sec:1}])
 
@@ -4797,6 +4804,7 @@ function NodeTypePopover(props) {
   var sec = props.sec || 1
   var showGroups = props.showGroups !== false
   var creatorOnly = !!props.creatorOnly
+  var pointOnly = !!props.pointOnly
 
   var grpHdr = {
     padding:"5px 14px 4px",fontSize:8,color:"var(--mu)",
@@ -4816,7 +4824,17 @@ function NodeTypePopover(props) {
 
   return createPortal(
     <div ref={props.menuRef} style={containerStyle}>
-      {(sec===1 || creatorOnly) && (
+      {pointOnly && (
+        <div>
+          {NODE_TYPES_POINT.map(function(item){
+            return <div key={item.t} className="drop-item"
+              onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,1)}}>
+              {item.l}
+            </div>
+          })}
+        </div>
+      )}
+      {!pointOnly && (sec===1 || creatorOnly) && (
         <div>
           {NODE_TYPES_S1.map(function(item){
             return <div key={item.t} className="drop-item"
@@ -4846,7 +4864,7 @@ function NodeTypePopover(props) {
           )}
         </div>
       )}
-      {sec===2 && !creatorOnly && (
+      {!pointOnly && sec===2 && !creatorOnly && (
         <div>
           {NODE_TYPES_S2.map(function(item){
             return <div key={item.t} className="drop-item"
@@ -4873,6 +4891,11 @@ function NodeTypePopover(props) {
 function NRef(props) {
   if(!props.nodes||!Array.isArray(props.nodes)) return null
   var mode = props.mode || "all"
+  var co = props.createOps||{}
+  // pointCtx: picker lives in a point-context source slot (Point Comp source).
+  // Restricts choices to point-based sources only — geometry point creators
+  // (grid/spiral/polar-grid/phyllotaxis/scatter) and other point comps.
+  var pointCtx = !!props.pointCtx
   var asMaskSt=useState(props.asMask||false); var asMask=asMaskSt[0], setAsMask=asMaskSt[1]
   var openSt=useState(false); var open=openSt[0], setOpen=openSt[1]
   var anchorRef=useRef(null), menuRef=useRef(null)
@@ -4910,18 +4933,28 @@ function NRef(props) {
     return function(){document.removeEventListener("mousedown",h)}
   },[createOpen])
 
-  var creators = mode==="intermediate" ? [] : props.nodes.filter(function(n){return n.section===1&&n.id!==props.selfId})
+  function isPointGeoNode(n){
+    if(GEO_POINT_TYPES.includes(n.type)) return true
+    if(n.type==="shape"&&n.props&&GEO_POINT_TYPES.includes(n.props.shapeType)) return true
+    return false
+  }
+  var creators = mode==="intermediate" ? [] : props.nodes.filter(function(n){
+    if(n.section!==1||n.id===props.selfId) return false
+    if(pointCtx&&!isPointGeoNode(n)) return false
+    return true
+  })
   var comps = props.nodes.filter(function(n){
     if(n.id===props.selfId) return false
     if(n.section!==2) return false
     if(mode==="intermediate") return n.type==="promoted"
-    if(mode==="source") return true
+    if(mode==="source") return pointCtx ? n.type==="point-comp" : true
     if(mode==="effect-source") return n.type==="stack"&&n.stackType==="effect"
     if(mode==="mask-source") return n.type==="stack"&&n.stackType==="mask"||n.type==="promoted"
     return true
   })
   var allItems = creators.concat(comps)
   var selectedNode = allItems.find(function(n){return n.id===props.v})
+    || (pointCtx ? props.nodes.find(function(n){return n.id===props.v}) : null)
   var btnLabel = selectedNode ? selectedNode.name : "— none —"
   var btnStyle={flex:1,textAlign:"left",fontSize:11,padding:"0 10px",
     fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",
@@ -4933,7 +4966,17 @@ function NRef(props) {
     setCreateOpen(false)
     setOpen(false)
     if(!props.onAdd) return
+    // "shape:<geo>" — create a Geometry node pre-set to a point shapeType
+    var geoSub=null
+    if(type.indexOf("shape:")===0){ geoSub=type.slice(6); type="shape" }
     props.onAdd(type, sec, function(newNode){
+      if(geoSub&&co.onUpd){
+        newNode=Object.assign({},newNode,{
+          name:(newNode.name||"").replace(/^shape/,geoSub),
+          props:Object.assign({},newNode.props,{shapeType:geoSub})
+        })
+        co.onUpd(newNode)
+      }
       setInlineId(newNode.id)
       props.fn(newNode.id)
     })
@@ -5055,7 +5098,7 @@ function NRef(props) {
           </div>
         </div>
       )}
-      {(function(){
+      {!pointCtx&&(function(){
         var otherMasks=[]
         ;(props.nodes||[]).forEach(function(n){
           if(n.id===props.selfId) return
@@ -5204,7 +5247,7 @@ function NRef(props) {
         {hasCreate&&createOpen&&createPos&&(
           <NodeTypePopover
             menuRef={createMenuRef} pos={createPos}
-            sec={1} showGroups={false} creatorOnly={true}
+            sec={1} showGroups={false} creatorOnly={true} pointOnly={pointCtx}
             onSelect={function(type,sec){doCreate(type,sec)}}/>
         )}
       </PR>
@@ -9935,7 +9978,7 @@ function PointCompProps(props) {
         {(
           <div style={{display:srcTab==="source"?"":"none"}} className="card-body">
             <NRef l="source" v={node.refId||null} nodes={nodes} selfId={node.id}
-              iC={props.iC} mode="source"
+              iC={props.iC} mode="source" pointCtx={true}
               onAdd={props.onAdd}
               createOps={{onUpd:onChange,onLoad:props.onLoad,onNavigate:props.onNavigate,onPromote:props.onPromote}}
               fn={function(v){onChange(Object.assign({},node,{refId:v}))}}/>
