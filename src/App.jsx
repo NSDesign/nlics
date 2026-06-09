@@ -1784,7 +1784,7 @@ function applyTransformStack(ctx, localOps, globalOps, w, h) {
   var PAD = 1
   var bw = w*(1+2*PAD), bh = h*(1+2*PAD)
   var buf = document.createElement("canvas"); buf.width=bw; buf.height=bh
-  var bx = buf.getContext("2d")
+  var bx = buf.getContext("2d",{willReadFrequently:true})
   var sp = ctx.canvas._shapeProps
   // Local pivot: shape centroid in buffer coords; fallback canvas centre
   var localCx = sp ? sp.x*w + w*PAD : bw/2
@@ -1927,7 +1927,7 @@ function gShape(ctx,p,w,h) {
   var rnd=seededRand(jitterSeed)
   var sc=2, sw2=w*sc, sh2=h*sc
   var tc=document.createElement("canvas"); tc.width=sw2; tc.height=sh2
-  var tc2=tc.getContext("2d")
+  var tc2=tc.getContext("2d",{willReadFrequently:true})
   var r=sz*Math.min(sw2,sh2)/2
   tc2.translate(x*sw2,y*sh2); tc2.rotate(rot*Math.PI/180)
 
@@ -2221,7 +2221,7 @@ function gNoise(ctx,p,w,h) {
     }
   }
   var tc=document.createElement("canvas");tc.width=dw;tc.height=dh
-  tc.getContext("2d").putImageData(img,0,0)
+  tc.getContext("2d",{willReadFrequently:true}).putImageData(img,0,0)
   ctx.save();ctx.globalAlpha=alpha;ctx.imageSmoothingEnabled=true;ctx.drawImage(tc,0,0,w,h);ctx.restore()
 }
 function gPat(ctx,p,w,h) {
@@ -2343,7 +2343,7 @@ function gTile(ctx,p,cmap,cache,iC,w,h,vis,origProps,extNodes,extNodeId) {
     if(rawHi){
       // Downscale to stamp size for SSAA quality
       var sCV=document.createElement("canvas"); sCV.width=Math.round(stampW); sCV.height=Math.round(stampH)
-      var sCTX=sCV.getContext("2d"); sCTX.imageSmoothingEnabled=true; sCTX.imageSmoothingQuality="high"
+      var sCTX=sCV.getContext("2d",{willReadFrequently:true}); sCTX.imageSmoothingEnabled=true; sCTX.imageSmoothingQuality="high"
       sCTX.drawImage(rawHi,0,0,Math.round(stampW),Math.round(stampH))
       srcCv=sCV
     }
@@ -2872,7 +2872,7 @@ function resolvePath(node, slotKey, steps) {
 
 /* ─── RENDERING ENGINE ───────────────────────────────────── */
 var BM = {"normal":"source-over","add":"lighter","multiply":"multiply","screen":"screen","overlay":"overlay","soft-light":"soft-light","hard-light":"hard-light","difference":"difference","exclusion":"exclusion","darken":"darken","lighten":"lighten","color-burn":"color-burn","color-dodge":"color-dodge","hue":"hue","saturation":"saturation","color":"color","luminosity":"luminosity"}
-function mkCv(w,h){var c=document.createElement("canvas");c.width=w;c.height=h;return c}
+function mkCv(w,h){var c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d",{willReadFrequently:true});return c}
 function clCv(s,w,h){var c=mkCv(w,h);c.getContext("2d").drawImage(s,0,0);if(s&&s._points)c._points=s._points.slice();return c}
 
 function pxBl(mode,p,c) {
@@ -3385,7 +3385,7 @@ function applyEfxStk(ctx,stack,cmap,cache,iC,w,h,vis,nodesList) {
             var sc=compAny(s.refId,cmap,new Map(cache),iC,satTW*2,satTH*2,new Set(vis),nodesList||[])
             if(!sc)return null
             var sv=document.createElement("canvas");sv.width=satTW;sv.height=satTH
-            var sx2=sv.getContext("2d");sx2.imageSmoothingEnabled=true;sx2.imageSmoothingQuality="high"
+            var sx2=sv.getContext("2d",{willReadFrequently:true});sx2.imageSmoothingEnabled=true;sx2.imageSmoothingQuality="high"
             sx2.drawImage(sc,0,0,satTW,satTH);return sv
           })
           var satTotalW=satSrcs.reduce(function(a,s){return a+(s.weight||1)},0)
@@ -4315,12 +4315,12 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
   _renderNodes=nodes||[]
   if(!canvas)return
   if(!dispId||!nodes||nodes.length===0){
-    var clrCtx=canvas.getContext("2d")
+    var clrCtx=canvas.getContext("2d",{willReadFrequently:true})
     clrCtx.clearRect(0,0,canvas.width,canvas.height)
     return
   }
   try {
-    var ctx=canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height)
+    var ctx=canvas.getContext("2d",{willReadFrequently:true});ctx.clearRect(0,0,canvas.width,canvas.height)
     var cmap=new Map(nodes.map(function(n){return[n.id,n]}))
     _renderNodes=nodes
     var w=canvas.width,h=canvas.height
@@ -4511,6 +4511,82 @@ function renderPipeline(canvas,dispId,nodes,iC,dispMask,dispSlot) {
 }
 
 
+
+
+/* ─── ADAPTIVE RENDER SCHEDULER ───────────────────────────────────────────
+   renderSmart() is the interactive entry point in front of renderPipeline.
+   It coalesces requests to at most one render per animation frame, and when
+   the last full-resolution render was slow it renders interactive updates
+   at a reduced draft scale (proxy-mode), stretching the result up to the
+   display canvas. A full-resolution settle pass runs after a short idle.
+   Draft timings continuously refine the cost estimate (pixel work ~ scale²)
+   so the chosen scale adapts as the graph gets heavier or lighter.
+   NOTE: export must call rsFlushFullRes() first — the display canvas may be
+   holding an upscaled draft frame while a settle pass is still pending. */
+var _rsPending=null   // latest requested args
+var _rsRaf=0          // queued rAF id
+var _rsSettle=0       // pending full-res settle timer
+var _rsFullMs=0       // estimated cost of a full-res render (ms)
+var _rsDraft=null     // reusable draft canvas
+var RS_SLOW=70        // full renders above this trigger draft mode (ms)
+var RS_TARGET=45      // aim draft renders at roughly this budget (ms)
+var RS_SETTLE=250     // idle time before the full-res settle pass (ms)
+var RS_SCALES=[1,0.71,0.5,0.35,0.25]  // quantised so the draft canvas isn't resized every frame
+
+function _rsPickScale(){
+  if(_rsFullMs<=RS_SLOW)return 1
+  var ideal=Math.sqrt(RS_TARGET/_rsFullMs)
+  for(var i=0;i<RS_SCALES.length;i++){if(RS_SCALES[i]<=ideal+0.001)return RS_SCALES[i]}
+  return RS_SCALES[RS_SCALES.length-1]
+}
+function _rsRun(p,scale){
+  var w=p.canvas.width,h=p.canvas.height
+  var t0=performance.now()
+  if(scale>=1||w<=2||h<=2){
+    renderPipeline(p.canvas,p.dispId,p.nodes,p.iC,p.dispMask,p.dispSlot)
+    _rsFullMs=performance.now()-t0
+    return
+  }
+  var dw=Math.max(1,Math.round(w*scale)),dh=Math.max(1,Math.round(h*scale))
+  if(!_rsDraft){_rsDraft=document.createElement("canvas");_rsDraft.getContext("2d",{willReadFrequently:true})}
+  if(_rsDraft.width!==dw)_rsDraft.width=dw
+  if(_rsDraft.height!==dh)_rsDraft.height=dh
+  renderPipeline(_rsDraft,p.dispId,p.nodes,p.iC,p.dispMask,p.dispSlot)
+  var dMs=performance.now()-t0
+  // Refine full-res estimate from draft cost; clamp the per-frame swing 2x
+  _rsFullMs=Math.max(_rsFullMs*0.5,Math.min(_rsFullMs*2,dMs/(scale*scale)))
+  var ctx=p.canvas.getContext("2d",{willReadFrequently:true})
+  ctx.clearRect(0,0,w,h)
+  ctx.save();ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high"
+  ctx.drawImage(_rsDraft,0,0,dw,dh,0,0,w,h);ctx.restore()
+}
+function renderSmart(canvas,dispId,nodes,iC,dispMask,dispSlot){
+  if(!canvas)return
+  _rsPending={canvas:canvas,dispId:dispId,nodes:nodes,iC:iC,dispMask:dispMask,dispSlot:dispSlot}
+  if(_rsRaf)return
+  _rsRaf=requestAnimationFrame(function(){
+    _rsRaf=0
+    var p=_rsPending;if(!p||!p.canvas)return
+    var scale=_rsPickScale()
+    _rsRun(p,scale)
+    if(_rsSettle){clearTimeout(_rsSettle);_rsSettle=0}
+    if(scale<1){
+      _rsSettle=setTimeout(function(){
+        _rsSettle=0
+        if(_rsRaf)return  // newer interactive render queued — it reschedules the settle
+        var q=_rsPending;if(!q||!q.canvas)return
+        _rsRun(q,1)
+      },RS_SETTLE)
+    }
+  })
+}
+// Synchronously ensure the display canvas holds a full-resolution frame.
+// Called before export (toDataURL reads the display canvas directly).
+function rsFlushFullRes(){
+  if(!_rsPending)return
+  if(_rsRaf){cancelAnimationFrame(_rsRaf);_rsRaf=0}
+  if(_rsSettle){clearTimeout(_rsSettle);_rsSettle=0;_rsRun(_rsPending,1)}
+}
 
 
 /* ─── UI PRIMITIVES ─────────────────────────────────────── */
@@ -11143,13 +11219,13 @@ function App() {
   },[])
   // Immediate re-render on data changes
   useEffect(function(){
-    if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask,dispSlot)
+    if(cvRef.current) renderSmart(cvRef.current,dispId,nodes,iC.current,dispMask,dispSlot)
   },[nodes,dispId,szW,szH,dispMask,dispSlot])
   // Deferred re-render on layout changes — waits for browser reflow so
   // canvas has correct dimensions and cvRef is attached to the live canvas
   useEffect(function(){
     var t = setTimeout(function(){
-      if(cvRef.current) renderPipeline(cvRef.current,dispId,nodes,iC.current,dispMask,dispSlot)
+      if(cvRef.current) renderSmart(cvRef.current,dispId,nodes,iC.current,dispMask,dispSlot)
     }, 60)
     return function(){ clearTimeout(t) }
   },[flipped,isVert])
@@ -11162,7 +11238,7 @@ function App() {
     var img=new Image()
     // blob: URLs are same-origin — crossOrigin header causes CORS failure on blobs
     if(!url.startsWith("blob:"))img.crossOrigin="anonymous"
-    img.onload=function(){iC.current.set(url,img);var st=stRef.current;renderPipeline(cvRef.current,st.dispId,st.nodes,iC.current)}
+    img.onload=function(){iC.current.set(url,img);var st=stRef.current;renderSmart(cvRef.current,st.dispId,st.nodes,iC.current)}
     img.onerror=function(){iC.current.set(url,{complete:false,naturalWidth:0})}
     iC.current.set(url,img)
     img.src=url
@@ -11307,7 +11383,7 @@ function App() {
     }
   }
   function sel(id){setSelId(function(p){return p===id?null:id})}
-  function doExport(fmt){var cv=cvRef.current;if(!cv)return;var a=document.createElement("a");a.download="nlics."+fmt;a.href=cv.toDataURL(fmt==="jpeg"?"image/jpeg":fmt==="webp"?"image/webp":"image/png",.95);a.click()}
+  function doExport(fmt){var cv=cvRef.current;if(!cv)return;rsFlushFullRes();var a=document.createElement("a");a.download="nlics."+fmt;a.href=cv.toDataURL(fmt==="jpeg"?"image/jpeg":fmt==="webp"?"image/webp":"image/png",.95);a.click()}
 
   // Drag state — held in refs so pointer handlers don't need re-registration
   var dragRef  = useRef(null)  // {vert, start, pct0, onEnd}
@@ -11447,7 +11523,7 @@ function App() {
     rightFS ? {position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:200} : {}
   )
 
-  function handleResize(w,h){setSzW(w);setSzH(h);setTimeout(function(){var st=stRef.current;renderPipeline(cvRef.current,st.dispId,st.nodes,iC.current)},30)}
+  function handleResize(w,h){setSzW(w);setSzH(h);setTimeout(function(){var st=stRef.current;renderSmart(cvRef.current,st.dispId,st.nodes,iC.current)},30)}
 
   var anyFS = leftFS || rightFS
 
