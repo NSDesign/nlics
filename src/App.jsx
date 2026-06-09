@@ -5579,6 +5579,54 @@ function GradP(props) {
   // Migrate legacy c1/s1/c2/s2 to stops on first render via gradStops helper
   var stops=gradStops(p).slice().sort(function(a,b){return a.pos-b.pos})
   function setStops(ns){up(Object.assign({},p,{stops:ns,c1:undefined,s1:undefined,c2:undefined,s2:undefined}))}
+  // Which channel(s) reverse/distribute operate on. UI-only state, not persisted in props.
+  var utilModeSt=useState("both"); var utilMode=utilModeSt[0], setUtilMode=utilModeSt[1]
+  // Sample the current gradient ramp at position t (0..1) -> {color, alpha}
+  function sampleRamp(t){
+    function ph(h){var s=(h||"#000").replace("#","");if(s.length===3)s=s.split("").map(function(c){return c+c}).join("");return[parseInt(s.slice(0,2),16)||0,parseInt(s.slice(2,4),16)||0,parseInt(s.slice(4,6),16)||0]}
+    if(t<=stops[0].pos)return{color:stops[0].color,alpha:stops[0].alpha==null?1:stops[0].alpha}
+    var last=stops[stops.length-1]
+    if(t>=last.pos)return{color:last.color,alpha:last.alpha==null?1:last.alpha}
+    for(var i=0;i<stops.length-1;i++){
+      var a=stops[i],b=stops[i+1]
+      if(t>=a.pos&&t<=b.pos){
+        var f=b.pos===a.pos?0:(t-a.pos)/(b.pos-a.pos)
+        var ca=ph(a.color),cb=ph(b.color)
+        var col="#"+[0,1,2].map(function(j){return Math.round(ca[j]+(cb[j]-ca[j])*f).toString(16).padStart(2,"0")}).join("")
+        var aa=a.alpha==null?1:a.alpha, ab=b.alpha==null?1:b.alpha
+        return{color:col,alpha:aa+(ab-aa)*f}
+      }
+    }
+    return{color:last.color,alpha:last.alpha==null?1:last.alpha}
+  }
+  // NOTE: reverse/distribute channel semantics. Stops are unified (one pos shared
+  // by colour+alpha), unlike Photoshop's separate colour/opacity stops. So:
+  //  - "both"   reverse = flip positions; distribute = re-space positions (original behaviour).
+  //  - "colour" reverse = reverse the colour sequence across stops in place;
+  //             distribute = resample the colour ramp at eased parameters and
+  //             reassign to stops in order — re-eases colour without moving stops or touching alpha.
+  //  - "alpha"  same as colour but for the alpha channel.
+  function doReverse(){
+    var n=stops.length
+    if(utilMode==="both"){setStops(stops.map(function(s){return Object.assign({},s,{pos:1-s.pos})}));return}
+    setStops(stops.map(function(s,i){
+      var src=stops[n-1-i]
+      return utilMode==="colour"
+        ? Object.assign({},s,{color:src.color})
+        : Object.assign({},s,{alpha:src.alpha==null?1:src.alpha})
+    }))
+  }
+  function doDistribute(curve){
+    var n=stops.length; if(n<2)return
+    if(utilMode==="both"){setStops(stops.map(function(s,i){return Object.assign({},s,{pos:curve(i/(n-1))})}));return}
+    var lo=stops[0].pos, hi=stops[n-1].pos
+    var samples=stops.map(function(_,i){return sampleRamp(lo+(hi-lo)*curve(i/(n-1)))})
+    setStops(stops.map(function(s,i){
+      return utilMode==="colour"
+        ? Object.assign({},s,{color:samples[i].color})
+        : Object.assign({},s,{alpha:samples[i].alpha})
+    }))
+  }
   function updStop(i,patch){setStops(stops.map(function(s,si){return si===i?Object.assign({},s,patch):s}))}
   function addStop(){
     // Insert at widest gap, interpolate colour + alpha
@@ -5601,7 +5649,7 @@ function GradP(props) {
   var previewStops=stops.map(function(s){
     var hex=(s.color||"#000000").replace("#",""),a=s.alpha==null?1:s.alpha
     if(hex.length===3)hex=hex.split("").map(function(c){return c+c}).join("")
-    return "rgba("+[parseInt(hex.slice(0,2),16),parseInt(hex.slice(2,4),16),parseInt(hex.slice(4,6),16),a].join(",")+" "+(s.pos*100).toFixed(1)+"%"
+    return "rgba("+[parseInt(hex.slice(0,2),16),parseInt(hex.slice(2,4),16),parseInt(hex.slice(4,6),16),a].join(",")+") "+(s.pos*100).toFixed(1)+"%"
   }).join(",")
   return (
     <div>
@@ -5656,20 +5704,21 @@ function GradP(props) {
       {p.gType==="conic" && ex('sa',<Sl l="start" v={p.sa||0} mn={0} mx={360} st={1} fmt={function(v){return Math.round(v)+"deg"}} fn={function(v){up(Object.assign({},p,{sa:v}))}}/>)}
       {ex('alpha',<Sl l="opacity" v={p.alpha==null?1:p.alpha} mn={0} mx={1} st={.01} fn={function(v){up(Object.assign({},p,{alpha:v}))}}/>)}
       {/* ── Gradient utilities ── */}
+      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
+        <span style={{fontSize:9,color:"var(--mu)",marginRight:4}}>apply to</span>
+        {["colour","alpha","both"].map(function(m){
+          return <button key={m} className={"tab"+(utilMode===m?" on ac":"")} style={{fontSize:10,padding:"3px 12px"}}
+            onClick={function(){setUtilMode(m)}}>{m}</button>
+        })}
+      </div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>
-        <button onClick={function(){
-          setStops(stops.map(function(s){return Object.assign({},s,{pos:1-s.pos})}))
-        }} className="ghost" style={{flex:"1 1 0",fontSize:10,padding:"4px 8px"}}>reverse</button>
+        <button onClick={doReverse} className="ac" style={{flex:"1 1 0",fontSize:10,padding:"4px 8px"}}>reverse</button>
       </div>
       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
         <span style={{fontSize:9,color:"var(--mu)",marginRight:4}}>distribute</span>
         {[["even",function(t){return t}],["expo",function(t){return t*t}],["log",function(t){return Math.sqrt(t)}]].map(function(m){
-          return <button key={m[0]} className="ghost" style={{fontSize:10,padding:"4px 10px"}}
-            onClick={function(){
-              var n2=stops.length; if(n2<2)return
-              var ns=stops.map(function(s,i){return Object.assign({},s,{pos:m[1](i/(n2-1))})})
-              setStops(ns)
-            }}>{m[0]}</button>
+          return <button key={m[0]} className="ac" style={{fontSize:10,padding:"4px 10px"}}
+            onClick={function(){doDistribute(m[1])}}>{m[0]}</button>
         })}
       </div>
       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
@@ -5682,7 +5731,7 @@ function GradP(props) {
           {label:"cyan",  stops:[{pos:0,color:"#000033",alpha:1},{pos:1,color:"#00ffcc",alpha:1}]},
           {label:"α→full",stops:[{pos:0,color:"#ffffff",alpha:0},{pos:1,color:"#ffffff",alpha:1}]}
         ].map(function(pr){
-          return <button key={pr.label} className="ghost" style={{fontSize:10,padding:"4px 8px"}}
+          return <button key={pr.label} className="ac" style={{fontSize:10,padding:"4px 8px"}}
             onClick={function(){setStops(pr.stops)}}>{pr.label}</button>
         })}
       </div>
