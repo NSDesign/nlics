@@ -4887,7 +4887,7 @@ function NodeTypePopover(props) {
         <div>
           {NODE_TYPES_POINT.map(function(item){
             return <div key={item.t} className="drop-item"
-              onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,1)}}>
+              onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,1,e.altKey)}}>
               {item.l}
             </div>
           })}
@@ -4897,7 +4897,7 @@ function NodeTypePopover(props) {
         <div>
           {NODE_TYPES_S1.map(function(item){
             return <div key={item.t} className="drop-item"
-              onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,1)}}>
+              onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,1,e.altKey)}}>
               {item.l}
             </div>
           })}
@@ -4906,7 +4906,7 @@ function NodeTypePopover(props) {
               <div style={grpHdr}>Advanced</div>
               {NODE_TYPES_S1_ADV.map(function(item){
                 return <div key={item.t} className="drop-item"
-                  onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,1)}}>
+                  onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,1,e.altKey)}}>
                   {item.l}
                 </div>
               })}
@@ -4916,7 +4916,7 @@ function NodeTypePopover(props) {
             <div>
               <div style={grpHdr}>Advanced</div>
               <div className="drop-item"
-                onPointerDown={function(e){e.preventDefault();props.onSelect("tile",1)}}>
+                onPointerDown={function(e){e.preventDefault();props.onSelect("tile",1,e.altKey)}}>
                 Tile
               </div>
             </div>
@@ -4927,7 +4927,7 @@ function NodeTypePopover(props) {
         <div>
           {NODE_TYPES_S2.map(function(item){
             return <div key={item.t} className="drop-item"
-              onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,2)}}>
+              onPointerDown={function(e){e.preventDefault();props.onSelect(item.t,2,e.altKey)}}>
               {item.l}
             </div>
           })}
@@ -5021,7 +5021,7 @@ function NRef(props) {
 
   function pick(id){ props.fn(id||null); setOpen(false); var nav=co.onNavigate||props.onNavigate; if(id&&nav&&id.indexOf("__")!==0) nav(id) }
 
-  function doCreate(type, sec) {
+  function doCreate(type, sec, alt) {
     setCreateOpen(false)
     setOpen(false)
     if(!props.onAdd) return
@@ -5038,7 +5038,7 @@ function NRef(props) {
       }
       setInlineId(newNode.id)
       props.fn(newNode.id)
-    })
+    }, {alt:alt})
   }
 
   function openInline(id) {
@@ -5307,7 +5307,7 @@ function NRef(props) {
           <NodeTypePopover
             menuRef={createMenuRef} pos={createPos}
             sec={1} showGroups={false} creatorOnly={true} pointOnly={pointCtx}
-            onSelect={function(type,sec){doCreate(type,sec)}}/>
+            onSelect={function(type,sec,alt){doCreate(type,sec,alt)}}/>
         )}
       </PR>
       {/* ── Inline settings panel ── */}
@@ -8762,7 +8762,7 @@ function AddMenu(props) {
       {open&&pos&&(
         <NodeTypePopover menuRef={menuRef} pos={pos} sec={props.sec}
           showGroups={true}
-          onSelect={function(type,sec){props.onAdd(type,sec);setOpen(false)}}/>
+          onSelect={function(type,sec,alt){props.onAdd(type,sec,undefined,{alt:alt});setOpen(false)}}/>
       )}
     </div>
   )
@@ -9359,6 +9359,22 @@ function SettingsSheet(props) {
               value={s.panelStyle}
               options={[{v:"inline",l:"Inline"},{v:"sheet",l:"Sheet"}]}
               onChange={function(v){ set("panelStyle", v) }}/>
+          </div>
+
+          {/* ── Display ── */}
+          <div className="setting-grp">
+            <div className="setting-grp-lbl">Display</div>
+            <div className="setting-row">
+              <div style={{flex:1}}>
+                <div className="setting-lbl">New item display</div>
+                <div className="setting-desc">Show new switches the live preview to each item as it's added. Hold Alt while picking a type in any add menu to invert this for a single add.</div>
+              </div>
+            </div>
+            <SegCtrl
+              value={s.autoDisplayNew?"show":"keep"}
+              options={[{v:"keep",l:"Keep current"},{v:"show",l:"Show new"}]}
+              onChange={function(v){ set("autoDisplayNew", v==="show") }}/>
+            <div className="setting-desc" style={{marginTop:10}}>Quick swap: press ` (backtick) or tap ⇄ in the preview bar to jump between the current and previous display.</div>
           </div>
 
           {/* ── Auto-save (standalone) ── */}
@@ -11166,6 +11182,7 @@ function App() {
   var s2 = useState(init.dispId); var dispId=s2[0],  setDispId=s2[1]
   var s2m= useState(false);      var dispMask=s2m[0],setDispMask=s2m[1]
   var s2s= useState(null);       var dispSlot=s2s[0],setDispSlot=s2s[1]  // {nodeId,slot,mode}
+  var s2p= useState(null);       var prevDisp=s2p[0],setPrevDisp=s2p[1]  // {dispId,dispMask,dispSlot} — quick-swap target
   var s3 = useState(null);        var selId=s3[0],   setSelId=s3[1]
   var s4 = useState(36);          var leftW=s4[0],   setLeftW=s4[1]
   var s5 = useState(56);          var topH=s5[0],    setTopH=s5[1]
@@ -11179,7 +11196,7 @@ function App() {
   var s12b=useState(400);         var szH=s12b[0],   setSzH=s12b[1]
 
   // Settings state
-  var DEFAULTS = {viewMode:"split",previewPinned:true,stickyHeaders:true,panelStyle:"inline",previewH:44,isVert:false,flipped:true}
+  var DEFAULTS = {viewMode:"split",previewPinned:true,stickyHeaders:true,panelStyle:"inline",previewH:44,isVert:false,flipped:true,autoDisplayNew:false}
   var ss1 = useState(DEFAULTS)
   var settings=ss1[0], setSettings=ss1[1]
   var ss2 = useState(false); var settingsOpen=ss2[0], setSettingsOpen=ss2[1]
@@ -11187,7 +11204,7 @@ function App() {
   // Sheet-mode selected node
   var ss4 = useState(null);  var sheetNode=ss4[0],   setSheetNode=ss4[1]   // {node, sec}
 
-  var appRef=useRef(null), cvRef=useRef(null), iC=useRef(new Map()), stRef=useRef({nodes:nodes,dispId:dispId})
+  var appRef=useRef(null), cvRef=useRef(null), iC=useRef(new Map()), stRef=useRef({nodes:nodes,dispId:dispId}), swapRef=useRef(null)
   var histRef  = useRef([])        // undo ring: array of {nodes} snapshots
   var toastSt  = useState(false);  var toastOn=toastSt[0], setToastOn=toastSt[1]
   var toastTmr = useRef(null)
@@ -11384,6 +11401,7 @@ function App() {
         previewPinned: m.previewPinned,
         stickyHeaders: m.stickyHeaders,
         panelStyle:    m.panelStyle,
+        autoDisplayNew:m.autoDisplayNew,
       })
       if (m.previewH !== undefined) setPreviewH(m.previewH)
       if (m.isVert   !== undefined) setIsVert(m.isVert)
@@ -11401,6 +11419,7 @@ function App() {
         previewPinned: settings.previewPinned,
         stickyHeaders: settings.stickyHeaders,
         panelStyle:    settings.panelStyle,
+        autoDisplayNew:settings.autoDisplayNew,
         previewH:      previewH,
         isVert:        isVert,
         flipped:       flipped,
@@ -11414,6 +11433,12 @@ function App() {
     function onKey(e){
       if((e.ctrlKey||e.metaKey)&&e.key==="z"&&!e.shiftKey){
         e.preventDefault(); doUndo()
+      }
+      // Backtick — quick display swap (skipped while typing)
+      if(e.key==="`"&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+        var t=e.target,tag=t&&t.tagName
+        if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||(t&&t.isContentEditable))return
+        e.preventDefault(); if(swapRef.current)swapRef.current()
       }
     }
     document.addEventListener("keydown",onKey)
@@ -11450,7 +11475,12 @@ function App() {
     iC.current.set(url,img)
     img.src=url
   }
-  function add(type,sec,onCreated){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="point-comp"?mkPointComp():type==="rasterise"?mkRasterise():type==="isolate"?mkIsolate():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):type==="group"?mkGroup(null,sec):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id);if(onCreated)onCreated(n)}
+  function add(type,sec,onCreated,opts){pushHistory({nodes:nodes});var n=type==="blender"?mkBlender():type==="layers"?mkLayerComp():type==="point-comp"?mkPointComp():type==="rasterise"?mkRasterise():type==="isolate"?mkIsolate():type==="stack-effect"?mkStack("effect"):type==="stack-mask"?mkStack("mask"):type==="group"?mkGroup(null,sec):mkNode(type);n.section=sec;setNodes(function(p){return p.concat([n])});setSelId(n.id);if(onCreated)onCreated(n)
+    // Auto-display new items: setting-driven; Alt held in the type picker
+    // inverts the setting for that one add. Groups have no display flag.
+    var show=!!settings.autoDisplayNew; if(opts&&opts.alt)show=!show
+    if(show&&type!=="group")setDisplay({type:"node",id:n.id,mask:false})
+  }
   function del(id){
     pushHistory({nodes:nodes})
     setNodes(function(p){
@@ -11552,6 +11582,14 @@ function App() {
   // All display changes go through this. Clears everything else first.
   function setDisplay(state){
     // state: null | {type:"node",id,mask:bool} | {type:"slot",nodeId,slot,mode}
+    // Snapshot the outgoing display as the quick-swap target when the
+    // *target identity* changes — mask/pixel mode toggles on the same
+    // target don't count. The "off" state is never stored here.
+    var newId=state?(state.type==="node"?state.id:state.nodeId):null
+    var newSK=state&&state.type==="slot"?state.nodeId+"/"+state.slot:""
+    var curSK=dispSlot?dispSlot.nodeId+"/"+dispSlot.slot:""
+    if(dispId&&(dispId!==newId||curSK!==newSK))
+      setPrevDisp({dispId:dispId,dispMask:dispMask,dispSlot:dispSlot})
     if(!state){
       setDispId(null); setDispMask(false); setDispSlot(null)
       return
@@ -11589,6 +11627,16 @@ function App() {
       setDisplay({type:"slot",nodeId:nodeId,slot:slot,mode:"pixels"})
     }
   }
+  // Quick display swap — toggle between current and previous display target,
+  // like a TV "last channel" button. Backtick hotkey + ⇄ in the preview bar.
+  function swapDisplay(){
+    if(!prevDisp) return
+    if(prevDisp.dispId&&!nodes.some(function(n){return n.id===prevDisp.dispId})){ setPrevDisp(null); return }
+    var cur={dispId:dispId,dispMask:dispMask,dispSlot:dispSlot}
+    setDispId(prevDisp.dispId); setDispMask(prevDisp.dispMask); setDispSlot(prevDisp.dispSlot)
+    setPrevDisp(cur)
+  }
+  swapRef.current=swapDisplay
   function sel(id){setSelId(function(p){return p===id?null:id})}
   function doExport(fmt){var cv=cvRef.current;if(!cv)return;rsFlushFullRes();var a=document.createElement("a");a.download="nlics."+fmt;a.href=cv.toDataURL(fmt==="jpeg"?"image/jpeg":fmt==="webp"?"image/webp":"image/png",.95);a.click()}
 
@@ -11780,6 +11828,11 @@ function App() {
         {active
           ? <span style={{fontSize:9,padding:"2px 8px",borderRadius:4,background:"rgba(176,96,240,.14)",color:"#c87aff",border:"1px solid rgba(176,96,240,.28)"}}>◉ {active.name}</span>
           : <span style={{fontSize:9,color:"var(--mu)"}}>none selected</span>}
+        {prevDisp&&(function(){
+          var pn=prevDisp.dispId?nodes.find(function(n){return n.id===prevDisp.dispId}):null
+          return <button className="hico" style={{fontSize:14}} onClick={swapDisplay}
+            title={"Swap display ⇄ "+(pn?pn.name:"off")+"  (`)"}>⇄</button>
+        })()}
         <span style={{flex:1}}/>
         <button className={"hico"+(rightFS?" exit":"")} title={rightFS?"Exit full screen":"Full screen preview"}
           onClick={function(){setRightFS(!rightFS)}}>{rightFS?"⊠":"⊡"}</button>
