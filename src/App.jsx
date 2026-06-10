@@ -1882,7 +1882,7 @@ function shapePoints(p,w,h) {
   var rx=p.rx==null?1:p.rx, ry=p.ry==null?1:p.ry
   var cornerR=p.cornerR||0.2
   var jitter=p.jitter||0, jitterSeed=p.jitterSeed||1
-  var segs=Math.max(3,Math.round(p.segments||32))
+  var segs=Math.max(3,Math.round((p.points!=null?p.points:p.segments)||32))  // "points" (legacy: segments)
   var rnd=seededRand(jitterSeed)
   var r=sz*Math.min(w,h)/2
   var out=[]
@@ -1948,7 +1948,7 @@ function gShape(ctx,p,w,h) {
   var cornerR=p.cornerR||0.2  // for rounded-rect: corner radius fraction
   var jitter=p.jitter||0, jitterSeed=p.jitterSeed||1
   var renderMode=p.renderMode||"smooth"  // "smooth" = arcs, "faceted" = line segments
-  var segs=Math.max(3,Math.round(p.segments||32))  // faceted segment count
+  var segs=Math.max(3,Math.round((p.points!=null?p.points:p.segments)||32))  // point count (legacy: segments)
   var rnd=seededRand(jitterSeed)
   var sc=2, sw2=w*sc, sh2=h*sc
   var tc=document.createElement("canvas"); tc.width=sw2; tc.height=sh2
@@ -5478,10 +5478,15 @@ function ShapeP(props) {
         </div>
       )}
 
-      {(p.renderMode==="faceted")&&(
-        ex("segments",<Sl l="segments" v={p.segments||32} mn={3} mx={128} st={1}
+      {/* NOTE: "points" replaces legacy "segments" — points are the lowest common
+          intrinsic attribute of shapes; the count feeds shapePoints (point-comp source),
+          points render mode, smooth+jitter and faceted rendering, so it's shown in all
+          render modes. Polygon (sides) and star (points) define their own vertex count;
+          geometry types use pointCount/cols/rows etc. Legacy p.segments still read. */}
+      {(s==="ellipse"||s==="circle"||s==="rectangle"||s==="rounded-rect"||s==="ring")&&(
+        ex("points",<Sl l="points" v={p.points!=null?p.points:(p.segments||32)} mn={3} mx={128} st={1}
           fmt={function(v){return Math.round(v)}}
-          fn={function(v){up(Object.assign({},p,{segments:v}))}}/>)
+          fn={function(v){up(Object.assign({},p,{points:v}))}}/>)
       )}
       {/* Jitter available in both modes for all shapes */}
       {(s==="ellipse"||s==="ring"||s==="rectangle"||s==="rounded-rect")&&(
