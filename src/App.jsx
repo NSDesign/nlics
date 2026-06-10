@@ -5586,50 +5586,45 @@ function GradP(props) {
   function setStops(ns){up(Object.assign({},p,{stops:ns,c1:undefined,s1:undefined,c2:undefined,s2:undefined}))}
   // Which channel(s) reverse/distribute operate on. UI-only state, not persisted in props.
   var utilModeSt=useState("both"); var utilMode=utilModeSt[0], setUtilMode=utilModeSt[1]
-  // Sample the current gradient ramp at position t (0..1) -> {color, alpha}
-  function sampleRamp(t){
-    function ph(h){var s=(h||"#000").replace("#","");if(s.length===3)s=s.split("").map(function(c){return c+c}).join("");return[parseInt(s.slice(0,2),16)||0,parseInt(s.slice(2,4),16)||0,parseInt(s.slice(4,6),16)||0]}
-    if(t<=stops[0].pos)return{color:stops[0].color,alpha:stops[0].alpha==null?1:stops[0].alpha}
-    var last=stops[stops.length-1]
-    if(t>=last.pos)return{color:last.color,alpha:last.alpha==null?1:last.alpha}
-    for(var i=0;i<stops.length-1;i++){
-      var a=stops[i],b=stops[i+1]
-      if(t>=a.pos&&t<=b.pos){
-        var f=b.pos===a.pos?0:(t-a.pos)/(b.pos-a.pos)
-        var ca=ph(a.color),cb=ph(b.color)
-        var col="#"+[0,1,2].map(function(j){return Math.round(ca[j]+(cb[j]-ca[j])*f).toString(16).padStart(2,"0")}).join("")
-        var aa=a.alpha==null?1:a.alpha, ab=b.alpha==null?1:b.alpha
-        return{color:col,alpha:aa+(ab-aa)*f}
-      }
-    }
-    return{color:last.color,alpha:last.alpha==null?1:last.alpha}
-  }
   // NOTE: reverse/distribute channel semantics. Stops are unified (one pos shared
-  // by colour+alpha), unlike Photoshop's separate colour/opacity stops. So:
-  //  - "both"   reverse = flip positions; distribute = re-space positions (original behaviour).
-  //  - "colour" reverse = reverse the colour sequence across stops in place;
-  //             distribute = resample the colour ramp at eased parameters and
-  //             reassign to stops in order — re-eases colour without moving stops or touching alpha.
-  //  - "alpha"  same as colour but for the alpha channel.
+  // by colour+alpha), unlike Photoshop's separate colour/opacity stops.
+  // p.stops is in INSERTION order, not position order — all ops below rank by position.
+  //  - "both"   reverse = flip positions; distribute = re-space positions with the
+  //             curve (affects colour+alpha spatially; per-stop values untouched).
+  //  - "colour" reverse = reverse the colour sequence across position-ranked stops;
+  //             distribute = re-interpolate INTERIOR stops' colours between the first
+  //             and last stop's colours along the curve (endpoints fixed — needs >=3 stops).
+  //  - "alpha"  same as colour, for the alpha channel.
+  function posRank(){
+    var sorted=stops.slice().sort(function(a,b){return a.pos-b.pos})
+    return{sorted:sorted,rank:function(st){return sorted.indexOf(st)}}
+  }
+  function hexLerp(h1,h2,f){
+    function ph(h){var x=(h||"#000").replace("#","");if(x.length===3)x=x.split("").map(function(c){return c+c}).join("");return[parseInt(x.slice(0,2),16)||0,parseInt(x.slice(2,4),16)||0,parseInt(x.slice(4,6),16)||0]}
+    var a=ph(h1),b=ph(h2)
+    return "#"+[0,1,2].map(function(j){return Math.round(a[j]+(b[j]-a[j])*f).toString(16).padStart(2,"0")}).join("")
+  }
   function doReverse(){
-    var n=stops.length
     if(utilMode==="both"){setStops(stops.map(function(s){return Object.assign({},s,{pos:1-s.pos})}));return}
-    setStops(stops.map(function(s,i){
-      var src=stops[n-1-i]
+    var pr=posRank(), n=pr.sorted.length
+    setStops(stops.map(function(s){
+      var src=pr.sorted[n-1-pr.rank(s)]
       return utilMode==="colour"
         ? Object.assign({},s,{color:src.color})
         : Object.assign({},s,{alpha:src.alpha==null?1:src.alpha})
     }))
   }
   function doDistribute(curve){
-    var n=stops.length; if(n<2)return
-    if(utilMode==="both"){setStops(stops.map(function(s,i){return Object.assign({},s,{pos:curve(i/(n-1))})}));return}
-    var lo=stops[0].pos, hi=stops[n-1].pos
-    var samples=stops.map(function(_,i){return sampleRamp(lo+(hi-lo)*curve(i/(n-1)))})
-    setStops(stops.map(function(s,i){
-      return utilMode==="colour"
-        ? Object.assign({},s,{color:samples[i].color})
-        : Object.assign({},s,{alpha:samples[i].alpha})
+    var pr=posRank(), n=pr.sorted.length; if(n<2)return
+    if(utilMode==="both"){
+      setStops(stops.map(function(s){return Object.assign({},s,{pos:curve(pr.rank(s)/(n-1))})}));return
+    }
+    var first=pr.sorted[0], last=pr.sorted[n-1]
+    setStops(stops.map(function(s){
+      var t=curve(pr.rank(s)/(n-1))
+      if(utilMode==="colour")return Object.assign({},s,{color:hexLerp(first.color,last.color,t)})
+      var a0=first.alpha==null?1:first.alpha, a1=last.alpha==null?1:last.alpha
+      return Object.assign({},s,{alpha:a0+(a1-a0)*t})
     }))
   }
   function updStop(i,patch){setStops(stops.map(function(s,si){return si===i?Object.assign({},s,patch):s}))}
