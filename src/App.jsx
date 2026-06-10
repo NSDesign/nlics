@@ -5719,12 +5719,12 @@ function GradP(props) {
         })}
       </div>
       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
-        <button onClick={doReverse} className="ac" style={{fontSize:10,padding:"4px 10px"}}>reverse</button>
-        <span style={{fontSize:9,color:"var(--mu)",margin:"0 4px 0 6px"}}>distribute</span>
+        <span style={{fontSize:9,color:"var(--mu)",marginRight:4}}>distribute</span>
         {[["even",function(t){return t}],["expo",function(t){return t*t}],["log",function(t){return Math.sqrt(t)}]].map(function(m){
           return <button key={m[0]} className="ac" style={{fontSize:10,padding:"4px 10px"}}
             onClick={function(){doDistribute(m[1])}}>{m[0]}</button>
         })}
+        <button onClick={doReverse} className="ac" style={{fontSize:10,padding:"4px 10px",marginLeft:"auto"}}>reverse</button>
       </div>
       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
         <span style={{fontSize:9,color:"var(--mu)",marginRight:4}}>presets</span>
