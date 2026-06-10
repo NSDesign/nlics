@@ -187,6 +187,8 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .hico{background:none;border:none;cursor:pointer;font-size:18px;color:#7ab8e8;min-height:var(--tap);min-width:var(--tap);padding:0 6px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;transition:all .12s;}
 .hico:hover,.hico:active{color:#aaddff;background:rgba(122,184,232,.12);}
 .hico.exit{color:var(--ac);border:1px solid rgba(36,204,168,.3);background:rgba(36,204,168,.07);}
+.fs-escape{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:700;background:var(--pn);border:1px solid rgba(36,204,168,.4);color:var(--ac);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:9px 18px;border-radius:999px;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.6);transition:all .12s;}
+.fs-escape:hover,.fs-escape:active{background:rgba(36,204,168,.14);border-color:var(--ac);}
 .stack-lbl{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em;padding:4px 0 8px;display:flex;align-items:center;gap:8px;}
 .stack-lbl::after{content:'';flex:1;height:1px;background:var(--bd);}
 /* Stack/Promoted type colours */
@@ -11753,7 +11755,6 @@ function App() {
           style={{display:"none"}} onChange={function(e){loadProject(e.target.files[0]);e.target.value="";setLoadDialog(false)}}/>
         <span style={{flex:1}}/>
         <button className="hico" title="Layout settings" onClick={function(){setSettingsOpen(true)}}>⚙</button>
-        <button className={"hico"+(rightFS?" exit":"")} title={rightFS?"Exit preview fullscreen":"Fullscreen preview"} onClick={function(){setRightFS(!rightFS)}}>{rightFS?"⊠":"⊡"}</button>
         {hProps.showExpand && <button className={"hico"+(leftFS?" exit":"")} onClick={function(){setLeftFS(!leftFS)}}>{leftFS?"⊠":"⊞"}</button>}
       </div>
     )
