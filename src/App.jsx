@@ -187,8 +187,6 @@ button.bp-tab:hover,button.bp-tab:active,button.bp-tab:focus{background:var(--sf
 .hico{background:none;border:none;cursor:pointer;font-size:18px;color:#7ab8e8;min-height:var(--tap);min-width:var(--tap);padding:0 6px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;transition:all .12s;}
 .hico:hover,.hico:active{color:#aaddff;background:rgba(122,184,232,.12);}
 .hico.exit{color:var(--ac);border:1px solid rgba(36,204,168,.3);background:rgba(36,204,168,.07);}
-.fs-escape{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:700;background:var(--pn);border:1px solid rgba(36,204,168,.4);color:var(--ac);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:9px 18px;border-radius:999px;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.6);transition:all .12s;}
-.fs-escape:hover,.fs-escape:active{background:rgba(36,204,168,.14);border-color:var(--ac);}
 .stack-lbl{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em;padding:4px 0 8px;display:flex;align-items:center;gap:8px;}
 .stack-lbl::after{content:'';flex:1;height:1px;background:var(--bd);}
 /* Stack/Promoted type colours */
@@ -9182,10 +9180,26 @@ function LivePreview(props) {
         }}>
         {barsVis?"⊡":"⊠"}
       </button>
+      {/* Exit fullscreen — matches the .hico.exit toggle in HeaderBar/PreviewBar */}
+      {props.fullscreen&&props.onFullscreen&&(
+        <button
+          title="Exit fullscreen preview"
+          onClick={props.onFullscreen}
+          style={{
+            position:"absolute",top:6,right:44,zIndex:10,
+            width:32,height:32,fontSize:16,flexShrink:0,
+            background:"rgba(36,204,168,.07)",
+            border:"1px solid rgba(36,204,168,.3)",
+            borderRadius:6,cursor:"pointer",display:"flex",alignItems:"center",
+            justifyContent:"center",color:"var(--ac)"
+          }}>
+          ⊠
+        </button>
+      )}
       {/* Top bar */}
       {barsVis&&(
         <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",
-          paddingRight:46,
+          paddingRight:props.fullscreen?84:46,
           background:"var(--pn)",borderBottom:"1px solid var(--bd)",flexShrink:0,overflowX:"auto"}}>
           <CanvasSizePicker szW={szW} szH={szH} onResize={props.onResize}/>
           {/* Zoom controls */}
@@ -11937,12 +11951,6 @@ function App() {
         onUpdate={upd} onLoad={loadUrl} onAdd={add} nodes={nodes} iC={iC}
         dispId={dispId} dispMask={dispMask} dispSlot={dispSlot} onDsp={dsp} dspSlot={dspSlot}
         onPromote={handlePromote} onExtract={handleExtract} onNavigate={handleNavigate}/>
-
-      {anyFS && (
-        <button className="fs-escape" onClick={function(){setLeftFS(false);setRightFS(false)}}>
-          ⊠ exit fullscreen
-        </button>
-      )}
 
       {settings.viewMode==="unified" ? (
         <div style={{height:"100vh",display:"flex",flexDirection:"column"}}>
